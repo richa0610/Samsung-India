@@ -1,13 +1,10 @@
-import { useState } from "react";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 
 import AuthHeader from "@/components/common/AppHeader";
 import SecurityFooter from "@/components/common/SecurityFooter";
-import ServerUrlSheet from "@/components/settings/ServerUrlSheet";
 import AppCard from "@/components/ui/AppCard";
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
@@ -18,15 +15,11 @@ import SocialLoginRow from "./SocialLoginRow";
 
 export default function RoleSelectionScreen() {
   const router = useRouter();
-  const [serverSheet, setServerSheet] = useState(false);
 
   return (
     <>
       <StatusBar style="dark" />
       <SafeAreaView style={styles.container}>
-        <Pressable style={styles.gear} onPress={() => setServerSheet(true)} hitSlop={10}>
-          <Ionicons name="settings-outline" size={20} color={Colors.gray600} />
-        </Pressable>
         <ScrollView contentContainerStyle={styles.content}>
           <AppCard style={styles.card}>
             <AuthHeader />
@@ -72,7 +65,6 @@ export default function RoleSelectionScreen() {
             <SecurityFooter />
           </View>
         </ScrollView>
-        <ServerUrlSheet visible={serverSheet} onClose={() => setServerSheet(false)} />
       </SafeAreaView>
     </>
   );
@@ -80,7 +72,6 @@ export default function RoleSelectionScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#EEF4FF" },
-  gear: { position: "absolute", top: 12, right: 16, zIndex: 2, padding: 6 },
   content: {
     flexGrow: 1,
     justifyContent: "center",

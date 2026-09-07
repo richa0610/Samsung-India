@@ -5,11 +5,12 @@ import { Dimensions, StyleSheet, View } from 'react-native';
 import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
+import { SPLASH_LOGO_ASPECT_RATIO, SPLASH_LOGO_WIDTH } from '@/config/splash';
+
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
 // How long the TOPS branding is held, static, before it fades to the app.
 const BRAND_HOLD_MS = 800;
-const SCREEN_W = Dimensions.get('window').width;
 
 export function AnimatedSplashOverlay() {
   const [animate, setAnimate] = useState(false);
@@ -157,7 +158,7 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   brandLogo: {
-    width: SCREEN_W * 0.66,
-    height: SCREEN_W * 0.66 * (872 / 1600),
+    width: SPLASH_LOGO_WIDTH,
+    height: SPLASH_LOGO_WIDTH * SPLASH_LOGO_ASPECT_RATIO,
   },
 });

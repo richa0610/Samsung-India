@@ -7,6 +7,7 @@ import TrainerMoreMenu from "@/components/trainer/dashboard/TrainerMoreMenu";
 import { useTrainerDashboardScreen } from "@/components/trainer/dashboard/useTrainerDashboardScreen";
 import DateDrop from "@/components/trainer/DateDrop";
 import AppModal from "@/components/ui/AppModal";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { Colors } from "@/theme/colors";
 
 export default function TrainerDashboardScreen() {
@@ -24,7 +25,10 @@ export default function TrainerDashboardScreen() {
     recentCompleted,
     loadAgenda,
     applyDateRange,
-    handleLogout,
+    confirmLogoutOpen,
+    requestLogout,
+    cancelLogout,
+    confirmLogout,
     handleLaunch,
     closePanels,
     handleBottomNavSelect,
@@ -44,7 +48,7 @@ export default function TrainerDashboardScreen() {
           refreshing={refreshing}
           onRefresh={() => loadAgenda("refresh")}
           onOpenProfile={() => router.push("/trainer_profile")}
-          onLogout={handleLogout}
+          onLogout={requestLogout}
           onSelectSession={handleLaunch}
         />
 
@@ -56,6 +60,16 @@ export default function TrainerDashboardScreen() {
       <AppModal visible={dateDropOpen} onClose={() => setDateDropOpen(false)} position="top" contentStyle={styles.dateDropPanel} closeOnOverlayPress>
         <DateDrop range={dateRange} preset={datePreset} onApply={applyDateRange} />
       </AppModal>
+
+      <ConfirmModal
+        visible={confirmLogoutOpen}
+        icon="log-out-outline"
+        tone="danger"
+        title="Log Out?"
+        message="Are you sure you want to go to the login page?"
+        onCancel={cancelLogout}
+        onConfirm={confirmLogout}
+      />
     </>
   );
 }

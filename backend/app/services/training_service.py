@@ -375,8 +375,31 @@ def _venue_names_for(db: Session, conferences: list[Conference]) -> dict[str, st
     return {v.venueUid: v.name for v in catalog_repository.get_venues_by_uids(db, venue_uids) if v.name}
 
 
+def _updated_by_names_for(db: Session, conferences: list[Conference]) -> dict[str, str]:
+    """`conference.updatedBy` stores whoever last saved the row as a bare
+    username (a trainer's phone number, or an admin's login) - resolve those
+    to display names in one batch, the same way `_venue_names_for` resolves
+    venue UIDs. Anything that doesn't match a real admin/agencyteam account
+    (old seed-script rows, which stamped the script's filename instead of a
+    real username) is left for the caller to fall back to the raw value."""
+    usernames = {c.updatedBy for c in conferences if c.updatedBy}
+    if not usernames:
+        return {}
+    names: dict[str, str] = {}
+    for admin in admin_repository.get_admins_by_usernames(db, usernames):
+        if admin.name:
+            names[admin.username] = admin.name
+    for agent in admin_repository.get_agents_by_usernames(db, usernames):
+        if agent.name:
+            names.setdefault(agent.username, agent.name)
+    return names
+
+
 def _to_agenda_item(
-    conference: Conference, trainee_count: int, venue_name_by_uid: dict[str, str]
+    conference: Conference,
+    trainee_count: int,
+    venue_name_by_uid: dict[str, str],
+    updated_by_name_by_username: dict[str, str],
 ) -> TrainingAgendaItem:
     return TrainingAgendaItem(
         conferenceUid=conference.conferenceUid,
@@ -394,7 +417,11 @@ def _to_agenda_item(
         district=conference.district,
         trainingHub=conference.trainingHub,
         venueName=venue_name_by_uid.get(conference.venueUid),
-        updatedBy=conference.updatedBy,
+        updatedBy=(
+            updated_by_name_by_username.get(conference.updatedBy, conference.updatedBy)
+            if conference.updatedBy
+            else None
+        ),
         updationOn=conference.updationOn.strftime("%Y-%m-%d %H:%M:%S") if conference.updationOn else None,
         timestamp=conference.timestamp.strftime("%Y-%m-%d %H:%M:%S") if conference.timestamp else None,
         traineeCount=trainee_count,
@@ -430,12 +457,14 @@ def list_trainer_trainings(
     conference_uids = [c.conferenceUid for c in conferences]
     trainee_uids_by_conference = _real_trainee_uids_by_conference(db, conference_uids)
     venue_name_by_uid = _venue_names_for(db, conferences)
+    updated_by_name_by_username = _updated_by_names_for(db, conferences)
 
     result = [
         _to_agenda_item(
             conference,
             len(trainee_uids_by_conference.get(conference.conferenceUid, set())),
             venue_name_by_uid,
+            updated_by_name_by_username,
         )
         for conference in conferences
     ]
@@ -477,11 +506,13 @@ def list_trainer_trainings(
         db, [c.conferenceUid for c in recent_completed_conferences]
     )
     recent_venue_name_by_uid = _venue_names_for(db, recent_completed_conferences)
+    recent_updated_by_name_by_username = _updated_by_names_for(db, recent_completed_conferences)
     recent_completed = [
         _to_agenda_item(
             conference,
             len(recent_completed_uids.get(conference.conferenceUid, set())),
             recent_venue_name_by_uid,
+            recent_updated_by_name_by_username,
         )
         for conference in recent_completed_conferences
     ]

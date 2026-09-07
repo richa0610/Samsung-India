@@ -1,5 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
+import { BackHandler } from "react-native";
 
 import { TrainingAgendaItem, fetchTrainerAgenda } from "@/api/training";
 import { DatePreset, DateRange, rangeForPreset } from "@/components/trainer/DateDrop";
@@ -51,6 +52,9 @@ export function useTrainerDashboardScreen() {
   const [recentCompleted, setRecentCompleted] = useState<TrainingAgendaItem[]>([]);
   const [loadingAgenda, setLoadingAgenda] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Shared by the header's power button AND the hardware/gesture back
+  // button below - either one opens the same confirmation.
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
 
   const loadAgenda = useCallback(
     async (mode: "load" | "refresh" | "silent" = "load") => {
@@ -98,6 +102,20 @@ export function useTrainerDashboardScreen() {
     }, [loadAgenda]),
   );
 
+  // Hardware/gesture back on this screen asks for confirmation instead of
+  // leaving straight away - same popup and destination as the header's
+  // power button. Only registered while this screen is actually focused,
+  // so it doesn't swallow back-presses on other screens.
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        setConfirmLogoutOpen(true);
+        return true;
+      });
+      return () => subscription.remove();
+    }, []),
+  );
+
   const applyDateRange = (range: DateRange, preset: DatePreset) => {
     // Just update the filter and stay on the dashboard - the agenda/stats
     // re-fetch on their own because `loadAgenda`/`loadMonthAgenda` depend on
@@ -111,9 +129,14 @@ export function useTrainerDashboardScreen() {
     setDateDropOpen(false);
   };
 
-  const handleLogout = () => {
+  const requestLogout = () => setConfirmLogoutOpen(true);
+
+  const cancelLogout = () => setConfirmLogoutOpen(false);
+
+  const confirmLogout = () => {
+    setConfirmLogoutOpen(false);
     adminLogout();
-    router.replace("/trainer_login");
+    router.replace("/");
   };
 
   const handleLaunch = (conferenceUid: string) => {
@@ -163,7 +186,10 @@ export function useTrainerDashboardScreen() {
     recentCompleted,
     loadAgenda,
     applyDateRange,
-    handleLogout,
+    confirmLogoutOpen,
+    requestLogout,
+    cancelLogout,
+    confirmLogout,
     handleLaunch,
     closePanels,
     handleBottomNavSelect,
