@@ -41,9 +41,6 @@ def submit_assessment(
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    # A trainee can only take a module's test once the trainer has marked
-    # them Present for this session - being un-marked or marked Absent blocks
-    # the submission (mirrors the locked modules in GET /sessions/current).
     attendance = attendance_repository.get_for_conference_and_trainee(
         db, payload.conferenceUid, trainee.traineeUid
     )

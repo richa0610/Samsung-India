@@ -11,10 +11,7 @@ from app.schemas.assessment import AssessmentQuestionsOut, QuestionOut, SubmitRe
 
 
 def score_answers(questions: list, answers_by_qid: dict[int, str | None]) -> tuple[int, int, float, int]:
-    """Grade a set of picks against a suite's questions. `answers_by_qid` maps
-    question id -> selected option id (or None). Returns
-    (total_score, max_score, percentage, correct_count). Shared by the one-shot
-    post-test submit and the Live Quiz finish scoring pass."""
+   
     points_by_id = {q.id: (q.points or 0) for q in questions}
     correct_by_id = {q.id: q.correct_answer for q in questions}
     max_score = sum(points_by_id.values())

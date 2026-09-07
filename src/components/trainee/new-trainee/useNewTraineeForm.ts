@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { formatDate } from "@/components/training/add-training/formatting";
 import {
   cleanText,
+  companyId,
   digitsOnly,
   email,
   firstError,
@@ -116,6 +117,7 @@ export function useNewTraineeForm() {
       mobile10(primaryPhone, "Primary phone"),
       mobile10(altPhone, "Alt phone"),
       pincode6(jobPincode, "Job pincode"),
+      companyId(agencyId, "Agency/Company ID"),
     );
     if (formatError) {
       setNotice(formatError);

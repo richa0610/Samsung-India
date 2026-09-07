@@ -17,6 +17,7 @@ import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { FontWeight } from "@/theme/fontWeight";
 import { RegisterFormValues } from "@/hooks/useRegisterForm";
+import { companyId } from "@/utils/validation/validators";
 
 type ProfessionalDetailsProps = {
     control: Control<RegisterFormValues>;
@@ -68,6 +69,7 @@ export default function ProfessionalDetails({
                     <Controller
                         control={control}
                         name="employee_id"
+                        rules={{ validate: (v) => companyId(v, "Employee ID") ?? true }}
                         render={({ field: { value, onChange } }) => (
                             <AppInput
                                 placeholder="Employee ID"
@@ -83,6 +85,9 @@ export default function ProfessionalDetails({
             </View>
             {errors.designation && (
                 <AppText style={styles.error}>{errors.designation.message}</AppText>
+            )}
+            {errors.employee_id && (
+                <AppText style={styles.error}>{errors.employee_id.message}</AppText>
             )}
 
             <Controller

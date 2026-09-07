@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import { Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -22,6 +22,9 @@ type SessionDashboardHeaderProps = {
   // The Session Report is only meaningful once the session has ended.
   reportEnabled?: boolean;
   loading?: boolean;
+  // True while fetching the trainer's live location, required before the
+  // check-in camera opens - disables the button so it can't be tapped twice.
+  startingSession?: boolean;
   onBack: () => void;
   onCopyLink: () => void;
   onShowQR: () => void;
@@ -42,6 +45,7 @@ export default function SessionDashboardHeader({
   startsOnLabel,
   reportEnabled = true,
   loading = false,
+  startingSession = false,
   onBack,
   onCopyLink,
   onShowQR,
@@ -169,11 +173,18 @@ export default function SessionDashboardHeader({
             <Pressable
               style={[styles.endSessionBtn, styles.startSessionBtn]}
               onPress={onStartSession}
+              disabled={startingSession}
               accessibilityRole="button"
               accessibilityLabel="Start Session"
             >
-              <Ionicons name="play" size={12} color={Colors.white} />
-              <AppText style={styles.endSessionBtnText}>Start Session</AppText>
+              {startingSession ? (
+                <ActivityIndicator size="small" color={Colors.white} />
+              ) : (
+                <Ionicons name="play" size={12} color={Colors.white} />
+              )}
+              <AppText style={styles.endSessionBtnText}>
+                {startingSession ? "Getting Location…" : "Start Session"}
+              </AppText>
             </Pressable>
           ) : (
             <Pressable

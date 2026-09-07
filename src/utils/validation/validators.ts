@@ -47,6 +47,34 @@ export function aadhar12(value: string, label = "Aadhaar number"): ValidationRes
   return /^\d{12}$/.test(trimmed) ? null : `${label} must be 12 digits.`;
 }
 
+/** Letters, digits and hyphens, 4-15 characters (e.g. "OFF26002", "EMP26001"). */
+export function companyId(value: string, label = "Company ID"): ValidationResult {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return /^[A-Za-z0-9-]{4,15}$/.test(trimmed)
+    ? null
+    : `${label} must be 4-15 letters, numbers or hyphens.`;
+}
+
+/**
+ * The standard "every website" password policy: at least 8 characters, with
+ * an uppercase letter, a lowercase letter, a digit, and a special character.
+ * Reports the first unmet rule rather than one generic message, so the user
+ * knows exactly what to fix. Only for a NEW password being set (registration
+ * / change-password) - never apply this to a login field, where the account's
+ * already-set password could legitimately not match a rule added later.
+ */
+export function password(value: string, label = "Password"): ValidationResult {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed.length < 8) return `${label} must be at least 8 characters.`;
+  if (!/[a-z]/.test(trimmed)) return `${label} must include a lowercase letter.`;
+  if (!/[A-Z]/.test(trimmed)) return `${label} must include an uppercase letter.`;
+  if (!/\d/.test(trimmed)) return `${label} must include a number.`;
+  if (!/[^A-Za-z0-9]/.test(trimmed)) return `${label} must include a special character.`;
+  return null;
+}
+
 /**
  * Whole number within [min, max]. Empty passes unless `mandatory` is set, so
  * an optional count field only complains once someone types in it.

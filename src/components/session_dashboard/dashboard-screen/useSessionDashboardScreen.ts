@@ -50,6 +50,8 @@ export function useSessionDashboardScreen() {
   const [moreOpen, setMoreOpen] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [startCoords, setStartCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [requestingStartLocation, setRequestingStartLocation] = useState(false);
   const [outsideVenue, setOutsideVenue] = useState<OutsideVenuePrompt | null>(null);
   const [showCheckOutModal, setShowCheckOutModal] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
@@ -124,7 +126,29 @@ export function useSessionDashboardScreen() {
     }
   };
 
-  const handleStartSession = () => {
+  // Location is required to start a session - regardless of whether this
+  // training has geofencing enforcement on. Fetched BEFORE the camera opens
+  // (not after the photo, like before) and the flow stops here entirely if
+  // it can't be obtained - no trainer photo capture, no session start,
+  // without a live GPS fix. `useLocationPermission` already alerts on
+  // blocked/unavailable; "denied"/cancelled need their own message since
+  // that hook only sets internal error state for those, no visible alert.
+  const handleStartSession = async () => {
+    setRequestingStartLocation(true);
+    const { coords, status } = await requestLocationWithRationale();
+    setRequestingStartLocation(false);
+
+    if (!coords) {
+      if (status === "denied") {
+        Alert.alert(
+          "Location required",
+          "We couldn't get your live location. Location is required to start this session - please try again.",
+        );
+      }
+      return;
+    }
+
+    setStartCoords(coords);
     setShowCheckInModal(true);
   };
 
@@ -169,8 +193,9 @@ export function useSessionDashboardScreen() {
   const handleConfirmStartSession = async (photo: TrainerCheckInPhoto) => {
     if (!adminToken) return;
     setShowCheckInModal(false);
-    const { coords } = await requestLocationWithRationale();
-    await runStartSession(photo, coords ?? null);
+    // Location was already required and captured before the camera opened
+    // (handleStartSession) - reuse it rather than asking again.
+    await runStartSession(photo, startCoords);
   };
 
   // "Yes, update the venue location" from the OUTSIDE_VENUE prompt: re-runs
@@ -333,6 +358,7 @@ export function useSessionDashboardScreen() {
     loadData,
     handleCopyLink,
     handleStartSession,
+    requestingStartLocation,
     handleConfirmStartSession,
     outsideVenue,
     handleUpdateVenueLocation,

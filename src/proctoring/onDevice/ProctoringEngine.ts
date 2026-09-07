@@ -9,9 +9,7 @@ const ALL_EVENT_TYPES: DetectedEventType[] = ["NO_FACE", "MULTIPLE_FACES", "LOOK
 interface ActiveDetectionState {
   startedAt: number;
   lastDetectedAt: number;
-  /** Highest severity already emitted for this ongoing detection, so only escalations re-fire. */
   emittedSeverity: Severity | null;
-  /** Set once the first WARNING/VIOLATION fires, so a later escalation for the same occurrence reuses it. */
   eventId: string | null;
 }
 

@@ -31,6 +31,7 @@ export default function SessionDashboardScreen() {
     loadData,
     handleCopyLink,
     handleStartSession,
+    requestingStartLocation,
     handleConfirmStartSession,
     outsideVenue,
     handleUpdateVenueLocation,
@@ -74,6 +75,7 @@ export default function SessionDashboardScreen() {
         onRefresh={() => loadData("refresh")}
         onReport={() => router.push({ pathname: "/session_report", params: { conferenceUid } })}
         onStartSession={handleStartSession}
+        startingSession={requestingStartLocation}
         onEndSession={handleEndSession}
       />
 

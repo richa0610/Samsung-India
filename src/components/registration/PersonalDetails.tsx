@@ -9,6 +9,7 @@ import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { FontWeight } from "@/theme/fontWeight";
 import { RegisterFormValues } from "@/hooks/useRegisterForm";
+import { mobile10 } from "@/utils/validation/validators";
 
 type PersonalDetailsProps = {
     control: Control<RegisterFormValues>;
@@ -52,7 +53,7 @@ export default function PersonalDetails({ control, errors, lockedFields }: Perso
                         name="phone"
                         rules={{
                             required: "Phone No is required",
-                            minLength: { value: 10, message: "Enter a valid phone number" },
+                            validate: (v) => mobile10(v, "Phone No") ?? true,
                         }}
                         render={({ field: { value, onChange } }) => (
                             <AppInput

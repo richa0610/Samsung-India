@@ -7,6 +7,7 @@ import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { FontWeight } from "@/theme/fontWeight";
 import { Radius } from "@/theme/radius";
+import { password as validatePassword } from "@/utils/validation/validators";
 import { TrainerProfileForm } from "./useTrainerProfileForm";
 import { ProfileSection } from "./ProfileSection";
 
@@ -18,6 +19,14 @@ export function SecuritySection({ form }: { form: TrainerProfileForm }) {
   const handleUpdateChanges = () => {
     if (!profile.password.trim()) {
       Alert.alert("Password required", "Please enter a password before updating.");
+      return;
+    }
+    // Only a NEW password being set here goes through the complexity check -
+    // this is a change-password flow, not a login field, so there's no risk
+    // of locking someone out of an already-existing password.
+    const passwordError = validatePassword(profile.password, "Password");
+    if (passwordError) {
+      Alert.alert("Password requirements not met", passwordError);
       return;
     }
     if (!profile.agreedToTerms) {
