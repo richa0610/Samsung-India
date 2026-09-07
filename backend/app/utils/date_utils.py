@@ -1,4 +1,16 @@
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def to_utc_iso(dt: datetime | None) -> str | None:
+    """A naive `datetime` - whether from Python's `datetime.now()` on the app
+    server or MySQL's `NOW()` - is UTC wall-clock time on this stack (Render +
+    Aiven). Tag it explicitly before sending it to the app: without an offset,
+    `Date.parse()` on the phone misreads it as already being in the device's
+    own local time (see `useLiveRuntime.ts`), which is off by exactly the
+    device's UTC offset (5h30m for IST) for anything still "live"."""
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc).isoformat()
 
 
 def parse_module_start(conference_date: str | None, time_str: str | None) -> datetime | None:

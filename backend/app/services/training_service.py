@@ -23,6 +23,7 @@ from app.repositories import (
     trainee_repository,
 )
 from app.routers.ws import manager as ws_manager
+from app.utils.date_utils import to_utc_iso
 from app.utils.helpers import geofence_enabled, within_geofence
 from app.utils.status import title_status
 from app.utils.validators import validate_document_upload, validate_image_upload
@@ -81,15 +82,15 @@ def _execution_flow(db: Session, conference: Conference) -> list[ExecutionFlowIt
             first_started = starts[0]
             last_started = starts[-1]
             elapsed = int((now - last_started.timestamp).total_seconds())
-            started_at = first_started.timestamp.isoformat()
+            started_at = to_utc_iso(first_started.timestamp)
             ended_at = None
         elif starts:
             item_status = "Completed"
             first_started = starts[0]
             last_stopped = stops[-1]
             elapsed = int((last_stopped.timestamp - starts[-1].timestamp).total_seconds())
-            started_at = first_started.timestamp.isoformat()
-            ended_at = last_stopped.timestamp.isoformat()
+            started_at = to_utc_iso(first_started.timestamp)
+            ended_at = to_utc_iso(last_stopped.timestamp)
         else:
             item_status = "Pending"
             elapsed = None
@@ -245,8 +246,8 @@ def _audit_log(db: Session, conference: Conference) -> list[AuditLogEntry]:
                     moduleKey=module_key,
                     label=MODULE_LABELS.get(module_key, module_key.title()),
                     runNumber=run_number,
-                    startedAt=started.timestamp.isoformat(),
-                    endedAt=stopped.timestamp.isoformat() if stopped else None,
+                    startedAt=to_utc_iso(started.timestamp),
+                    endedAt=to_utc_iso(stopped.timestamp) if stopped else None,
                     elapsedSeconds=elapsed,
                     isRunning=stopped is None,
                     startedBy=performer_names.get(started.performedBy, started.performedBy) if started.performedBy else None,
@@ -676,8 +677,8 @@ def _build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut
         approvalStatus=title_status(conference.status),
         activeModuleId=conference.activeModuleId,
         activeModuleQuestionCount=_active_module_question_count(db, conference),
-        actualStartedAt=conference.actualStartedAt.isoformat() if conference.actualStartedAt else None,
-        actualEndedAt=conference.actualEndedAt.isoformat() if conference.actualEndedAt else None,
+        actualStartedAt=to_utc_iso(conference.actualStartedAt),
+        actualEndedAt=to_utc_iso(conference.actualEndedAt),
         runtimeSeconds=runtime_seconds,
         audience=AudienceBreakdown(
             total=len(participant_uids),

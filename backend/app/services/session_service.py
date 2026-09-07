@@ -55,15 +55,32 @@ def _conference_start(conference: Conference) -> datetime | None:
 
 
 def _session_is_over(conference: Conference) -> bool:
-    """True once a session should stop counting as active for a trainee: the
-    trainer explicitly ended it (`conferenceStatus == "Completed"`), or its
-    scheduled day is already in the past. The second case covers a session the
-    trainer started but never ran End Session on - it would otherwise stay
-    "live" to trainees forever (a stale QR scanned the next day, etc.)."""
+    """True once a session should stop counting as active for a trainee.
+    Checked in order:
+
+      1. The trainer explicitly ended it (`conferenceStatus == "Completed"`).
+      2. It's actively running right now (`Ongoing`/`Live`) - never "over"
+         while live, no matter how late it started relative to its
+         originally scheduled `conferenceDate`. Schedules slip; a trainer
+         starting a session a few days late doesn't make it any less live.
+      3. Otherwise (not live, never explicitly ended) - a staleness guard,
+         covering a trainer who started it and walked away without ever
+         running End Session (it would otherwise stay "live" to trainees
+         forever - a stale QR scanned days later, etc.), or a session that
+         was scheduled but never started at all. Based on when it *actually*
+         started (`actualStartedAt`) when that's known - falling back to the
+         originally scheduled day only for a session that never started."""
     if title_status(conference.conferenceStatus) == "Completed":
         return True
-    day = (conference.conferenceEndsOn or conference.conferenceDate or "").strip()
-    return bool(day) and day < datetime.now().strftime("%Y-%m-%d")
+    if title_status(conference.conferenceStatus) in _LIVE_STATUSES:
+        return False
+    reference_day = (
+        conference.conferenceEndsOn
+        or (conference.actualStartedAt.strftime("%Y-%m-%d") if conference.actualStartedAt else None)
+        or conference.conferenceDate
+        or ""
+    ).strip()
+    return bool(reference_day) and reference_day < datetime.now().strftime("%Y-%m-%d")
 
 
 def _select_current_conference(

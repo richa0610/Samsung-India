@@ -9,8 +9,14 @@ import { useEffect, useState } from "react";
  *  - ended (`endedAt` set)         -> endedAt - startedAt, frozen
  *  - running                       -> now - startedAt, re-ticking every second
  *
- * Assumes the phone and the machine running the backend share a timezone
- * (the backend sends naive local ISO timestamps) - safe for same-venue use.
+ * The backend tags every timestamp it sends here with an explicit UTC
+ * offset (`date_utils.to_utc_iso`), so `Date.parse` below always converts
+ * correctly to the device's own local time - regardless of what timezone
+ * the backend server itself runs in. Was previously a same-timezone
+ * assumption (bare, offset-less timestamps) that broke the moment the
+ * backend moved off a same-venue machine onto a cloud host in a different
+ * timezone - every "live" duration on this screen was off by exactly the
+ * device's UTC offset (5h30m for IST) until that got fixed server-side.
  */
 export function useLiveRuntime(
   startedAt: string | null | undefined,
