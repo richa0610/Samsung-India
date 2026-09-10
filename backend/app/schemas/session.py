@@ -42,6 +42,12 @@ class CurrentSession(BaseModel):
     # On-device proctoring locked this trainee out of the post-test (3 strikes).
     # Clears when the trainer unlocks them from the Participant Master List.
     proctoringLocked: bool = False
+    # Company-level proctoring controls (Tenant.live_proctoring_enabled /
+    # proctoring_max_warnings, Common DB) - lets the trainee app disable
+    # on-device proctoring entirely, or use a non-default warning count,
+    # per company.
+    liveProctoringEnabled: bool = True
+    proctoringMaxWarnings: int = 3
     # The trainer has closed the session. The app drops back to the "no active
     # session" screen (the module timeline is gone); past results stay in
     # Rank / Dashboard / history.

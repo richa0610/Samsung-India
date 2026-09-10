@@ -36,7 +36,6 @@ from app.schemas.attendance import (
 from app.routers.ws import manager as ws_manager
 from app.services import attendance_service
 from app.utils.helpers import (
-    attendance_is_assigned,
     distance_meters,
     geofence_enabled,
     within_geofence,
@@ -97,13 +96,10 @@ def check_in(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You've been marked absent for this session.",
         )
-    # Assigned (roster) trainees self-admit: their own check-in marks them
-    # Present. Walk-ins still need the trainer's manual "mark present" first.
-    if existing.status != "Present" and not attendance_is_assigned(existing):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The trainer hasn't marked you present yet.",
-        )
+    # Any trainee who has joined (Joined/Pending, assigned or not) can
+    # self-admit here - only a trainer's already-final Present/Absent
+    # decision blocks a self check-in, same rule as the trainee app's
+    # plain (non-secure) check-in on the other branch.
 
     if existing.status != "Present":
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -244,9 +240,9 @@ async def check_in_secure(
         else "ATTENDANCE"
     )
 
-    # Admission is trainer-gated: the trainer must mark this trainee "Present"
-    # on the Participant Master List before they can check in. Secure Check-In
-    # then attaches the proof (photo + location) to that same row.
+    # Any trainee who has joined this conference (Attendance row exists from
+    # session_service.join_session) can self-admit via Secure Check-In -
+    # only a trainer's already-final Present/Absent decision blocks it.
     existing = (
         db.query(Attendance)
         .filter(
@@ -265,13 +261,6 @@ async def check_in_secure(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You've been marked absent for this session.",
         )
-    # Assigned (roster) trainees self-admit: Secure Check-In marks them Present
-    # (below). Walk-ins still need the trainer's manual "mark present" first.
-    if existing.status != "Present" and not attendance_is_assigned(existing):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The trainer hasn't marked you present yet.",
-        )
     if existing.checkInPhoto and not settings.ALLOW_ATTENDANCE_RETEST:
         return AttendanceOut(status=existing.status, markedOn=existing.markedOn)
 
@@ -284,8 +273,8 @@ async def check_in_secure(
     (photo_dir / filename).write_bytes(contents)
 
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    # Assigned trainee self-admitting - promote Joined/Pending -> Present (no-op
-    # if the trainer already marked them).
+    # Trainee self-admitting - promote Joined/Pending -> Present (no-op if
+    # the trainer already marked them).
     existing.status = "Present"
     existing.markedOn = now_str
     existing.trainerUid = existing.trainerUid or (conference.trainerEmployeeId if conference else None)

@@ -1,9 +1,15 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import OperationalError
 
 from app.core.config import settings
 from app.core.media import MEDIA_ROOT
-from app.database.connection import Base, engine
+from app.database.common import common_engine
+from app.database.connection import CommonBase, TenantBase
+from app.database.tenant import tenant_manager
 
 # Import all models
 from app.models import *
@@ -19,15 +25,44 @@ from app.routers.trainer import router as trainer_router
 from app.routers.training import router as training_router
 from app.routers.ws import router as ws_router
 
-Base.metadata.create_all(bind=engine)
+logger = logging.getLogger("main")
+
+# 1. Initialize Common DB schema (admin, system_modules, tenants, etc.)
+try:
+    CommonBase.metadata.create_all(bind=common_engine)
+except Exception as e:
+    logger.warning("Could not automatically create Common DB tables on startup: %s", e)
+
+# 2. Initialize default tenant schema
+try:
+    default_engine = tenant_manager.get_engine(settings.DEFAULT_TENANT_ID)
+    TenantBase.metadata.create_all(bind=default_engine)
+except Exception as e:
+    logger.warning("Could not automatically create default tenant tables on startup: %s", e)
 
 app = FastAPI(
-    title="Samsung India API",
-    version="1.0.0",
+    title="Samsung India API (Multi-Tenant)",
+    version="2.0.0",
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
     openapi_url="/openapi.json" if settings.DEBUG else None,
 )
+
+
+# Global 503 handler for database operational/connection errors across tenants
+@app.exception_handler(OperationalError)
+async def db_operational_exception_handler(request: Request, exc: OperationalError):
+    logger.error("Database connection failure on %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": "Tenant database is temporarily unavailable"},
+    )
+
+
+@app.on_event("shutdown")
+def on_shutdown():
+    tenant_manager.close_all()
+
 
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 

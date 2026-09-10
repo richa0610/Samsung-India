@@ -17,6 +17,8 @@ export function checkIn(token: string, conferenceUid: string) {
 export type VerifyLocationResult = {
   distanceMeters: number | null;
   withinRadius: boolean | null;
+  /** Geofence radius this check was made against, in metres (defaults to 100). */
+  radiusMeters: number | null;
   venueLabel: string | null;
 };
 

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet } from "react-native";
 
 import { SessionDashboard } from "@/api/training";
@@ -10,7 +11,6 @@ import {
   SessionHeroesCard,
   TopPerformersCard,
 } from "@/components/session_dashboard";
-import { useLiveRuntime } from "@/hooks/useLiveRuntime";
 import { Colors } from "@/theme/colors";
 import { formatDurationHMS, formatRuntimeLabel } from "./formatting";
 import LiveStudioSection from "./LiveStudioSection";
@@ -44,7 +44,27 @@ export default function DashboardScrollContent({
   onUnlockExam,
   liveQuizControls,
 }: DashboardScrollContentProps) {
-  const runtimeSeconds = useLiveRuntime(data?.actualStartedAt, data?.actualEndedAt);
+  // Server-authoritative sum of each module's own active time (see
+  // _module_active_seconds on the backend) - ticks locally only while a
+  // module is actually live, so it doesn't drift ahead of the real value
+  // during a gap between modules (unlike the previous raw
+  // actualStartedAt/actualEndedAt wall-clock diff, which counted those
+  // gaps as runtime too).
+  const [runtimeSeconds, setRuntimeSeconds] = useState<number | null>(data?.runtimeSeconds ?? null);
+  useEffect(() => {
+    const moduleRunning = data?.conferenceStatus === "Ongoing" && data?.activeModuleId != null;
+    if (!moduleRunning || data?.runtimeSeconds == null) {
+      setRuntimeSeconds(data?.runtimeSeconds ?? null);
+      return;
+    }
+    const base = data.runtimeSeconds;
+    const capturedAt = Date.now();
+    const tick = () => setRuntimeSeconds(base + Math.floor((Date.now() - capturedAt) / 1000));
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [data?.runtimeSeconds, data?.conferenceStatus, data?.activeModuleId]);
+
   const participants = participantsFromTrainees(data?.trainees ?? []);
 
   return (

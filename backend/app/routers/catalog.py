@@ -27,3 +27,43 @@ def list_checklist_items(
     _admin: Admin = Depends(get_current_admin),
 ):
     return catalog_service.list_checklist_items(db)
+
+
+@router.get("/training-hubs", response_model=list[SelectOptionOut])
+def list_training_hubs(
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(get_current_admin),
+):
+    return catalog_service.list_training_hubs(db)
+
+
+@router.get("/audiences", response_model=list[SelectOptionOut])
+def list_audiences(
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(get_current_admin),
+):
+    return catalog_service.list_audiences(db)
+
+
+@router.get("/session-types", response_model=list[SelectOptionOut])
+def list_session_types(
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(get_current_admin),
+):
+    return catalog_service.list_session_types(db)
+
+
+@router.get("/training-types", response_model=list[SelectOptionOut])
+def list_training_types(
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(get_current_admin),
+):
+    return catalog_service.list_training_types(db)
+
+
+@router.get("/requested-by-options", response_model=list[SelectOptionOut])
+def list_requested_by_options(
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(get_current_admin),
+):
+    return catalog_service.list_requested_by_options(db)

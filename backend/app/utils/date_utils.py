@@ -1,4 +1,36 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+# The venue clock. Every conference in this system is in India, and
+# `conferenceDate`/`conferenceTime` (and the per-module times) are entered in
+# local venue time. IST is a fixed UTC+5:30 with no DST, so a plain offset is
+# exact and needs no tz database.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def ist_now() -> datetime:
+    """Current venue (IST) wall-clock time as a naive datetime, for comparing
+    against the naive `conferenceDate`/`conferenceTime` strings. Derived from
+    an absolute UTC reading, so it's correct whether the host runs on UTC
+    (Render) or on local time (a dev machine)."""
+    return datetime.now(timezone.utc).astimezone(IST).replace(tzinfo=None)
+
+
+def utc_naive_to_ist(dt: datetime | None) -> datetime | None:
+    """Convert a naive UTC datetime (how timestamps are stored on this stack -
+    e.g. `conference.actualStartedAt`) to naive IST wall-clock time, so it can
+    be compared against parsed `conferenceDate`/`conferenceTime` values."""
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc).astimezone(IST).replace(tzinfo=None)
+
+
+def ist_to_iso(dt: datetime | None) -> str | None:
+    """Tag a naive venue-local (IST) datetime - e.g. a parsed
+    `conferenceDate`/`conferenceTime` - with its +05:30 offset so the app
+    reads it as the correct instant."""
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=IST).isoformat()
 
 
 def to_utc_iso(dt: datetime | None) -> str | None:

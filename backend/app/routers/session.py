@@ -1,8 +1,8 @@
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_trainee
-from app.dependencies.database import get_db
+from app.dependencies.database import get_db, get_tenant_id_from_request
 from app.models.trainee import Trainee
 from app.schemas.session import (
     CurrentSession,
@@ -42,20 +42,24 @@ def join_session(
 
 @router.get("/current", response_model=CurrentSession)
 def get_current_session(
+    request: Request,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return session_service.get_current_session(db, trainee)
+    tenant_id = get_tenant_id_from_request(request)
+    return session_service.get_current_session(db, trainee, tenant_id)
 
 
 @router.post("/proctoring-lock", response_model=ProctoringLockOut)
 def report_proctoring_lock(
     payload: ProctoringLockRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return session_service.report_proctoring_lock(db, trainee, payload, background_tasks)
+    tenant_id = get_tenant_id_from_request(request)
+    return session_service.report_proctoring_lock(db, trainee, payload, background_tasks, tenant_id)
 
 
 @router.get("/live-quiz", response_model=LiveQuizView)

@@ -1,9 +1,9 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.rate_limit import rate_limit
 from app.dependencies.auth import get_current_trainee
-from app.dependencies.database import get_db
+from app.dependencies.database import get_db, get_tenant_id_from_request
 from app.models.trainee import Trainee
 from app.schemas.trainee import (
     TokenResponse,
@@ -32,17 +32,20 @@ def register_trainee(payload: TraineeRegister, background_tasks: BackgroundTasks
     response_model=TokenResponse,
     dependencies=[Depends(rate_limit(max_attempts=5, window_seconds=300))],
 )
-def login_trainee(payload: TraineeLogin, db: Session = Depends(get_db)):
-    return trainee_service.login(db, payload)
+def login_trainee(payload: TraineeLogin, request: Request, db: Session = Depends(get_db)):
+    tenant_id = get_tenant_id_from_request(request)
+    return trainee_service.login(db, payload, tenant_id)
 
 
 @router.patch("/me", response_model=TokenResponse)
 def update_trainee(
     payload: TraineeUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return trainee_service.update_me(db, trainee, payload)
+    tenant_id = get_tenant_id_from_request(request)
+    return trainee_service.update_me(db, trainee, payload, tenant_id)
 
 
 @router.post("/me/photo", response_model=TraineeOut)

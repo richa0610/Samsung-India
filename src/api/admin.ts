@@ -7,6 +7,8 @@ export type AdminAccount = {
   name: string;
   role: string;
   offerId?: string | null;
+  company?: string | null;
+  tenant_id?: string | null;
 };
 
 export type AdminAuthSession = {

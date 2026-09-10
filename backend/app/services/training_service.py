@@ -23,7 +23,7 @@ from app.repositories import (
     trainee_repository,
 )
 from app.routers.ws import manager as ws_manager
-from app.utils.date_utils import to_utc_iso
+from app.utils.date_utils import ist_now, ist_to_iso, parse_module_start, to_utc_iso
 from app.utils.helpers import geofence_enabled, within_geofence
 from app.utils.status import title_status
 from app.utils.validators import validate_document_upload, validate_image_upload
@@ -54,6 +54,7 @@ from app.services.module_flow import (
     configured_modules,
     live_quiz_suite_uid,
     log_module_action,
+    module_planned_minutes,
 )
 
 
@@ -67,6 +68,7 @@ def _execution_flow(db: Session, conference: Conference) -> list[ExecutionFlowIt
     for log in logs:
         logs_by_module.setdefault(log.moduleId, []).append(log)
 
+    planned_minutes = module_planned_minutes(conference)
     now = datetime.now()
     items: list[ExecutionFlowItem] = []
     for module_key in modules:
@@ -105,6 +107,7 @@ def _execution_flow(db: Session, conference: Conference) -> list[ExecutionFlowIt
                 startedAt=started_at,
                 endedAt=ended_at,
                 elapsedSeconds=elapsed,
+                assignedMinutes=planned_minutes.get(module_key),
             )
         )
 
@@ -209,12 +212,55 @@ def _pair_runs(
     return runs
 
 
+def _module_active_seconds(db: Session, conference: Conference) -> Optional[int]:
+    """Total wall-clock time any module has actually been running - the sum
+    of each configured module's own run durations from
+    ConferenceActivityLog (via _pair_runs, so a module that ran more than
+    once via Restart has every run counted, not just the latest) - not the
+    raw time since the session started, which would also count time before
+    the first module went live or any gap between one module stopping and
+    the next one starting."""
+    if not conference.actualStartedAt:
+        return None
+
+    modules = configured_modules(conference)
+    if not modules:
+        return None
+
+    logs = activity_log_list(db, conference.conferenceUid)
+    logs_by_module: dict[str, list[ConferenceActivityLog]] = {}
+    for log in logs:
+        logs_by_module.setdefault(log.moduleId, []).append(log)
+
+    now = datetime.now()
+    total_seconds = 0
+    for module_key in modules:
+        for started, stopped in _pair_runs(logs_by_module.get(module_key, [])):
+            end_point = stopped.timestamp if stopped else now
+            total_seconds += int((end_point - started.timestamp).total_seconds())
+    return total_seconds
+
+
 def _resolve_performer_names(db: Session, usernames: set[str]) -> dict[str, str]:
+    """`performedBy` values can be either an `Admin` username (Common DB) or
+    an `AgencyTeam` username (this tenant's DB). This function is called
+    several layers deep from many endpoints (audit log / execution flow
+    attribution), so rather than threading a `common_db` session through
+    every one of those call chains, it opens its own short-lived Common DB
+    session just for the Admin half of the lookup."""
     if not usernames:
         return {}
     names: dict[str, str] = {}
-    for admin in admin_repository.get_admins_by_usernames(db, usernames):
-        names[admin.username] = admin.name or admin.username
+
+    from app.database.common import CommonSessionLocal
+
+    common_db = CommonSessionLocal()
+    try:
+        for admin in admin_repository.get_admins_by_usernames(common_db, usernames):
+            names[admin.username] = admin.name or admin.username
+    finally:
+        common_db.close()
+
     remaining = usernames - names.keys()
     if remaining:
         for agent in admin_repository.get_agents_by_usernames(db, remaining):
@@ -236,6 +282,28 @@ def _audit_log(db: Session, conference: Conference) -> list[AuditLogEntry]:
 
     now = datetime.now()
     entries: list[AuditLogEntry] = []
+
+    # Late-start overrides (recorded by start_training when a trainer starts a
+    # session after its scheduled time) sit at the top of the log - they
+    # happen before any module runs.
+    for log in logs:
+        if log.action != "LATE_START":
+            continue
+        who = performer_names.get(log.performedBy, log.performedBy) if log.performedBy else None
+        entries.append(
+            AuditLogEntry(
+                moduleKey="LATE_START",
+                label="Late start (override)",
+                runNumber=1,
+                startedAt=to_utc_iso(log.timestamp),
+                endedAt=to_utc_iso(log.timestamp),
+                elapsedSeconds=None,
+                isRunning=False,
+                startedBy=who,
+                note=log.locationRemark,
+            )
+        )
+
     for module_key in modules:
         runs = _pair_runs(logs_by_module.get(module_key, []))
         for run_number, (started, stopped) in enumerate(runs, start=1):
@@ -322,10 +390,10 @@ def create_training(db: Session, payload: TrainingCreate, background_tasks: Back
         if payload.sessionFlow and payload.sessionFlow.survey
         else None,
         updatedBy=admin.username,
-        # Every new training needs an admin to review and approve it (see
-        # list_pending_trainings + approve_training) before the trainer can
-        # start it - see the check in start_training.
-        status="Pending",
+        # Auto-approved on creation for now - the trainer can start it straight
+        # away without waiting on an admin review (see list_pending_trainings +
+        # approve_training and the check in start_training).
+        status="Approved",
     )
     conference = conference_repository.create(db, conference)
 
@@ -386,9 +454,17 @@ def _updated_by_names_for(db: Session, conferences: list[Conference]) -> dict[st
     if not usernames:
         return {}
     names: dict[str, str] = {}
-    for admin in admin_repository.get_admins_by_usernames(db, usernames):
-        if admin.name:
-            names[admin.username] = admin.name
+
+    from app.database.common import CommonSessionLocal
+
+    common_db = CommonSessionLocal()
+    try:
+        for admin in admin_repository.get_admins_by_usernames(common_db, usernames):
+            if admin.name:
+                names[admin.username] = admin.name
+    finally:
+        common_db.close()
+
     for agent in admin_repository.get_agents_by_usernames(db, usernames):
         if agent.name:
             names.setdefault(agent.username, agent.name)
@@ -635,7 +711,15 @@ def _build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut
     def _proctoring(uid: str) -> tuple[bool, int, list[str]]:
         """(isLocked, strikes, log lines) from the trainee's attendance row -
         `isTheftLocked` / `theftAttemptsLeft` / `theftRemarks` (see
-        session_service.report_proctoring_lock)."""
+        session_service.report_proctoring_lock, which is the source of
+        truth for the actual max-warnings enforcement using the tenant's
+        configured value). The `3` here is only this display's own
+        fallback for a never-locked row (attemptsLeft is still None) -
+        _build_dashboard has no tenant_id available (it's reused by many
+        callers that don't have a request to resolve one from), so
+        TraineeRow.proctoringMaxStrikes stays this static default rather
+        than the tenant's real configured max; it's informational only and
+        doesn't affect whether/when a trainee actually gets locked out."""
         att = attendance_by_trainee.get(uid)
         if att is None:
             return False, 0, []
@@ -691,10 +775,7 @@ def _build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut
         latest_result_by_trainee.values(), key=lambda r: float(r.percentage), reverse=True
     )[:5]
 
-    runtime_seconds = None
-    if conference.actualStartedAt:
-        end_point = conference.actualEndedAt or datetime.now()
-        runtime_seconds = int((end_point - conference.actualStartedAt).total_seconds())
+    runtime_seconds = _module_active_seconds(db, conference)
 
     return SessionDashboardOut(
         conferenceUid=conference.conferenceUid,
@@ -920,6 +1001,7 @@ async def start_training(
     longitude: float | None = None,
     venue_latitude: float | None = None,
     venue_longitude: float | None = None,
+    late_start_reason: str | None = None,
 ) -> TrainingOut:
     conference = _get_owned_conference(db, admin, conference_uid)
     if conference.conferenceEndsOn is not None:
@@ -936,6 +1018,33 @@ async def start_training(
         db, admin, conference, latitude, longitude, venue_latitude, venue_longitude
     )
 
+    # Late start: if the scheduled start time has already passed, the trainer
+    # must acknowledge the delay with a reason (recorded on the activity log)
+    # before the session can start. Checked AFTER the geofence gate so a
+    # geofenced session confirms the trainer is at the venue first, then asks
+    # for the reason. `conferenceTime` is venue-local (IST), so the "now" it's
+    # compared against has to be IST too - not the host's naive clock.
+    late_reason = (late_start_reason or "").strip()[:500]
+    scheduled_start = parse_module_start(conference.conferenceDate, conference.conferenceTime)
+    is_late_start = (
+        conference.actualStartedAt is None
+        and scheduled_start is not None
+        and ist_now() >= scheduled_start
+    )
+    if is_late_start and not late_reason:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail={
+                "code": "LATE_START",
+                "message": (
+                    "This session was scheduled to start at "
+                    f"{conference.conferenceTime or scheduled_start.strftime('%I:%M %p')}. "
+                    "Add a reason for the delay to start it now."
+                ),
+                "scheduledFor": ist_to_iso(scheduled_start),
+            },
+        )
+
     # The trainer must capture a check-in photo to start the session - same
     # identity-verification idea as the trainee's secure attendance check-in.
     contents = await photo.read()
@@ -948,6 +1057,20 @@ async def start_training(
     conference.conferenceStatus = "Ongoing"
     if conference.actualStartedAt is None:
         conference.actualStartedAt = datetime.now()
+
+    if is_late_start and late_reason:
+        activity_log_repository.add(
+            db,
+            ConferenceActivityLog(
+                conferenceUid=conference.conferenceUid,
+                moduleId=None,
+                action="LATE_START",
+                performedBy=admin.username,
+                trainerLat=latitude,
+                trainerLng=longitude,
+                locationRemark=late_reason,
+            ),
+        )
 
     # Starting the session no longer auto-activates a module - the trainer
     # runs the flow forward one manual Start at a time (start_module), so

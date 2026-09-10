@@ -23,16 +23,16 @@ def register(db: Session, payload: TraineeRegister, background_tasks: Background
     return trainee
 
 
-def login(db: Session, payload: TraineeLogin) -> TokenResponse:
+def login(db: Session, payload: TraineeLogin, tenant_id: str) -> TokenResponse:
     trainee = trainee_repository.get_by_phone(db, payload.phone)
     if not trainee:
         raise not_found("No trainee found with this phone number")
 
-    access_token = create_access_token(subject=str(trainee.phone))
+    access_token = create_access_token(subject=str(trainee.phone), tenant_id=tenant_id, role="trainee")
     return TokenResponse(access_token=access_token, trainee=trainee)
 
 
-def update_me(db: Session, trainee: Trainee, payload: TraineeUpdate) -> TokenResponse:
+def update_me(db: Session, trainee: Trainee, payload: TraineeUpdate, tenant_id: str) -> TokenResponse:
     updates = payload.model_dump(exclude_unset=True, exclude_none=True)
 
     if "phone" in updates or "email" in updates:
@@ -54,7 +54,7 @@ def update_me(db: Session, trainee: Trainee, payload: TraineeUpdate) -> TokenRes
     # subject), so a changed phone number invalidates the token that was
     # just used to make this request - issue a fresh one so the trainee
     # doesn't get silently logged out by their own edit.
-    access_token = create_access_token(subject=str(trainee.phone))
+    access_token = create_access_token(subject=str(trainee.phone), tenant_id=tenant_id, role="trainee")
     return TokenResponse(access_token=access_token, trainee=trainee)
 
 

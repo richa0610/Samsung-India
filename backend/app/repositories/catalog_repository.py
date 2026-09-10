@@ -30,3 +30,13 @@ def list_checklist_items(db: Session) -> list[SubCategory]:
         .order_by(SubCategory.subCategory)
         .all()
     )
+
+
+def list_distinct_conference_values(db: Session, column) -> list[str]:
+    """Distinct, non-empty values already used for `column` across this
+    tenant's conferences - backs the Training Hub/Audience/Session Type/
+    Training Type/Requested By pickers, none of which have a dedicated
+    master table (legacy or new)."""
+    rows = db.query(column).filter(column.isnot(None), column != "").distinct().all()
+    values = {row[0].strip() for row in rows if row[0] and row[0].strip()}
+    return sorted(values, key=lambda s: s.lower())

@@ -10,8 +10,13 @@ import {
   ModuleConfig,
   createTraining,
   fetchAssessmentSuites,
+  fetchAudiences,
   fetchChecklistItems,
+  fetchRequestedByOptions,
+  fetchSessionTypes,
   fetchTrainers,
+  fetchTrainingHubs,
+  fetchTrainingTypes,
   fetchVenues,
 } from "@/api/training";
 import {
@@ -38,11 +43,14 @@ const emptyModule = (): EvaluationModuleState => ({
 
 export function useAddTrainingForm() {
   const router = useRouter();
-  const { adminToken, adminLogout } = useAuth();
+  const { adminToken, admin, adminLogout } = useAuth();
 
   const [zone, setZone] = useState("");
   const [region, setRegion] = useState("");
-  const [company, setCompany] = useState("Samsung India");
+  // The company this training belongs to is the logged-in admin/trainer's
+  // own company (admin.company), not a user choice - see BasicDetailsSection,
+  // which renders this locked rather than as an editable picker.
+  const [company] = useState(admin?.company ?? "Samsung India");
   const [requestedByOption, setRequestedByOption] = useState("");
   const [requestedByOther, setRequestedByOther] = useState("");
 
@@ -66,9 +74,8 @@ export function useAddTrainingForm() {
   const [attendanceEnabled, setAttendanceEnabled] = useState(true);
   const [checkInOpens, setCheckInOpens] = useState("");
   const [checkOutCloses, setCheckOutCloses] = useState("");
+  // Trainer only toggles geofencing on/off; the check-in radius is fixed at 100 m.
   const [geoFencing, setGeoFencing] = useState(true);
-  // Metres a trainee may be from the venue and still check in (geoFencing on).
-  const [geoRadius, setGeoRadius] = useState("100");
 
   const [modules, setModules] = useState<Record<ModuleKey, EvaluationModuleState>>({
     standardTest: emptyModule(),
@@ -90,6 +97,18 @@ export function useAddTrainingForm() {
   const [trainerOptions, setTrainerOptions] = useState<SelectOption[]>([]);
   const [checklistOptions, setChecklistOptions] = useState<SelectOption[]>([]);
   const [venueOptions, setVenueOptions] = useState<SelectOption[]>([]);
+  // Seeded with the static fallback list, replaced once the backend returns
+  // real distinct values already used across past conferences - same
+  // "learn from history" pattern as the trainer/venue/checklist pickers
+  // above, just for fields that don't have a dedicated lookup table.
+  // These pickers have no master table - their options are whatever values
+  // this tenant has already used on past trainings (served by the /admin
+  // catalog endpoints). Empty until the first fetch resolves.
+  const [trainingHubOptions, setTrainingHubOptions] = useState<SelectOption[]>([]);
+  const [audienceOptions, setAudienceOptions] = useState<SelectOption[]>([]);
+  const [sessionTypeOptions, setSessionTypeOptions] = useState<SelectOption[]>([]);
+  const [trainingTypeOptions, setTrainingTypeOptions] = useState<SelectOption[]>([]);
+  const [requestedByOptions, setRequestedByOptions] = useState<SelectOption[]>([]);
 
   useEffect(() => {
     if (!adminToken) return;
@@ -102,6 +121,21 @@ export function useAddTrainingForm() {
     fetchChecklistItems(adminToken)
       .then(setChecklistOptions)
       .catch(() => setChecklistOptions([]));
+    fetchTrainingHubs(adminToken)
+      .then(setTrainingHubOptions)
+      .catch(() => setTrainingHubOptions([]));
+    fetchAudiences(adminToken)
+      .then(setAudienceOptions)
+      .catch(() => setAudienceOptions([]));
+    fetchSessionTypes(adminToken)
+      .then(setSessionTypeOptions)
+      .catch(() => setSessionTypeOptions([]));
+    fetchTrainingTypes(adminToken)
+      .then(setTrainingTypeOptions)
+      .catch(() => setTrainingTypeOptions([]));
+    fetchRequestedByOptions(adminToken)
+      .then(setRequestedByOptions)
+      .catch(() => setRequestedByOptions([]));
   }, [adminToken]);
 
   // Venue is gated on District, so its options are re-fetched (scoped
@@ -283,7 +317,7 @@ export function useAddTrainingForm() {
                 checkInOpens: checkInOpens || undefined,
                 checkOutCloses: checkOutCloses || undefined,
                 geoFencing,
-                geoRadius: geoFencing ? Number(digitsOnly(geoRadius)) || 100 : undefined,
+                geoRadius: geoFencing ? 100 : undefined,
               }
             : undefined,
           standardTest: modules.standardTest.enabled ? toPayloadModule(modules.standardTest) : undefined,
@@ -309,10 +343,11 @@ export function useAddTrainingForm() {
   return {
     zone, setZone,
     region, setRegion,
-    company, setCompany,
+    company,
     requestedByOption, setRequestedByOption,
     requestedByOther, setRequestedByOther,
     requestedBy,
+    requestedByOptions,
 
     trainerId, setTrainerId,
     trainerName, setTrainerName,
@@ -328,16 +363,19 @@ export function useAddTrainingForm() {
     conferenceTime, setConferenceTime,
     trainingEndDate, setTrainingEndDate,
     trainingHub, setTrainingHub,
+    trainingHubOptions,
     audience, setAudience,
+    audienceOptions,
     sessionType, setSessionType,
+    sessionTypeOptions,
     trainingType, setTrainingType,
+    trainingTypeOptions,
     batchSize, setBatchSize,
 
     attendanceEnabled, setAttendanceEnabled, toggleAttendance,
     checkInOpens, setCheckInOpens,
     checkOutCloses, setCheckOutCloses,
     geoFencing, setGeoFencing,
-    geoRadius, setGeoRadius,
 
     modules, toggleModule, updateModule,
     orderedFlowItems,

@@ -12,7 +12,7 @@ import {
   isAttendanceRecorded,
   setSessionFlowState,
 } from "@/api/session";
-import { isSessionLocked, resetSessionViolations } from "@/components/proctoring/violations";
+import { isSessionLocked, resetSessionViolations, setProctoringSettings } from "@/components/proctoring/violations";
 import { useAuth } from "@/hooks/useAuth";
 import { useLiveQuizChannel } from "@/hooks/useLiveQuizChannel";
 
@@ -83,6 +83,11 @@ export function useTraineeHome() {
 
       try {
         const data: CurrentSession = await getCurrentSession(token);
+        // Sync the company's proctoring on/off + max-warnings settings
+        // before the trainee can reach post_test - see violations.ts.
+        if (data.liveProctoringEnabled !== undefined && data.proctoringMaxWarnings !== undefined) {
+          setProctoringSettings(data.liveProctoringEnabled, data.proctoringMaxWarnings);
+        }
         // The backend `/sessions/current` response is the single source of
         // truth for every module's isLive / isCompleted / score / isMissed.
         // A module goes live ONLY when the trainer starts it

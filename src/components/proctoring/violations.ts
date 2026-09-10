@@ -22,7 +22,19 @@ export const VIOLATION_FOOTER_LABELS: Record<SecurityViolationType, string> = {
   [SECURITY_VIOLATIONS.TAB_SWITCH]: "TAB SWITCH\nVIOLATION",
 };
 
-export const MAX_PROCTORING_WARNINGS = 3;
+// Company-level defaults, overridden once real session data loads - see
+// setProctoringSettings (called from useTraineeHome as soon as
+// /sessions/current returns liveProctoringEnabled/proctoringMaxWarnings).
+// `let` (not `const`) is deliberate: every consumer below reads these live
+// via ES module bindings, so updating them here is reflected everywhere
+// without threading a prop/config object through each file.
+export let MAX_PROCTORING_WARNINGS = 3;
+export let PROCTORING_ENABLED = true;
+
+export function setProctoringSettings(enabled: boolean, maxWarnings: number): void {
+  PROCTORING_ENABLED = enabled;
+  MAX_PROCTORING_WARNINGS = maxWarnings > 0 ? maxWarnings : MAX_PROCTORING_WARNINGS;
+}
 
 // ─── Global session violation tracker ───────────────────────────────────────
 // Persists the violation count per session key so that re-renders or navigations

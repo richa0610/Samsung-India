@@ -11,12 +11,6 @@ import { Spacing } from "@/theme/spacing";
 import { digitsOnly } from "@/utils/validation";
 import { DateTimeField } from "./DateTimeField";
 import { SectionTitle } from "./SectionTitle";
-import {
-  AUDIENCE_OPTIONS,
-  SESSION_TYPE_OPTIONS,
-  TRAINING_HUB_OPTIONS,
-  TRAINING_TYPE_OPTIONS,
-} from "./constants";
 import { AddTrainingForm } from "./useAddTrainingForm";
 
 export function TrainingDetailsSection({ form }: { form: AddTrainingForm }) {
@@ -63,7 +57,7 @@ export function TrainingDetailsSection({ form }: { form: AddTrainingForm }) {
         placeholder="Select Hub"
         icon="business-outline"
         value={form.trainingHub}
-        options={TRAINING_HUB_OPTIONS}
+        options={form.trainingHubOptions}
         onSelect={(option) => form.setTrainingHub(option.value)}
       />
       <SearchableSelect
@@ -72,7 +66,7 @@ export function TrainingDetailsSection({ form }: { form: AddTrainingForm }) {
         placeholder="Select Audience"
         icon="school-outline"
         value={form.audience}
-        options={AUDIENCE_OPTIONS}
+        options={form.audienceOptions}
         onSelect={(option) => form.setAudience(option.value)}
       />
       <SearchableSelect
@@ -81,7 +75,7 @@ export function TrainingDetailsSection({ form }: { form: AddTrainingForm }) {
         placeholder="Select Session Type"
         icon="person-outline"
         value={form.sessionType}
-        options={SESSION_TYPE_OPTIONS}
+        options={form.sessionTypeOptions}
         onSelect={(option) => form.setSessionType(option.value)}
       />
       <SearchableSelect
@@ -90,7 +84,7 @@ export function TrainingDetailsSection({ form }: { form: AddTrainingForm }) {
         placeholder="Select Training Type"
         icon="wifi-outline"
         value={form.trainingType}
-        options={TRAINING_TYPE_OPTIONS}
+        options={form.trainingTypeOptions}
         onSelect={(option) => form.setTrainingType(option.value)}
       />
       <AppInput

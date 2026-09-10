@@ -5,6 +5,7 @@ from app.models.attendance import Attendance
 from app.models.category import Category, SubCategory
 from app.models.attendance_log import AttendanceLog
 from app.models.booking import Booking
+from app.models.common.tenant_registry import Tenant
 from app.models.conference import Conference
 from app.models.conference_activity_log import ConferenceActivityLog
 from app.models.data_scope import DataScope
@@ -41,4 +42,6 @@ __all__ = [
     "UidSequence",
     "UserPermission",
     "Venue",
+    # Common DB (DB-per-tenant split)
+    "Tenant",
 ]

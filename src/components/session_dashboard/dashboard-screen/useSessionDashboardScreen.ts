@@ -35,6 +35,15 @@ export type OutsideVenuePrompt = {
   trainerCoords: { latitude: number; longitude: number } | null;
 };
 
+export type LateStartPrompt = {
+  photo: TrainerCheckInPhoto;
+  trainerCoords: { latitude: number; longitude: number } | null;
+  // Carried through when the trainer also corrected the venue location on the
+  // way here, so the retried start keeps that fix.
+  venueOverride?: { latitude: number; longitude: number };
+  scheduledFor: string | null;
+};
+
 export function useSessionDashboardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ conferenceUid?: string }>();
@@ -53,6 +62,7 @@ export function useSessionDashboardScreen() {
   const [startCoords, setStartCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [requestingStartLocation, setRequestingStartLocation] = useState(false);
   const [outsideVenue, setOutsideVenue] = useState<OutsideVenuePrompt | null>(null);
+  const [lateStart, setLateStart] = useState<LateStartPrompt | null>(null);
   const [showCheckOutModal, setShowCheckOutModal] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
   const [startedForUid, setStartedForUid] = useState(conferenceUid);
@@ -156,19 +166,27 @@ export function useSessionDashboardScreen() {
     photo: TrainerCheckInPhoto,
     trainerCoords: { latitude: number; longitude: number } | null,
     venueOverride?: { latitude: number; longitude: number },
+    lateReason?: string,
   ) => {
     if (!adminToken) return;
     try {
-      await startTraining(adminToken, conferenceUid, photo, {
-        latitude: trainerCoords?.latitude,
-        longitude: trainerCoords?.longitude,
-        venueLatitude: venueOverride?.latitude,
-        venueLongitude: venueOverride?.longitude,
-      });
+      await startTraining(
+        adminToken,
+        conferenceUid,
+        photo,
+        {
+          latitude: trainerCoords?.latitude,
+          longitude: trainerCoords?.longitude,
+          venueLatitude: venueOverride?.latitude,
+          venueLongitude: venueOverride?.longitude,
+        },
+        lateReason,
+      );
       // Only flip to the "started" view once the backend actually confirms
       // it - e.g. an unapproved session gets rejected with a 403, and the
       // dashboard shouldn't show as live when nothing actually started.
       setOutsideVenue(null);
+      setLateStart(null);
       setHasStarted(true);
       loadData("silent");
     } catch (err) {
@@ -181,6 +199,13 @@ export function useSessionDashboardScreen() {
           radius: info.radius,
           trainerCoords,
         });
+        return;
+      }
+      // Geofence (if any) already cleared by this point - the backend checks
+      // it before the late-start gate - so this is the trainer being late.
+      if (err instanceof ApiError && err.status === 409 && body?.code === "LATE_START" && !lateReason) {
+        const info = err.body as { scheduledFor?: string | null };
+        setLateStart({ photo, trainerCoords, venueOverride, scheduledFor: info.scheduledFor ?? null });
         return;
       }
       Alert.alert(
@@ -208,6 +233,16 @@ export function useSessionDashboardScreen() {
 
   // "No" - the session does not start (they must be at the venue to start).
   const dismissOutsideVenue = () => setOutsideVenue(null);
+
+  // Late-start override: the trainer typed a reason for starting after the
+  // scheduled time - retry the start with it (keeping any venue-location fix
+  // made earlier in the flow). The backend logs the reason on the activity log.
+  const handleSubmitLateStart = async (reason: string) => {
+    if (!lateStart) return;
+    await runStartSession(lateStart.photo, lateStart.trainerCoords, lateStart.venueOverride, reason);
+  };
+
+  const dismissLateStart = () => setLateStart(null);
 
   const handleMarkAttendance = async (
     traineeUid: string,
@@ -363,6 +398,9 @@ export function useSessionDashboardScreen() {
     outsideVenue,
     handleUpdateVenueLocation,
     dismissOutsideVenue,
+    lateStart,
+    handleSubmitLateStart,
+    dismissLateStart,
     showCheckOutModal,
     setShowCheckOutModal,
     endingSession,

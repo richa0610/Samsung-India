@@ -12,6 +12,7 @@
         "buildType": "apk"
       },
       "env": {
+        "EXPO_PUBLIC_API_URL": "https://samsung-india-backend.onrender.com",
         "EXPO_PUBLIC_USE_RN_FETCH": "1"
       }
     },

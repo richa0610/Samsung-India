@@ -27,7 +27,8 @@ from app.schemas.session import (
     SessionModule,
 )
 from app.services.module_flow import auto_advance_if_due, configured_modules
-from app.utils.date_utils import duration, parse_module_start
+from app.services.proctoring_settings_service import get_proctoring_settings
+from app.utils.date_utils import duration, ist_now, parse_module_start, utc_naive_to_ist
 from app.utils.helpers import attendance_is_assigned
 from app.utils.status import title_status
 
@@ -256,6 +257,7 @@ def report_proctoring_lock(
     trainee: Trainee,
     payload: ProctoringLockRequest,
     background_tasks: BackgroundTasks,
+    tenant_id: str,
 ) -> ProctoringLockOut:
     """The trainee's post-test proctoring struck out - persist the lock onto
     their attendance row so the trainer's Participant Master List shows it and
@@ -279,8 +281,9 @@ def report_proctoring_lock(
         )
         attendance_repository.create(db, attendance)
 
+    _, proctoring_max_warnings = get_proctoring_settings(tenant_id)
     attendance.isTheftLocked = 1
-    attendance.theftAttemptsLeft = max(0, 3 - payload.strikeNumber)
+    attendance.theftAttemptsLeft = max(0, proctoring_max_warnings - payload.strikeNumber)
     stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{stamp}] LOCKED strike #{payload.strikeNumber}: {payload.violationType}"
     attendance.theftRemarks = f"{line}\n{attendance.theftRemarks}" if attendance.theftRemarks else line
@@ -292,12 +295,14 @@ def report_proctoring_lock(
     return ProctoringLockOut(locked=True)
 
 
-def get_current_session(db: Session, trainee: Trainee) -> CurrentSession:
+def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> CurrentSession:
     conference, started, start_at = _select_current_conference(db, trainee=trainee)
     if not conference:
         raise not_found("No active training session found")
 
     auto_advance_if_due(db, conference)
+
+    live_proctoring_enabled, proctoring_max_warnings = get_proctoring_settings(tenant_id)
 
     location = ", ".join(filter(None, [conference.district, conference.state])) or None
 
@@ -317,6 +322,8 @@ def get_current_session(db: Session, trainee: Trainee) -> CurrentSession:
             confirmationStatus="Completed",
             started=False,
             sessionClosed=True,
+            liveProctoringEnabled=live_proctoring_enabled,
+            proctoringMaxWarnings=proctoring_max_warnings,
             modules=[],
         )
 
@@ -331,6 +338,8 @@ def get_current_session(db: Session, trainee: Trainee) -> CurrentSession:
             confirmationStatus="Not Confirmed",
             started=False,
             startsAt=start_at.strftime("%d %b %Y, %I:%M %p") if start_at else None,
+            liveProctoringEnabled=live_proctoring_enabled,
+            proctoringMaxWarnings=proctoring_max_warnings,
             modules=[],
         )
 
@@ -344,6 +353,39 @@ def get_current_session(db: Session, trainee: Trainee) -> CurrentSession:
     # it - as opposed to just not-yet-live, which still shows "please wait".
     module_order = configured_modules(conference)
     active_index = module_order.index(conference.activeModuleId) if conference.activeModuleId in module_order else None
+
+    # Late start: when the trainer started the session after its scheduled
+    # time, the per-module schedule in `sessionConfig` can no longer be met.
+    # Past that point a module whose planned window has already elapsed - and
+    # that the trainer hasn't started and the trainee hasn't done - is shown
+    # as "missed" rather than "please wait" (see is_missed rule 4). All times
+    # are compared in IST, the venue clock the config strings are written in.
+    scheduled_start_ist = start_at
+    actual_start_ist = utc_naive_to_ist(conference.actualStartedAt)
+    started_late = (
+        scheduled_start_ist is not None
+        and actual_start_ist is not None
+        and actual_start_ist > scheduled_start_ist
+    )
+    now_ist = ist_now()
+    # sessionConfig section + (planned-end field, planned-start fallback) per module.
+    _MODULE_WINDOW = {
+        "ATTENDANCE": ("attendance", "checkOutCloses", "checkInOpens"),
+        "STANDARD_TEST": ("standardTest", "endTime", "startTime"),
+        "LIVE_QUIZ": ("liveQuiz", "endTime", "startTime"),
+        "SURVEY": ("survey", "endTime", "startTime"),
+    }
+
+    def _planned_deadline(key: str):
+        section, end_field, start_field = _MODULE_WINDOW.get(key, (None, None, None))
+        if section is None:
+            return None
+        block = config.get(section, {})
+        # Only a real per-module time counts here - no falling back to the
+        # session start, or an import with no flow times would mark every
+        # module missed the moment a late session starts.
+        raw = block.get(end_field) or block.get(start_field)
+        return parse_module_start(conference.conferenceDate, raw) if raw else None
 
     # Per-module run history from the trainer's Start/End actions. A module
     # the trainer has already Started and Ended - `ran_seconds` set - is over:
@@ -383,9 +425,16 @@ def get_current_session(db: Session, trainee: Trainee) -> CurrentSession:
         if conference.conferenceEndsOn and str(conference.conferenceEndsOn) < now_date_str:
             return True
         # 3. The trainer has manually advanced the flow past this module.
-        if key not in module_order or active_index is None:
-            return False
-        return module_order.index(key) < active_index
+        if key in module_order and active_index is not None and module_order.index(key) < active_index:
+            return True
+        # 4. The session started late and this module's planned window has
+        #    already elapsed - it won't run on schedule. (If the trainer does
+        #    start it anyway, the `live`/`completed` guards above take over.)
+        if started_late:
+            deadline = _planned_deadline(key)
+            if deadline is not None and now_ist > deadline:
+                return True
+        return False
 
     def _ran_label(key: str) -> str | None:
         """How long the module actually ran, e.g. "45m 3s" - for the
@@ -422,10 +471,13 @@ def get_current_session(db: Session, trainee: Trainee) -> CurrentSession:
     is_absent = attendance_status == "Absent"
     checked_in = trainee_checked_in
     attendance_is_active_module = conference.activeModuleId == "ATTENDANCE"
-    # Assigned (roster) trainees self-admit: they can run Secure Check-In
-    # without the trainer's manual "mark present" (the check-in marks them
-    # Present - see routers/attendance.py). Walk-ins stay trainer-gated.
-    attendance_admitted = trainer_admitted or attendance_is_assigned(attendance)
+    # Every trainee self-admits once the Attendance module is live - no
+    # per-trainee admission gate (assigned/unassigned/fresh doesn't matter
+    # here; routers/attendance.py accepts a self check-in from any of them
+    # the same way, only a trainer's already-final Present/Absent decision
+    # blocks it). Kept as its own variable (rather than inlining `True`)
+    # since attendance_live/_lock_reason below both read it.
+    attendance_admitted = True
 
     def _lock_reason(module_key: str) -> str | None:
         if module_key == "ATTENDANCE":
@@ -519,6 +571,8 @@ def get_current_session(db: Session, trainee: Trainee) -> CurrentSession:
         # the Participant Master List; the trainee's screen sees the flip here
         # and lets them back into the test.
         proctoringLocked=bool(attendance and attendance.isTheftLocked),
+        liveProctoringEnabled=live_proctoring_enabled,
+        proctoringMaxWarnings=proctoring_max_warnings,
         attendanceGeoFencing=bool(attendance_cfg.get("geoFencing")),
         modules=modules,
     )

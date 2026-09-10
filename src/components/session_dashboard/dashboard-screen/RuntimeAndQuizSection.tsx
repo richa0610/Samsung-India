@@ -3,6 +3,8 @@ import { Fragment } from "react";
 import { SessionDashboard } from "@/api/training";
 import ActiveModuleCard from "@/components/session_dashboard/ActiveModuleCard";
 import SessionRuntimeCard from "@/components/session_dashboard/SessionRuntimeCard";
+import { useLiveRuntime } from "@/hooks/useLiveRuntime";
+import { formatDurationHM } from "./formatting";
 
 type RuntimeAndQuizSectionProps = {
   data: SessionDashboard | null;
@@ -25,13 +27,25 @@ export default function RuntimeAndQuizSection({
     ? Math.round((completedModules / flow.length) * 100)
     : 0;
 
+  // "Assigned" = planned budget: the sum of every module's configured
+  // start -> end window (backend `assignedMinutes`).
+  const assignedSeconds = flow.reduce((sum, m) => sum + (m.assignedMinutes ?? 0) * 60, 0);
+  // "Consumed" = wall-clock time the session has actually been open
+  // (actualStartedAt -> now / ended, gaps between modules included), ticking
+  // live while it runs - distinct from "Actual Session Runtime" above, which
+  // counts module-active time only.
+  const consumedSeconds = useLiveRuntime(data?.actualStartedAt, data?.actualEndedAt);
+  const timeUsedPercent = assignedSeconds
+    ? Math.min(100, Math.round((consumedSeconds / assignedSeconds) * 100))
+    : 0;
+
   return (
     <Fragment>
       <SessionRuntimeCard
         actualRuntime={actualRuntime}
-        assignedTime="00h 42m"
-        consumedTime="04h 22m"
-        timeUsedPercent={92}
+        assignedTime={formatDurationHM(assignedSeconds)}
+        consumedTime={formatDurationHM(consumedSeconds)}
+        timeUsedPercent={timeUsedPercent}
         moduleCompletionPercent={moduleCompletionPercent}
       />
 

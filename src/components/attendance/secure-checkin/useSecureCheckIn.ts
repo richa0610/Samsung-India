@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ImageSourcePropType } from "react-native";
+import { Alert, ImageSourcePropType } from "react-native";
 import { useRouter } from "expo-router";
 
 import { ApiError, VerifyLocationResult, secureCheckIn, verifyLocation } from "@/api/attendance";
@@ -61,9 +61,18 @@ export function useSecureCheckIn(params: SecureCheckInParams) {
         // Geofenced session, trainee outside the radius - hard stop here (the
         // backend enforces it again at submit, this is the friendly pre-check).
         if (result.withinRadius === false) {
+          const radius = result.radiusMeters ?? 100;
           const away =
             result.distanceMeters != null ? ` (about ${Math.round(result.distanceMeters)} m away)` : "";
-          setError(`You're not at the training venue${away}. Move closer and try again.`);
+          Alert.alert(
+            "You're too far from the venue",
+            `Please come within the venue radius of ${radius} m to mark your attendance.${
+              away ? `\n\nYou're currently${away}.` : ""
+            }`,
+          );
+          setError(
+            `You're not at the training venue${away}. Move within ${radius} m and try again.`,
+          );
           setStep("error");
           return;
         }
@@ -133,7 +142,14 @@ export function useSecureCheckIn(params: SecureCheckInParams) {
       setAttendanceState("ATTENDANCE_RECORDED");
       setStep("granted");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't submit your check-in.");
+      const message = err instanceof ApiError ? err.message : "Couldn't submit your check-in.";
+      // Backend's geofence rejection ("...Move within N m to check in.") -
+      // surface it as a popup so the trainee sees it immediately, not just on
+      // the error screen behind the camera.
+      if (err instanceof ApiError && /move within/i.test(err.message)) {
+        Alert.alert("You're too far from the venue", err.message);
+      }
+      setError(message);
       setStep("error");
     }
   };

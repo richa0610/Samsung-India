@@ -9,17 +9,17 @@ from app.schemas.catalog import SelectOptionOut
 from app.schemas.trainer_profile import TrainerProfileOut, TrainerProfileUpdate
 
 
-def _find_trainer(db: Session, username: str) -> Admin | AgencyTeam | None:
-    """Real trainers live in `agencyteam`, not `admin` (same fallback the
-    login endpoint uses) - check both so this doesn't 404 for accounts
-    only seeded into `agencyteam`."""
-    trainer = admin_repository.get_admin_by_username_and_role(db, username, "trainer")
+def _find_trainer(common_db: Session, db: Session, username: str) -> Admin | AgencyTeam | None:
+    """Real trainers live in `agencyteam` (tenant DB), not `admin` (Common
+    DB) - same fallback the login endpoint uses - check both so this
+    doesn't 404 for accounts only seeded into `agencyteam`."""
+    trainer = admin_repository.get_admin_by_username_and_role(common_db, username, "trainer")
     if trainer:
         return trainer
     return admin_repository.get_agency_by_username_and_role(db, username, "trainer")
 
 
-def list_trainers(db: Session, company: str | None = None) -> list[SelectOptionOut]:
+def list_trainers(common_db: Session, db: Session, company: str | None = None) -> list[SelectOptionOut]:
     """Powers the Add Training and New Trainee forms' Trainer ID pickers.
     `label` shows the employee ID alongside the name (e.g.
     "OFF26001 - Aditya Kumar") so trainers sharing a name are still
@@ -35,7 +35,7 @@ def list_trainers(db: Session, company: str | None = None) -> list[SelectOptionO
         trainers = admin_repository.list_agency_trainers(db, company=company)
     else:
         trainers = [
-            *admin_repository.list_admin_trainers(db),
+            *admin_repository.list_admin_trainers(common_db),
             *admin_repository.list_agency_trainers(db),
         ]
 
@@ -53,8 +53,8 @@ def list_trainers(db: Session, company: str | None = None) -> list[SelectOptionO
     return sorted(options, key=lambda o: o.name or o.label)
 
 
-def get_trainer_name(db: Session, username: str) -> dict:
-    trainer = _find_trainer(db, username)
+def get_trainer_name(common_db: Session, db: Session, username: str) -> dict:
+    trainer = _find_trainer(common_db, db, username)
     if not trainer:
         raise not_found("Trainer not found")
 
@@ -230,7 +230,9 @@ def get_profile(admin: Admin | AgencyTeam) -> TrainerProfileOut:
     return _agency_to_profile(admin)
 
 
-def update_profile(db: Session, admin: Admin | AgencyTeam, payload: TrainerProfileUpdate) -> TrainerProfileOut:
+def update_profile(
+    common_db: Session, db: Session, admin: Admin | AgencyTeam, payload: TrainerProfileUpdate
+) -> TrainerProfileOut:
     updates = payload.model_dump(exclude_unset=True, exclude_none=True)
     # Self-service role changes would be a privilege-escalation risk (the
     # Official Info section's form happens to include a `role` field) -
@@ -239,9 +241,11 @@ def update_profile(db: Session, admin: Admin | AgencyTeam, payload: TrainerProfi
 
     if isinstance(admin, Admin):
         _apply_profile_update(admin, updates, _ADMIN_FIELD_MAP)
+        # `admin` was loaded from the Common DB (see get_current_admin) -
+        # must be saved through that same session, not the tenant one.
+        admin_repository.save(common_db, admin)
     else:
         _apply_profile_update(admin, updates, _AGENCY_FIELD_MAP)
-
-    admin_repository.save(db, admin)
+        admin_repository.save(db, admin)
 
     return get_profile(admin)

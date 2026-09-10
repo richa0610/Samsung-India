@@ -6,7 +6,7 @@ import { useFaceDetectorOutput } from "react-native-vision-camera-face-detector"
 import { ProctoringEngine } from "@/proctoring/onDevice/ProctoringEngine";
 import { MIN_FACE_SIZE } from "@/proctoring/onDevice/config";
 import type { DetectedEventType, DetectionEvent } from "@/proctoring/onDevice/types";
-import { MAX_PROCTORING_WARNINGS, SECURITY_VIOLATIONS, SecurityViolationType, VIOLATION_FOOTER_LABELS } from "../violations";
+import { MAX_PROCTORING_WARNINGS, PROCTORING_ENABLED, SECURITY_VIOLATIONS, SecurityViolationType, VIOLATION_FOOTER_LABELS } from "../violations";
 
 const EVENT_TO_VIOLATION: Record<DetectedEventType, SecurityViolationType> = {
   NO_FACE: SECURITY_VIOLATIONS.NO_FACE,
@@ -36,6 +36,10 @@ export function useOnDeviceProctoring({ active, paused, warningsCount, onViolati
   const wasActiveRef = useRef(active);
 
   const maxedOut = warningsCount >= MAX_PROCTORING_WARNINGS;
+  // Company-level kill switch (Tenant.live_proctoring_enabled) - when off,
+  // the camera/detector never runs and no violation can ever fire,
+  // regardless of `active`.
+  const proctoringEnabled = PROCTORING_ENABLED;
 
   useEffect(() => {
     if (!hasPermission) requestPermission();
@@ -82,7 +86,7 @@ export function useOnDeviceProctoring({ active, paused, warningsCount, onViolati
     trackingEnabled: false,
     minFaceSize: MIN_FACE_SIZE,
     onFacesDetected(faces) {
-      if (!active || paused || maxedOut) return;
+      if (!active || paused || maxedOut || !proctoringEnabled) return;
 
       if (faces.length === 0) {
         engine.ingestFace({ faceCount: 0 }, Date.now());
@@ -114,18 +118,20 @@ export function useOnDeviceProctoring({ active, paused, warningsCount, onViolati
     },
   });
 
-  const isInactive = !active || paused || !hasPermission || maxedOut;
+  const isInactive = !active || paused || !hasPermission || maxedOut || !proctoringEnabled;
   const currentBadge = isInactive ? null : activeCandidateBadge;
 
-  const footerLabel = !hasPermission
-    ? "Camera Off"
-    : maxedOut
-      ? "Submitting…"
-      : currentBadge
-        ? VIOLATION_FOOTER_LABELS[currentBadge] || "VIOLATION\nDETECTED"
-        : graceActive
-          ? "Get Ready…"
-          : "AI Active";
+  const footerLabel = !proctoringEnabled
+    ? "Proctoring Off"
+    : !hasPermission
+      ? "Camera Off"
+      : maxedOut
+        ? "Submitting…"
+        : currentBadge
+          ? VIOLATION_FOOTER_LABELS[currentBadge] || "VIOLATION\nDETECTED"
+          : graceActive
+            ? "Get Ready…"
+            : "AI Active";
 
   const isDangerBadge = !!currentBadge || maxedOut;
 

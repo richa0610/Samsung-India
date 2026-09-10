@@ -4,7 +4,7 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.dependencies.database import get_db
+from app.dependencies.database import get_common_db, get_db
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.models.trainee import Trainee
@@ -46,7 +46,11 @@ def get_current_trainee(
 def get_current_admin(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
+    common_db: Session = Depends(get_common_db),
 ) -> Admin | AgencyTeam:
+    """`Admin` (superadmin/internal accounts) lives in the shared Common
+    Database; `AgencyTeam` (partner-agency trainers) lives in the caller's
+    own tenant database - see the DB-per-tenant split in app/database/."""
     unauthorized = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired session",
@@ -64,7 +68,7 @@ def get_current_admin(
     subject = payload.get("sub") or ""
 
     if subject.startswith("admin:"):
-        admin = admin_repository.get_admin_by_username(db, subject.removeprefix("admin:"))
+        admin = admin_repository.get_admin_by_username(common_db, subject.removeprefix("admin:"))
         if not admin:
             raise unauthorized
         return admin

@@ -56,6 +56,11 @@ export type CurrentSession = {
   // On-device proctoring locked this trainee out of the post-test. Clears
   // when the trainer unlocks them from the Participant Master List.
   proctoringLocked?: boolean;
+  // Company-level proctoring controls (admin-configurable per tenant) -
+  // whether on-device proctoring should run at all, and how many warnings
+  // it takes to lock a trainee out. See src/components/proctoring/violations.ts.
+  liveProctoringEnabled?: boolean;
+  proctoringMaxWarnings?: number;
   // The trainer has closed the session - drop back to the "no active session"
   // screen instead of the module timeline.
   sessionClosed?: boolean;

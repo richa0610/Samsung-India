@@ -15,6 +15,8 @@ class AdminOut(BaseModel):
     name: str
     role: str
     offerId: Optional[str] = None
+    company: Optional[str] = None
+    tenant_id: Optional[str] = None
 
 
 class AdminAuthSession(BaseModel):

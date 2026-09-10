@@ -12,3 +12,5 @@ class FaceCheckRequest(BaseModel):
 
 class FaceCheckResult(BaseModel):
     faceCount: int
+    maxWarnings: int
+    allowed: bool = True

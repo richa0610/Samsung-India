@@ -24,4 +24,7 @@ class VerifyLocationRequest(BaseModel):
 class VerifyLocationOut(BaseModel):
     distanceMeters: Optional[float] = None
     withinRadius: Optional[bool] = None
+    # The geofence radius this check was made against, in metres (defaults to
+    # 100). Lets the trainee app tell the user exactly how close they need to be.
+    radiusMeters: Optional[int] = None
     venueLabel: Optional[str] = None

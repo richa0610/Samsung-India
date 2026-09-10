@@ -182,6 +182,9 @@ export type AuditLogEntry = {
   elapsedSeconds: number | null;
   isRunning: boolean;
   startedBy: string | null;
+  /** Free-text detail for a non-module event (e.g. a late-start override
+   *  reason). null for ordinary module runs. */
+  note: string | null;
 };
 
 export type LiveStudioQuestion = {
@@ -303,6 +306,10 @@ export function startTraining(
   conferenceUid: string,
   photo: { uri: string; name: string; type: string },
   location?: StartTrainingLocation,
+  /** Reason for starting after the scheduled time - required by the backend
+   *  (409 LATE_START) once the start time has passed, recorded on the
+   *  activity log. */
+  lateStartReason?: string,
 ) {
   const formData = new FormData();
   formData.append("photo", { uri: photo.uri, name: photo.name, type: photo.type } as unknown as Blob);
@@ -315,6 +322,7 @@ export function startTraining(
   for (const [key, value] of fields) {
     if (value != null) formData.append(key, String(value));
   }
+  if (lateStartReason?.trim()) formData.append("lateStartReason", lateStartReason.trim());
   return apiUpload<TrainingOut>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/start`, formData, token);
 }
 
@@ -474,6 +482,36 @@ export function fetchVenues(token: string, district?: string) {
 
 export function fetchChecklistItems(token: string) {
   return apiRequest<SelectOption[]>("/admin/checklist-items", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function fetchTrainingHubs(token: string) {
+  return apiRequest<SelectOption[]>("/admin/training-hubs", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function fetchAudiences(token: string) {
+  return apiRequest<SelectOption[]>("/admin/audiences", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function fetchSessionTypes(token: string) {
+  return apiRequest<SelectOption[]>("/admin/session-types", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function fetchTrainingTypes(token: string) {
+  return apiRequest<SelectOption[]>("/admin/training-types", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function fetchRequestedByOptions(token: string) {
+  return apiRequest<SelectOption[]>("/admin/requested-by-options", {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

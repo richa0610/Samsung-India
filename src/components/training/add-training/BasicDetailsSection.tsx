@@ -4,7 +4,7 @@ import AppCard from "@/components/ui/AppCard";
 import AppInput from "@/components/ui/AppInput";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { SectionTitle } from "./SectionTitle";
-import { COMPANY_OPTIONS, REGIONS_BY_ZONE, REQUESTED_BY_OPTIONS, ZONES } from "./constants";
+import { REGIONS_BY_ZONE, ZONES } from "./constants";
 import { AddTrainingForm } from "./useAddTrainingForm";
 
 export function BasicDetailsSection({ form }: { form: AddTrainingForm }) {
@@ -42,8 +42,9 @@ export function BasicDetailsSection({ form }: { form: AddTrainingForm }) {
         placeholder="Select Company"
         icon="business-outline"
         value={form.company}
-        options={COMPANY_OPTIONS}
-        onSelect={(option) => form.setCompany(option.value)}
+        options={[{ label: form.company, value: form.company }]}
+        onSelect={() => {}}
+        disabled
       />
       <SearchableSelect
         label="Requested By"
@@ -52,7 +53,7 @@ export function BasicDetailsSection({ form }: { form: AddTrainingForm }) {
         placeholder={form.company ? "Select Requester" : "Select Company First"}
         icon="person-outline"
         value={form.requestedByOption}
-        options={form.company ? REQUESTED_BY_OPTIONS : []}
+        options={form.company ? form.requestedByOptions : []}
         onSelect={(option) => form.setRequestedByOption(option.value)}
         disabled={!form.company}
       />

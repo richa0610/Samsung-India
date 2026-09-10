@@ -80,6 +80,7 @@ def verify_location(db: Session, payload: VerifyLocationRequest) -> VerifyLocati
     return VerifyLocationOut(
         distanceMeters=distance,
         withinRadius=(distance <= radius) if distance is not None else None,
+        radiusMeters=radius,
         venueLabel=", ".join(filter(None, [conference.district, conference.state])) or None,
     )
 

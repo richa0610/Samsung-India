@@ -24,11 +24,20 @@ _MODULE_CONFIG = {
     "LIVE_QUIZ": ("liveQuiz", "startTime"),
     "SURVEY": ("survey", "startTime"),
 }
+# sessionConfig key + (start field, end field) for each module - the planned
+# window the trainer set when building the session flow.
+_MODULE_TIME_RANGE = {
+    "ATTENDANCE": ("attendance", "checkInOpens", "checkOutCloses"),
+    "STANDARD_TEST": ("standardTest", "startTime", "endTime"),
+    "LIVE_QUIZ": ("liveQuiz", "startTime", "endTime"),
+    "SURVEY": ("survey", "startTime", "endTime"),
+}
 _CANONICAL_INDEX = {key: i for i, key in enumerate(MODULE_SEQUENCE)}
 
 __all__ = [
     "MODULE_LABELS",
     "configured_modules",
+    "module_planned_minutes",
     "log_module_action",
     "auto_advance_if_due",
     "live_quiz_suite_uid",
@@ -81,6 +90,35 @@ def configured_modules(conference: Conference) -> list[str]:
         return (minutes if minutes is not None else 10**9, _CANONICAL_INDEX[module_key])
 
     return sorted(modules, key=sort_key)
+
+
+def module_planned_minutes(conference: Conference) -> dict[str, int]:
+    """Each configured module's planned duration in minutes, from the
+    start/end times the trainer set on it in `sessionConfig` (free-text
+    "10:00 AM" values). Modules with no usable start/end pair - or an end
+    that isn't after the start - are left out. Drives the "Assigned" time
+    budget and the "Total Time Used" gauge on the Session Dashboard."""
+    config = {}
+    if conference.sessionConfig:
+        try:
+            config = json.loads(conference.sessionConfig)
+        except ValueError:
+            config = {}
+
+    planned: dict[str, int] = {}
+    for module_key in configured_modules(conference):
+        section, start_field, end_field = _MODULE_TIME_RANGE[module_key]
+        block = config.get(section) or {}
+        start = time_to_minutes(block.get(start_field))
+        end = time_to_minutes(block.get(end_field))
+        if start is None and module_key == "ATTENDANCE":
+            start = time_to_minutes(conference.conferenceTime)
+        if start is None or end is None:
+            continue
+        span = end - start
+        if span > 0:
+            planned[module_key] = span
+    return planned
 
 
 def log_module_action(db: Session, conference_uid: str, module_id: str, action: str, performed_by: str) -> None:

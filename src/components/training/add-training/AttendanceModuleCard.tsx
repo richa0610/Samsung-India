@@ -1,11 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable, View } from "react-native";
 
-import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
 import { FontWeight } from "@/theme/fontWeight";
-import { digitsOnly } from "@/utils/validation";
 import { ATTENDANCE_COLOR, ATTENDANCE_ICON } from "./constants";
 import { DateTimeField } from "./DateTimeField";
 import { flowCardStyles as s } from "./flowCardStyles";
@@ -34,20 +32,10 @@ export function AttendanceModuleCard({ form }: { form: AddTrainingForm }) {
       </Pressable>
 
       {form.geoFencing && (
-        <>
-          <AppInput
-            compact
-            label="Check-in radius (metres)"
-            value={form.geoRadius}
-            onChangeText={(t) => form.setGeoRadius(digitsOnly(t).slice(0, 4))}
-            keyboardType="number-pad"
-            placeholder="100"
-          />
-          <AppText style={s.geoHint} color={Colors.gray600}>
-            Trainees must be within this distance of the venue&apos;s saved location to check
-            in. If the venue has no coordinates on record, the fence isn&apos;t enforced.
-          </AppText>
-        </>
+        <AppText style={s.geoHint} color={Colors.gray600}>
+          Trainees must be within 100 m of the venue&apos;s saved location to check in. If the
+          venue has no coordinates on record, the fence isn&apos;t enforced.
+        </AppText>
       )}
     </View>
   );

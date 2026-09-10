@@ -1,10 +1,10 @@
 from sqlalchemy import BigInteger, Column, DateTime, Integer, String, Text, text
 from sqlalchemy.sql import func
 
-from app.database.connection import Base
+from app.database.connection import CommonBase
 
 
-class Admin(Base):
+class Admin(CommonBase):
     """Mirrors the real `admin` table (mmtbtwob_tops). Shared by admin and
     trainer accounts, distinguished by `role` - only `role="trainer"`
     accounts can sign into the trainer dashboard today; `role="admin"`

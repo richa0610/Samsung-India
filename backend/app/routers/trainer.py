@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_admin
-from app.dependencies.database import get_db
+from app.dependencies.database import get_common_db, get_db
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.schemas.catalog import SelectOptionOut
@@ -16,18 +16,20 @@ router = APIRouter(prefix="/admin", tags=["trainer"])
 def list_trainers(
     company: str | None = None,
     db: Session = Depends(get_db),
+    common_db: Session = Depends(get_common_db),
     _admin: Admin = Depends(get_current_admin),
 ):
-    return trainer_service.list_trainers(db, company)
+    return trainer_service.list_trainers(common_db, db, company)
 
 
 @router.get("/trainers/{username}")
 def get_trainer_name(
     username: str,
     db: Session = Depends(get_db),
+    common_db: Session = Depends(get_common_db),
     _admin: Admin = Depends(get_current_admin),
 ):
-    return trainer_service.get_trainer_name(db, username)
+    return trainer_service.get_trainer_name(common_db, db, username)
 
 
 @router.get("/profile", response_model=TrainerProfileOut)
@@ -39,6 +41,7 @@ def get_profile(admin: Admin | AgencyTeam = Depends(get_current_admin)):
 def update_profile(
     payload: TrainerProfileUpdate,
     db: Session = Depends(get_db),
+    common_db: Session = Depends(get_common_db),
     admin: Admin | AgencyTeam = Depends(get_current_admin),
 ):
-    return trainer_service.update_profile(db, admin, payload)
+    return trainer_service.update_profile(common_db, db, admin, payload)

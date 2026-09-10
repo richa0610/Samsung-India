@@ -38,26 +38,10 @@ export const TRAINER_OPTIONS: SelectOption[] = [
   { label: "9585478000 - GANESH", value: "9585478000" },
 ];
 
-export const TRAINING_HUB_OPTIONS: SelectOption[] = ["Delhi", "Not Assigned", "BOLPUR", "ALIPURDUAR", "BONGAIGAON", "BAHARAMPUR"].map(
-  (v) => ({ label: v, value: v })
-);
-export const AUDIENCE_OPTIONS: SelectOption[] = ["PC Training", "SEC Plan", "SEC", "SEC LITE GT", "OT SEC", "FESTIVE SEC", "SGC"].map(
-  (v) => ({ label: v, value: v })
-);
-export const SESSION_TYPE_OPTIONS: SelectOption[] = [
-  "Classroom Training",
-  "Online Training",
-  "PC Training",
-  "MX Training",
-  "ASE and ZSE",
-  "Sales Team",
-  "Partner Staff",
-  "NHIT",
-].map((v) => ({ label: v, value: v }));
-export const TRAINING_TYPE_OPTIONS: SelectOption[] = ["Webinar", "Product Training", "Classroom Training"].map((v) => ({
-  label: v,
-  value: v,
-}));
+// Training Hub / Audience / Session Type / Training Type pickers have no
+// static option list - they're populated from the /admin catalog endpoints
+// (distinct values this tenant has used on past trainings).
+
 export const UNLOCK_CONDITIONS = ["Automatic", "Manual Broadcast"];
 
 export const DEFAULT_CATEGORY_OPTIONS: SelectOption[] = ["POST TEST", "SAMSUMG S25", "Survey", "Quiz"].map((v) => ({

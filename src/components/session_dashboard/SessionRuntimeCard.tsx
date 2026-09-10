@@ -16,9 +16,9 @@ type SessionRuntimeCardProps = {
 
 export default function SessionRuntimeCard({
   actualRuntime = "0h 00m 00s",
-  assignedTime = "00h 42m",
-  consumedTime = "04h 22m",
-  timeUsedPercent = 92,
+  assignedTime = "0h 00m",
+  consumedTime = "0h 00m",
+  timeUsedPercent = 0,
   moduleCompletionPercent = 0,
 }: SessionRuntimeCardProps) {
   const donutSize = 56;

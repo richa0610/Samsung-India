@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Enum, ForeignKey, Integer, text
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Enum, Integer, text
 
 from app.database.connection import Base
 
@@ -7,7 +6,13 @@ from app.database.connection import Base
 class UserPermission(Base):
     """Mirrors the `user_permissions` table from mmtbtwob_tops — module-level
     read/write access control per user. Each row grants (or denies) one module
-    to one user. References `system_modules.id` via FK with CASCADE delete."""
+    to one user.
+
+    `module_id` points at `system_modules.id`, but is a plain column (no FK
+    constraint, no ORM relationship) rather than a real foreign key: this
+    table lives in each tenant's own database while `system_modules` moved
+    to the shared Common Database as part of the DB-per-tenant split, and a
+    real FK/relationship can't span two separate physical databases."""
 
     __tablename__ = "user_permissions"
 
@@ -18,13 +23,7 @@ class UserPermission(Base):
     table_type = Column(
         Enum("admin", "agencyteam", "trainee", name="user_permissions_table_type")
     )
-    module_id = Column(
-        Integer,
-        ForeignKey("system_modules.id", ondelete="CASCADE"),
-        index=True,
-    )
+    module_id = Column(Integer, index=True)
 
     can_read = Column(Integer, server_default=text("0"))
     can_write = Column(Integer, server_default=text("0"))
-
-    module = relationship("SystemModule", back_populates="permissions")

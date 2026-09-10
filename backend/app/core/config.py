@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic_settings import BaseSettings
 
 
@@ -12,6 +14,22 @@ class Settings(BaseSettings):
     # enforce TLS (e.g. Aiven - download it from the service's "Connection
     # Information" panel). Leave blank for a plain local MySQL with no TLS.
     DB_SSL_CA: str = ""
+
+    # Common Database settings (shared registry: admin, system_modules,
+    # tenants). Falls back to DB_* if not explicitly defined, so a
+    # single-tenant deployment needs no extra configuration.
+    COMMON_DB_HOST: Optional[str] = None
+    COMMON_DB_PORT: Optional[int] = None
+    COMMON_DB_USER: Optional[str] = None
+    COMMON_DB_PASSWORD: Optional[str] = None
+    COMMON_DB_NAME: Optional[str] = None
+
+    # Multi-tenancy settings
+    DEFAULT_TENANT_ID: str = "samsung"
+    TENANT_POOL_SIZE: int = 5
+    TENANT_MAX_OVERFLOW: int = 10
+    TENANT_POOL_TIMEOUT: int = 10
+    TENANT_POOL_RECYCLE: int = 280
 
     SECRET_KEY: str
     ALGORITHM: str
@@ -33,6 +51,10 @@ class Settings(BaseSettings):
     # during assessments. Leave blank to disable server-side face checks.
     FACE_DETECTION_API_KEY: str = ""
 
+    # Fallback warning count for tenants whose registry row has no explicit
+    # proctoring_max_warnings value.
+    DEFAULT_PROCTORING_MAX_WARNINGS: int = 3
+
     # Comma-separated list of origins allowed to call this API from a
     # browser (CORS). Only relevant for `expo start --web` / browser
     # clients - native Expo Go / dev-client requests don't send an Origin
@@ -47,6 +69,26 @@ class Settings(BaseSettings):
     @property
     def allowed_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
+
+    @property
+    def common_db_host(self) -> str:
+        return self.COMMON_DB_HOST or self.DB_HOST
+
+    @property
+    def common_db_port(self) -> int:
+        return self.COMMON_DB_PORT or self.DB_PORT
+
+    @property
+    def common_db_user(self) -> str:
+        return self.COMMON_DB_USER or self.DB_USER
+
+    @property
+    def common_db_password(self) -> str:
+        return self.COMMON_DB_PASSWORD or self.DB_PASSWORD
+
+    @property
+    def common_db_name(self) -> str:
+        return self.COMMON_DB_NAME or self.DB_NAME
 
 
 settings = Settings()

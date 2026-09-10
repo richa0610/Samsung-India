@@ -311,6 +311,10 @@ class ExecutionFlowItem(BaseModel):
     startedAt: Optional[str] = None
     endedAt: Optional[str] = None
     elapsedSeconds: Optional[int] = None
+    # Planned duration of this module in minutes, from the start/end times the
+    # trainer set on it when building the session flow. None when it has no
+    # usable pair. Feeds the "Assigned" budget + "Total Time Used" gauge.
+    assignedMinutes: Optional[int] = None
     # True when the trainer may start this module now: the session is
     # running, nothing else is live, this module hasn't run yet, and every
     # module before it in the flow has finished. Drives the per-row Start
@@ -335,6 +339,9 @@ class AuditLogEntry(BaseModel):
     elapsedSeconds: Optional[int] = None
     isRunning: bool = False
     startedBy: Optional[str] = None
+    # Free-text detail for a non-module event (e.g. the reason a trainer gave
+    # when overriding a late session start). None for ordinary module runs.
+    note: Optional[str] = None
 
 
 class LiveBroadcastRequest(BaseModel):
