@@ -1068,6 +1068,20 @@ def _resolve_schedule_override(conference: Conference, reason: str | None) -> bo
     return True
 
 
+def check_schedule(db: Session, admin: Admin, conference_uid: str) -> dict:
+    """Read-only pre-check for the Start Session flow: lets the app ask for
+    a schedule-override reason right after the trainer taps "Start Session"
+    - before the camera even opens - rather than only after they've already
+    taken the check-in photo. Raises the exact same 409 SCHEDULE_OVERRIDE
+    `_resolve_schedule_override` would raise if a reason is needed; returns
+    a plain OK otherwise. Never persists anything (no reason to apply, no
+    save) - the authoritative check+persist still happens inside
+    start_training itself, so this can't be used to bypass it."""
+    conference = _get_owned_conference(db, admin, conference_uid)
+    _resolve_schedule_override(conference, None)
+    return {"offSchedule": False}
+
+
 async def start_training(
     db: Session,
     admin: Admin,

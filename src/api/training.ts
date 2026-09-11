@@ -301,6 +301,20 @@ export type StartTrainingLocation = {
   venueLongitude?: number;
 };
 
+export type ScheduleCheckResult = { offSchedule: boolean };
+
+/** Read-only pre-check, called right after "Start Session" - before the
+ *  camera even opens - so the app can collect a schedule-override reason up
+ *  front instead of only after the trainer has already taken the check-in
+ *  photo. Throws the same 409 SCHEDULE_OVERRIDE (with `scheduledFor`/`early`)
+ *  as `startTraining` would if a reason is needed. */
+export function checkTrainingSchedule(token: string, conferenceUid: string) {
+  return apiRequest<ScheduleCheckResult>(
+    `/admin/trainings/${encodeURIComponent(conferenceUid)}/schedule-check`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+}
+
 export function startTraining(
   token: string,
   conferenceUid: string,

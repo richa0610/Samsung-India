@@ -7,6 +7,7 @@ import {
   SessionDashboard,
   UploadFile,
   broadcastLiveQuestion,
+  checkTrainingSchedule,
   endTraining,
   fetchSessionDashboard,
   finishLiveQuiz,
@@ -40,15 +41,17 @@ export type OutsideVenuePrompt = {
 };
 
 export type ScheduleOverridePrompt = {
-  photo: TrainerCheckInPhoto;
-  trainerCoords: { latitude: number; longitude: number } | null;
-  // Carried through when the trainer also corrected the venue location on the
-  // way here, so the retried start keeps that fix.
-  venueOverride?: { latitude: number; longitude: number };
   scheduledFor: string | null;
   // True when starting before the scheduled time, false when after - drives
   // "early"/"late" wording in the prompt.
   early: boolean;
+  // Only set for the rare post-photo fallback (the schedule window was
+  // crossed mid-flow, after the check-in photo was already taken) - absent
+  // for the normal case, where this prompt appears right after "Start
+  // Session" and the camera hasn't opened yet. See handleSubmitScheduleOverride.
+  photo?: TrainerCheckInPhoto;
+  trainerCoords?: { latitude: number; longitude: number } | null;
+  venueOverride?: { latitude: number; longitude: number };
 };
 
 export function useSessionDashboardScreen() {
@@ -70,6 +73,10 @@ export function useSessionDashboardScreen() {
   const [requestingStartLocation, setRequestingStartLocation] = useState(false);
   const [outsideVenue, setOutsideVenue] = useState<OutsideVenuePrompt | null>(null);
   const [scheduleOverride, setScheduleOverride] = useState<ScheduleOverridePrompt | null>(null);
+  // Reason collected from the pre-camera schedule-override prompt (see
+  // handleStartSession) - carried through every later start attempt (photo
+  // capture, and any venue-location retry) so it's only ever asked once.
+  const [pendingScheduleReason, setPendingScheduleReason] = useState<string | undefined>(undefined);
   const [showCheckOutModal, setShowCheckOutModal] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
   const [startedForUid, setStartedForUid] = useState(conferenceUid);
@@ -150,12 +157,19 @@ export function useSessionDashboardScreen() {
   // without a live GPS fix. `useLocationPermission` already alerts on
   // blocked/unavailable; "denied"/cancelled need their own message since
   // that hook only sets internal error state for those, no visible alert.
+  //
+  // Schedule is checked next, still before the camera opens: if this start
+  // is off-schedule, the trainer gives a reason right here, up front - the
+  // camera only opens once that's resolved (or wasn't needed). The venue
+  // geofence, by contrast, is only ever checked after the photo (see
+  // runStartSession) since confirming location is naturally part of
+  // submitting the actual start.
   const handleStartSession = async () => {
     setRequestingStartLocation(true);
     const { coords, status } = await requestLocationWithRationale();
-    setRequestingStartLocation(false);
 
     if (!coords) {
+      setRequestingStartLocation(false);
       if (status === "denied") {
         Alert.alert(
           "Location required",
@@ -166,7 +180,28 @@ export function useSessionDashboardScreen() {
     }
 
     setStartCoords(coords);
-    setShowCheckInModal(true);
+
+    if (!adminToken) {
+      setRequestingStartLocation(false);
+      return;
+    }
+    try {
+      await checkTrainingSchedule(adminToken, conferenceUid);
+      setRequestingStartLocation(false);
+      setShowCheckInModal(true);
+    } catch (err) {
+      setRequestingStartLocation(false);
+      const body = err instanceof ApiError ? (err.body as { code?: string } | null) : null;
+      if (err instanceof ApiError && err.status === 409 && body?.code === "SCHEDULE_OVERRIDE") {
+        const info = err.body as { scheduledFor?: string | null; early?: boolean };
+        setScheduleOverride({ scheduledFor: info.scheduledFor ?? null, early: info.early ?? false });
+        return;
+      }
+      Alert.alert(
+        "Couldn't start the session",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+    }
   };
 
   const runStartSession = async (
@@ -194,6 +229,7 @@ export function useSessionDashboardScreen() {
       // dashboard shouldn't show as live when nothing actually started.
       setOutsideVenue(null);
       setScheduleOverride(null);
+      setPendingScheduleReason(undefined);
       setHasStarted(true);
       loadData("silent");
     } catch (err) {
@@ -223,9 +259,13 @@ export function useSessionDashboardScreen() {
           return;
         }
       }
-      // Geofence (if any) already cleared by this point - the backend checks
-      // it before the schedule-override gate - so this is the trainer
-      // starting earlier or later than planned.
+      // Rare fallback: the schedule check already runs up front in
+      // handleStartSession, before the camera even opens, so this normally
+      // never fires - only if the off-schedule window was crossed mid-flow
+      // (e.g. the trainer sat on the camera screen past the grace period).
+      // Carries the photo/coords/venueOverride already in hand so
+      // handleSubmitScheduleOverride can resubmit immediately instead of
+      // re-opening the camera.
       if (err instanceof ApiError && err.status === 409 && body?.code === "SCHEDULE_OVERRIDE" && !overrideReason) {
         const info = err.body as { scheduledFor?: string | null; early?: boolean };
         setScheduleOverride({
@@ -248,32 +288,49 @@ export function useSessionDashboardScreen() {
     if (!adminToken) return;
     setShowCheckInModal(false);
     // Location was already required and captured before the camera opened
-    // (handleStartSession) - reuse it rather than asking again.
-    await runStartSession(photo, startCoords);
+    // (handleStartSession) - reuse it rather than asking again. Same for the
+    // schedule-override reason, if this start needed one.
+    await runStartSession(photo, startCoords, undefined, pendingScheduleReason);
   };
 
   // "Yes, update the venue location" from the OUTSIDE_VENUE prompt: re-runs
   // start with the chosen coordinates, which the backend writes onto the
-  // venue + this conference and then starts.
+  // venue + this conference and then starts. Carries the schedule reason
+  // through too - nothing was actually persisted on the request that hit
+  // the geofence block, so it has to be resent on every retry.
   const handleUpdateVenueLocation = async (latitude: number, longitude: number) => {
     if (!outsideVenue) return;
-    await runStartSession(outsideVenue.photo, outsideVenue.trainerCoords, { latitude, longitude });
+    await runStartSession(
+      outsideVenue.photo,
+      outsideVenue.trainerCoords,
+      { latitude, longitude },
+      pendingScheduleReason,
+    );
   };
 
   // "No" - the session does not start (they must be at the venue to start).
   const dismissOutsideVenue = () => setOutsideVenue(null);
 
-  // Schedule override: the trainer typed a reason for starting earlier or
-  // later than planned - retry the start with it (keeping any venue-location
-  // fix made earlier in the flow). The backend stores it on the conference.
+  // The trainer typed a reason for starting earlier or later than planned.
+  //  - Normal case (no photo attached to the prompt): this fired right after
+  //    "Start Session", before the camera opened - stash the reason and open
+  //    the camera now; it'll be sent along once the photo's taken.
+  //  - Fallback case (photo attached): the window was crossed mid-flow after
+  //    the photo was already captured - resubmit the real start immediately.
   const handleSubmitScheduleOverride = async (reason: string) => {
     if (!scheduleOverride) return;
-    await runStartSession(
-      scheduleOverride.photo,
-      scheduleOverride.trainerCoords,
-      scheduleOverride.venueOverride,
-      reason,
-    );
+    if (scheduleOverride.photo) {
+      await runStartSession(
+        scheduleOverride.photo,
+        scheduleOverride.trainerCoords ?? null,
+        scheduleOverride.venueOverride,
+        reason,
+      );
+    } else {
+      setPendingScheduleReason(reason);
+      setScheduleOverride(null);
+      setShowCheckInModal(true);
+    }
   };
 
   const dismissScheduleOverride = () => setScheduleOverride(null);

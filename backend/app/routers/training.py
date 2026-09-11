@@ -144,6 +144,15 @@ def get_session_report(
     return training_service.get_session_report(db, admin, conference_uid)
 
 
+@router.get("/trainings/{conference_uid}/schedule-check")
+def check_training_schedule(
+    conference_uid: str,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    return training_service.check_schedule(db, admin, conference_uid)
+
+
 @router.post("/trainings/{conference_uid}/start", response_model=TrainingOut)
 async def start_training(
     conference_uid: str,
