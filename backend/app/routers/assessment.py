@@ -104,12 +104,14 @@ def submit_assessment(
             )
         )
         db.commit()
-    except Exception as exc:  # TEMP diagnostic - surface the real reason
+    except Exception:
         db.rollback()
+        # Full exception + traceback goes to the server log only - never to
+        # the client. Debug from Render's logs, not from what the app shows.
         logging.getLogger("assessment").exception("submit_assessment failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Save failed: {type(exc).__name__}: {str(exc)[:200]}",
+            detail="Couldn't save your submission. Please try again.",
         )
 
     return SubmitResult(

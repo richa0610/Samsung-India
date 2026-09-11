@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from app.core.config import settings
 from app.core.media import MEDIA_ROOT
@@ -57,13 +57,48 @@ app = FastAPI(
 )
 
 
-# Global 503 handler for database operational/connection errors across tenants
+# Global error handlers - production policy: an HTTPException (raised
+# throughout the routers/services with a curated `detail`) always renders as
+# written, since it's registered for that exact class; everything below is a
+# safety net for whatever ISN'T one of those, so no raw exception text,
+# SQL, stack trace, or file path a caller could use to fingerprint the stack
+# ever reaches the response - full detail only ever goes to the server log.
+
+# Database connection/availability failures (can't reach the tenant's MySQL
+# at all) across every tenant.
 @app.exception_handler(OperationalError)
 async def db_operational_exception_handler(request: Request, exc: OperationalError):
     logger.error("Database connection failure on %s: %s", request.url.path, exc)
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": "Tenant database is temporarily unavailable"},
+    )
+
+
+# Any other DB-level failure (bad query, a constraint violation, a schema
+# mismatch, etc.) - the database was reachable, it just rejected the query.
+# More specific than the catch-all below so it logs with DB context, but the
+# client-facing message is the same.
+@app.exception_handler(SQLAlchemyError)
+async def db_query_exception_handler(request: Request, exc: SQLAlchemyError):
+    logger.error("Unhandled database error on %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Something went wrong. Please try again."},
+    )
+
+
+# Last-resort catch-all: any other unhandled exception (a bug, not a DB
+# issue). FastAPI's own handlers for HTTPException and request-validation
+# errors are registered for those specific classes and always take priority
+# over this one, so existing 400/401/403/404/409/422/503 responses (and
+# their exact messages) are completely unaffected by this handler existing.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception on %s", request.url.path)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Something went wrong. Please try again."},
     )
 
 
