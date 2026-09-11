@@ -60,6 +60,7 @@ export default function TrainerLoginScreen() {
                   onChangeText={setUsername}
                   autoCapitalize="none"
                   returnKeyType="next"
+                  maxLength={10}
                 />
                 <AppInput
                   label="Password"
@@ -69,6 +70,7 @@ export default function TrainerLoginScreen() {
                   secureTextEntry
                   returnKeyType="go"
                   onSubmitEditing={handleLogin}
+                  maxLength={15}
                 />
 
                 {notice && (

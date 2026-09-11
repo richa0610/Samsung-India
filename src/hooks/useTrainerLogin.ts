@@ -23,7 +23,7 @@ export function useTrainerLogin(initialReason?: string) {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    const cleanUsername = cleanText(username, 100);
+    const cleanUsername = cleanText(username, 10);
     if (!cleanUsername || !password) {
       setNotice("Enter your username and password.");
       return;
