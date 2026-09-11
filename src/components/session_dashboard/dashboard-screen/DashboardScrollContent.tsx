@@ -127,6 +127,7 @@ export default function DashboardScrollContent({
         <RuntimeAndQuizSection
           data={data}
           actualRuntime={formatDurationHMS(runtimeSeconds)}
+          runtimeSeconds={runtimeSeconds}
           onStopActiveModule={onStopActiveModule}
         />
       )}
