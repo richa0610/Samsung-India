@@ -28,7 +28,7 @@ from app.schemas.session import (
 )
 from app.services.module_flow import auto_advance_if_due, configured_modules
 from app.services.proctoring_settings_service import get_proctoring_settings
-from app.utils.date_utils import duration, ist_now, parse_module_start, utc_naive_to_ist
+from app.utils.date_utils import duration, parse_module_start
 from app.utils.helpers import attendance_is_assigned
 from app.utils.status import title_status
 
@@ -354,39 +354,6 @@ def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> Curren
     module_order = configured_modules(conference)
     active_index = module_order.index(conference.activeModuleId) if conference.activeModuleId in module_order else None
 
-    # Late start: when the trainer started the session after its scheduled
-    # time, the per-module schedule in `sessionConfig` can no longer be met.
-    # Past that point a module whose planned window has already elapsed - and
-    # that the trainer hasn't started and the trainee hasn't done - is shown
-    # as "missed" rather than "please wait" (see is_missed rule 4). All times
-    # are compared in IST, the venue clock the config strings are written in.
-    scheduled_start_ist = start_at
-    actual_start_ist = utc_naive_to_ist(conference.actualStartedAt)
-    started_late = (
-        scheduled_start_ist is not None
-        and actual_start_ist is not None
-        and actual_start_ist > scheduled_start_ist
-    )
-    now_ist = ist_now()
-    # sessionConfig section + (planned-end field, planned-start fallback) per module.
-    _MODULE_WINDOW = {
-        "ATTENDANCE": ("attendance", "checkOutCloses", "checkInOpens"),
-        "STANDARD_TEST": ("standardTest", "endTime", "startTime"),
-        "LIVE_QUIZ": ("liveQuiz", "endTime", "startTime"),
-        "SURVEY": ("survey", "endTime", "startTime"),
-    }
-
-    def _planned_deadline(key: str):
-        section, end_field, start_field = _MODULE_WINDOW.get(key, (None, None, None))
-        if section is None:
-            return None
-        block = config.get(section, {})
-        # Only a real per-module time counts here - no falling back to the
-        # session start, or an import with no flow times would mark every
-        # module missed the moment a late session starts.
-        raw = block.get(end_field) or block.get(start_field)
-        return parse_module_start(conference.conferenceDate, raw) if raw else None
-
     # Per-module run history from the trainer's Start/End actions. A module
     # the trainer has already Started and Ended - `ran_seconds` set - is over:
     # a trainee who never completed it (didn't check in / joined after it
@@ -427,13 +394,6 @@ def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> Curren
         # 3. The trainer has manually advanced the flow past this module.
         if key in module_order and active_index is not None and module_order.index(key) < active_index:
             return True
-        # 4. The session started late and this module's planned window has
-        #    already elapsed - it won't run on schedule. (If the trainer does
-        #    start it anyway, the `live`/`completed` guards above take over.)
-        if started_late:
-            deadline = _planned_deadline(key)
-            if deadline is not None and now_ist > deadline:
-                return True
         return False
 
     def _ran_label(key: str) -> str | None:
