@@ -64,21 +64,27 @@ export default function TrainerCheckOutModal({ visible, submitting, onClose, onC
           requestPermission={camera.requestPermission}
           device={camera.device}
           photoOutput={camera.photoOutput}
+          faceDetectorOutput={camera.faceDetectorOutput}
+          canCapture={camera.canCapture}
           cameraRef={camera.cameraRef}
         />
 
         <Pressable
-          style={[styles.captureBtn, camera.capturing && styles.dim]}
+          style={[styles.captureBtn, (camera.capturing || (!camera.hasPhoto && !camera.canCapture)) && styles.dim]}
           onPress={camera.hasPhoto ? camera.handleRetake : camera.handleCapture}
-          disabled={camera.capturing}
+          disabled={camera.capturing || (!camera.hasPhoto && !camera.canCapture)}
         >
           {camera.capturing ? (
             <ActivityIndicator size="small" color={Colors.white} />
           ) : (
             <>
-              <Ionicons name={camera.hasPhoto ? "refresh" : "camera"} size={18} color={Colors.white} />
+              <Ionicons
+                name={camera.hasPhoto ? "refresh" : camera.canCapture ? "camera" : "scan-outline"}
+                size={18}
+                color={Colors.white}
+              />
               <AppText color={Colors.white} weight={FontWeight.semiBold} style={styles.captureText}>
-                {camera.hasPhoto ? "Retake Photo" : "Capture Photo"}
+                {camera.hasPhoto ? "Retake Photo" : camera.canCapture ? "Capture Photo" : "Face not detected"}
               </AppText>
             </>
           )}

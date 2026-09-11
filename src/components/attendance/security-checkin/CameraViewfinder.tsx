@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { RefObject } from "react";
 import { ActivityIndicator, Image, ImageSourcePropType, Pressable, StyleSheet, View } from "react-native";
-import { Camera, CameraDevice, CameraPhotoOutput, CameraRef } from "react-native-vision-camera";
+import { Camera, CameraDevice, CameraOutput, CameraPhotoOutput, CameraRef } from "react-native-vision-camera";
 
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
@@ -14,6 +14,10 @@ type CameraViewfinderProps = {
   requestPermission: () => void;
   device: CameraDevice | undefined;
   photoOutput: CameraPhotoOutput;
+  faceDetectorOutput: CameraOutput;
+  // False while no face is in view (real device only - see useSecurityCheckIn) -
+  // shows a "position your face" hint over the live preview.
+  canCapture: boolean;
   cameraRef: RefObject<CameraRef | null>;
 };
 
@@ -24,6 +28,8 @@ export default function CameraViewfinder({
   requestPermission,
   device,
   photoOutput,
+  faceDetectorOutput,
+  canCapture,
   cameraRef,
 }: CameraViewfinderProps) {
   return (
@@ -44,7 +50,23 @@ export default function CameraViewfinder({
       ) : !device ? (
         <ActivityIndicator color={Colors.white} />
       ) : (
-        <Camera ref={cameraRef} style={styles.cameraStream} device={device} isActive outputs={[photoOutput]} />
+        <>
+          <Camera
+            ref={cameraRef}
+            style={styles.cameraStream}
+            device={device}
+            isActive
+            outputs={[photoOutput, faceDetectorOutput]}
+          />
+          {!canCapture && (
+            <View style={styles.faceHintBanner} pointerEvents="none">
+              <Ionicons name="scan-outline" size={16} color={Colors.white} />
+              <AppText color={Colors.white} weight={FontWeight.medium} style={styles.faceHintText}>
+                Position your face in the frame
+              </AppText>
+            </View>
+          )}
+        </>
       )}
     </View>
   );
@@ -94,5 +116,22 @@ const styles = StyleSheet.create({
   photoImage: {
     width: "100%",
     height: "100%",
+  },
+  faceHintBanner: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "rgba(17, 24, 39, 0.75)",
+  },
+  faceHintText: {
+    fontSize: 12,
   },
 });

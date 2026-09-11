@@ -27,6 +27,8 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
     requestPermission,
     device,
     photoOutput,
+    faceDetectorOutput,
+    canCapture,
     cameraRef,
     capturing,
     photoSource,
@@ -59,11 +61,13 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
             requestPermission={requestPermission}
             device={device}
             photoOutput={photoOutput}
+            faceDetectorOutput={faceDetectorOutput}
+            canCapture={canCapture}
             cameraRef={cameraRef}
           />
 
           {!hasPhoto ? (
-            <NoPhotoControls capturing={capturing} onCapture={handleCapture} />
+            <NoPhotoControls capturing={capturing} canCapture={canCapture} onCapture={handleCapture} />
           ) : (
             <PhotoCapturedControls onRetake={handleRetake} onProceed={handleProceedPress} />
           )}
