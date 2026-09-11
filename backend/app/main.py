@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.media import MEDIA_ROOT
 from app.database.common import common_engine
 from app.database.connection import CommonBase, TenantBase
+from app.database.schema_sync import sync_missing_columns
 from app.database.tenant import tenant_manager
 
 # Import all models
@@ -30,6 +31,12 @@ logger = logging.getLogger("main")
 # 1. Initialize Common DB schema (admin, system_modules, tenants, etc.)
 try:
     CommonBase.metadata.create_all(bind=common_engine)
+    # create_all() only creates missing TABLES - a column added to a model
+    # after its table already exists elsewhere (e.g. Tenant.
+    # live_proctoring_enabled, added after `tenants` already existed on a
+    # live deployment) never appears there on its own. This stack has no
+    # migration framework, so this best-effort additive sync is it.
+    sync_missing_columns(common_engine, CommonBase)
 except Exception as e:
     logger.warning("Could not automatically create Common DB tables on startup: %s", e)
 
@@ -37,6 +44,7 @@ except Exception as e:
 try:
     default_engine = tenant_manager.get_engine(settings.DEFAULT_TENANT_ID)
     TenantBase.metadata.create_all(bind=default_engine)
+    sync_missing_columns(default_engine, TenantBase)
 except Exception as e:
     logger.warning("Could not automatically create default tenant tables on startup: %s", e)
 
