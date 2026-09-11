@@ -33,6 +33,10 @@ export type OutsideVenuePrompt = {
   distanceMeters: number;
   radius: number;
   trainerCoords: { latitude: number; longitude: number } | null;
+  // True once this venue's location has already been corrected once
+  // (OUTSIDE_VENUE_LOCKED) - the modal drops the "update the venue" option
+  // and shows a hard block instead, since the one-time correction is used up.
+  locked: boolean;
 };
 
 export type LateStartPrompt = {
@@ -191,15 +195,30 @@ export function useSessionDashboardScreen() {
       loadData("silent");
     } catch (err) {
       const body = err instanceof ApiError ? (err.body as { code?: string } | null) : null;
-      if (err instanceof ApiError && err.status === 409 && body?.code === "OUTSIDE_VENUE" && !venueOverride) {
-        const info = err.body as { distanceMeters: number; radius: number };
-        setOutsideVenue({
-          photo,
-          distanceMeters: info.distanceMeters,
-          radius: info.radius,
-          trainerCoords,
-        });
-        return;
+      // OUTSIDE_VENUE offers the one-time "update the venue location?"
+      // correction; OUTSIDE_VENUE_LOCKED is the same distance check but the
+      // venue's location was already corrected once, so the modal shows a
+      // hard block instead (see OutsideVenueModal). Both carry distance info
+      // when raised from the actual radius check - the defensive case where
+      // a locked venue rejects a resubmitted correction doesn't, and falls
+      // through to the generic alert below.
+      if (
+        err instanceof ApiError &&
+        err.status === 409 &&
+        (body?.code === "OUTSIDE_VENUE" || body?.code === "OUTSIDE_VENUE_LOCKED") &&
+        !venueOverride
+      ) {
+        const info = err.body as { distanceMeters?: number; radius?: number };
+        if (info.distanceMeters != null && info.radius != null) {
+          setOutsideVenue({
+            photo,
+            distanceMeters: info.distanceMeters,
+            radius: info.radius,
+            trainerCoords,
+            locked: body?.code === "OUTSIDE_VENUE_LOCKED",
+          });
+          return;
+        }
       }
       // Geofence (if any) already cleared by this point - the backend checks
       // it before the late-start gate - so this is the trainer being late.

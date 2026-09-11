@@ -939,20 +939,36 @@ def _resolve_start_geofence(
 
     - If the trainer supplied `venue_latitude`/`venue_longitude` they've chosen
       to correct the venue location from the "you're not at the venue" prompt:
-      persist it onto the venue row and this conference, and skip the check.
+      persist it onto the venue row and this conference, lock the venue
+      against any further correction through this flow, and skip the check.
     - Else, if the session is geofenced (venue has coordinates + geoFencing on)
       and the trainer's position is outside the radius, raise a 409 the app
-      recognises to show that prompt. A session that isn't geofenced starts
-      with no location check.
+      recognises to show that prompt - offering the one-time correction above
+      only while the venue isn't already locked. A session that isn't
+      geofenced starts with no location check.
     """
+    venue = catalog_repository.get_venue_by_uid(db, conference.venueUid) if conference.venueUid else None
+
     if venue_latitude is not None and venue_longitude is not None:
-        if conference.venueUid:
-            venue = catalog_repository.get_venue_by_uid(db, conference.venueUid)
-            if venue:
-                venue.latitude = venue_latitude
-                venue.longitude = venue_longitude
-                venue.updatedBy = admin.username
-                venue.updationOn = datetime.now()
+        # A locked venue can't be corrected again, even by resubmitting this
+        # form field directly - the one-time correction has already been used.
+        if venue is not None and venue.geoLocationLocked:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail={
+                    "code": "OUTSIDE_VENUE_LOCKED",
+                    "message": (
+                        "This venue's location was already confirmed once and can't be "
+                        "corrected again. Start the session from the venue."
+                    ),
+                },
+            )
+        if venue is not None:
+            venue.latitude = venue_latitude
+            venue.longitude = venue_longitude
+            venue.geoLocationLocked = 1
+            venue.updatedBy = admin.username
+            venue.updationOn = datetime.now()
         conference.geoLatitude = venue_latitude
         conference.geoLongitude = venue_longitude
         return
@@ -977,6 +993,23 @@ def _resolve_start_geofence(
         return
 
     radius = conference.geoRadius or 100
+    if venue is not None and venue.geoLocationLocked:
+        # No correction offered - this venue's coordinates were already
+        # confirmed once, so the app shows a hard block instead of the
+        # "update the venue location?" prompt.
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail={
+                "code": "OUTSIDE_VENUE_LOCKED",
+                "message": (
+                    f"You're about {distance:.0f} m from the venue (allowed: {radius} m). "
+                    "This venue's location has already been confirmed and can't be corrected "
+                    "again - start the session from the venue."
+                ),
+                "distanceMeters": round(distance),
+                "radius": radius,
+            },
+        )
     raise HTTPException(
         status_code=http_status.HTTP_409_CONFLICT,
         detail={

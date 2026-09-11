@@ -29,6 +29,13 @@ class Venue(Base):
     district = Column(String(100))
     latitude = Column(Numeric(10, 8))
     longitude = Column(Numeric(11, 8))
+    # Set once a trainer corrects this venue's coordinates via the "you're
+    # not at the venue, update its location?" prompt at session start (see
+    # _resolve_start_geofence). After that the location is treated as
+    # confirmed and can't be corrected again through that flow - only a
+    # genuinely wrong value edited directly (e.g. by an admin) changes it
+    # from here. 0 = never overridden yet.
+    geoLocationLocked = Column(Integer, nullable=False, server_default=text("0"))
     state = Column(String(100))
     pincode = Column(String(100))
     map = Column(Text)
