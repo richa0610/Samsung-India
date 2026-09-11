@@ -16,6 +16,7 @@ import { Fonts } from "@/theme/fonts";
 import { ApiError, loginTrainee } from "@/api/auth";
 import { joinSession } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
+import { digitsOnly } from "@/utils/validation";
 
 export default function Starter1() {
   const router = useRouter();
@@ -82,10 +83,11 @@ export default function Starter1() {
                 placeholder="Enter Company ID or Phone No"
                 value={phone}
                 onChangeText={(value) => {
-                  setPhone(value);
+                  setPhone(digitsOnly(value).slice(0, 10));
                   if (error) setError(null);
                 }}
-                keyboardType="phone-pad"
+                keyboardType="number-pad"
+                maxLength={10}
               />
               {error && (
                 <AppText style={styles.error}>{error}</AppText>
