@@ -57,14 +57,14 @@ export default function OutsideVenueModal({ prompt, onCancel, onSave }: OutsideV
       {locked ? (
         <AppText style={styles.body}>
           You&apos;re about {prompt?.distanceMeters} m from the venue (allowed: {prompt?.radius} m).
-          This venue&apos;s location was already confirmed once and can&apos;t be corrected again —
-          start the session from the venue.
+          This session&apos;s location was already confirmed once and can&apos;t be corrected
+          again — start the session from the venue.
         </AppText>
       ) : (
         <AppText style={styles.body}>
           You&apos;re about {prompt?.distanceMeters} m from the saved venue location (allowed:{" "}
-          {prompt?.radius} m). The venue location may be wrong — update it? This can only be done
-          once for this venue.
+          {prompt?.radius} m). The venue location may be wrong — update it for this session? This
+          can only be done once.
         </AppText>
       )}
 

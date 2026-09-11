@@ -58,6 +58,14 @@ class Conference(Base):
     geoLatitude = Column(Numeric(10, 8))
     geoLongitude = Column(Numeric(11, 8))
     geoRadius = Column(Integer, server_default=text("100"))
+    # Set once a trainer corrects THIS conference's geoLatitude/geoLongitude
+    # via the "you're not at the venue, update its location?" prompt at
+    # session start (see _resolve_start_geofence). Scoped to this conference
+    # only - the shared venue row is never touched, so a correction here
+    # doesn't silently change where the geofence is for every OTHER training
+    # at the same venue. After this is set, that flow can't correct it again
+    # for this conference. 0 = never overridden yet.
+    venueLocationOverridden = Column(Integer, nullable=False, server_default=text("0"))
 
     assessmentFor = Column(String(100))
     preAssessmentUid = Column(String(100))
