@@ -1,6 +1,5 @@
 import json
 from collections import defaultdict
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -14,7 +13,7 @@ from app.core.constants import (
 from app.models.conference import Conference
 from app.models.conference_activity_log import ConferenceActivityLog
 from app.repositories import activity_log_repository, conference_repository
-from app.utils.date_utils import parse_module_start, time_to_minutes
+from app.utils.date_utils import ist_now, parse_module_start, time_to_minutes
 
 # sessionConfig key + planned-start-time field for each module, used to order
 # the flow by time.
@@ -179,7 +178,11 @@ def auto_advance_if_due(db: Session, conference: Conference) -> bool:
         return False
 
     start_at = parse_module_start(conference.conferenceDate, module_config.get("startTime"))
-    if start_at is None or datetime.now() < start_at:
+    # `conferenceDate`/`startTime` are venue-local (IST) - compare against the
+    # venue clock, not the host's naive wall clock. On the UTC-hosted Render
+    # server, using datetime.now() here left an auto-advance-due module stuck
+    # for up to ~5h30m after it was actually due.
+    if start_at is None or ist_now() < start_at:
         return False
 
     conference.activeModuleId = next_module
