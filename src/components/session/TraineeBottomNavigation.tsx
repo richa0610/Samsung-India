@@ -17,6 +17,47 @@ export type TraineeBottomNavigationProps = {
   onSelectTab: (tab: TraineeTab) => void;
 };
 
+// All four tabs render identically (icon in a circular badge + label below) -
+// the only thing that marks one as active is a blue fill behind its own
+// icon, not a raised/oversized button. Kept as data so the four Pressables
+// below share exactly the same layout instead of one being special-cased.
+const TABS: {
+  key: TraineeTab;
+  label: string;
+  icon: (active: boolean) => React.ReactNode;
+}[] = [
+  {
+    key: "rank",
+    label: "Rank",
+    icon: (active) => (
+      <Ionicons name={active ? "podium" : "podium-outline"} size={20} color={active ? Colors.white : Colors.bottomNavInactive} />
+    ),
+  },
+  {
+    key: "dashboard",
+    label: "Dashboard",
+    icon: (active) => (
+      <Ionicons name={active ? "grid" : "grid-outline"} size={19} color={active ? Colors.white : Colors.bottomNavInactive} />
+    ),
+  },
+  {
+    key: "home",
+    label: "Home",
+    icon: (active) => <HomeIcon width={20} height={20} stroke={active ? Colors.white : Colors.bottomNavInactive} />,
+  },
+  {
+    key: "profile",
+    label: "Profile",
+    icon: (active) => (
+      <Ionicons
+        name={active ? "person-circle" : "person-circle-outline"}
+        size={22}
+        color={active ? Colors.white : Colors.bottomNavInactive}
+      />
+    ),
+  },
+];
+
 export default function TraineeBottomNavigation({
   activeTab = "home",
   onSelectTab,
@@ -26,92 +67,27 @@ export default function TraineeBottomNavigation({
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       <View style={styles.container}>
-        {/* Left: Rank Tab */}
-        <Pressable
-          style={styles.tabItem}
-          onPress={() => onSelectTab("rank")}
-          accessibilityRole="button"
-          accessibilityLabel="Rank"
-          hitSlop={8}
-        >
-          <Ionicons
-            name={activeTab === "rank" ? "podium" : "podium-outline"}
-            size={24}
-            color={activeTab === "rank" ? Colors.headerBlue : Colors.bottomNavInactive}
-          />
-          <AppText
-            style={[
-              styles.tabLabel,
-              activeTab === "rank" && styles.tabLabelActive,
-            ]}
-            weight={activeTab === "rank" ? FontWeight.bold : FontWeight.medium}
-          >
-            Rank
-          </AppText>
-        </Pressable>
-
-        {/* Dashboard Tab - the trainee's stats / rankings / history page */}
-        <Pressable
-          style={styles.tabItem}
-          onPress={() => onSelectTab("dashboard")}
-          accessibilityRole="button"
-          accessibilityLabel="Dashboard"
-          hitSlop={8}
-        >
-          <Ionicons
-            name={activeTab === "dashboard" ? "grid" : "grid-outline"}
-            size={22}
-            color={activeTab === "dashboard" ? Colors.headerBlue : Colors.bottomNavInactive}
-          />
-          <AppText
-            style={[
-              styles.tabLabel,
-              activeTab === "dashboard" && styles.tabLabelActive,
-            ]}
-            weight={activeTab === "dashboard" ? FontWeight.bold : FontWeight.medium}
-          >
-            Dashboard
-          </AppText>
-        </Pressable>
-
-        {/* Center: Raised Circular Home Button */}
-        <View style={styles.centerButtonWrapper}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.centerButton,
-              pressed && styles.centerButtonPressed,
-            ]}
-            onPress={() => onSelectTab("home")}
-            accessibilityRole="button"
-            accessibilityLabel="Home"
-          >
-            <HomeIcon width={28} height={28} stroke={Colors.white} />
-          </Pressable>
-        </View>
-
-        {/* Right: Profile Tab */}
-        <Pressable
-          style={styles.tabItem}
-          onPress={() => onSelectTab("profile")}
-          accessibilityRole="button"
-          accessibilityLabel="Profile"
-          hitSlop={8}
-        >
-          <Ionicons
-            name={activeTab === "profile" ? "person-circle" : "person-circle-outline"}
-            size={26}
-            color={activeTab === "profile" ? Colors.headerBlue : Colors.bottomNavInactive}
-          />
-          <AppText
-            style={[
-              styles.tabLabel,
-              activeTab === "profile" && styles.tabLabelActive,
-            ]}
-            weight={activeTab === "profile" ? FontWeight.bold : FontWeight.medium}
-          >
-            Profile
-          </AppText>
-        </Pressable>
+        {TABS.map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              style={({ pressed }) => [styles.tabItem, pressed && styles.tabItemPressed]}
+              onPress={() => onSelectTab(tab.key)}
+              accessibilityRole="button"
+              accessibilityLabel={tab.label}
+              hitSlop={8}
+            >
+              <View style={[styles.iconBadge, active && styles.iconBadgeActive]}>{tab.icon(active)}</View>
+              <AppText
+                style={[styles.tabLabel, active && styles.tabLabelActive]}
+                weight={active ? FontWeight.bold : FontWeight.medium}
+              >
+                {tab.label}
+              </AppText>
+            </Pressable>
+          );
+        })}
       </View>
     </View>
   );
@@ -128,15 +104,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-around",
-    paddingTop: 10,
-    paddingHorizontal: 24,
-    height: 60,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
   tabItem: {
     alignItems: "center",
     justifyContent: "center",
     minWidth: 64,
-    gap: 3,
+    gap: 4,
+  },
+  tabItemPressed: {
+    opacity: 0.75,
+  },
+  iconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconBadgeActive: {
+    backgroundColor: Colors.headerBlue,
   },
   tabLabel: {
     fontSize: Fonts.caption,
@@ -144,25 +132,5 @@ const styles = StyleSheet.create({
   },
   tabLabelActive: {
     color: Colors.headerBlue,
-  },
-  centerButtonWrapper: {
-    alignItems: "center",
-    justifyContent: "center",
-    top: -18,
-  },
-  centerButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: Colors.headerBlue,
-    borderWidth: 4,
-    borderColor: Colors.white,
-    alignItems: "center",
-    justifyContent: "center",
-    ...Shadows.homeButton,
-  },
-  centerButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.96 }],
   },
 });
