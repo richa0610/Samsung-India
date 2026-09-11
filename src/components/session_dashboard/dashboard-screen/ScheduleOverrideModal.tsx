@@ -5,10 +5,10 @@ import { Ionicons } from "@expo/vector-icons";
 import AppInput from "@/components/ui/AppInput";
 import AppModal from "@/components/ui/AppModal";
 import AppText from "@/components/ui/AppText";
-import { LateStartPrompt } from "./useSessionDashboardScreen";
+import { ScheduleOverridePrompt } from "./useSessionDashboardScreen";
 
-type LateStartModalProps = {
-  prompt: LateStartPrompt | null;
+type ScheduleOverrideModalProps = {
+  prompt: ScheduleOverridePrompt | null;
   onCancel: () => void;
   onSubmit: (reason: string) => void;
 };
@@ -20,7 +20,7 @@ function scheduledLabel(iso: string | null): string | null {
   return parsed.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
 }
 
-export default function LateStartModal({ prompt, onCancel, onSubmit }: LateStartModalProps) {
+export default function ScheduleOverrideModal({ prompt, onCancel, onSubmit }: ScheduleOverrideModalProps) {
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -34,6 +34,7 @@ export default function LateStartModal({ prompt, onCancel, onSubmit }: LateStart
   }
 
   const when = scheduledLabel(prompt?.scheduledFor ?? null);
+  const earlyOrLate = prompt?.early ? "early" : "late";
   const canSubmit = reason.trim().length > 0 && !submitting;
 
   const submit = () => {
@@ -46,18 +47,19 @@ export default function LateStartModal({ prompt, onCancel, onSubmit }: LateStart
     <AppModal visible={!!prompt} onClose={onCancel} position="center" contentStyle={styles.sheet}>
       <View style={styles.header}>
         <Ionicons name="time" size={18} color="#F59E0B" />
-        <AppText style={styles.title}>Starting late</AppText>
+        <AppText style={styles.title}>Training schedule override</AppText>
       </View>
       <AppText style={styles.body}>
         {when
           ? `This session was scheduled to start at ${when}.`
-          : "This session was scheduled to start earlier."}{" "}
-        Add a reason for the delay to start it now — it&apos;s recorded on the session activity log.
+          : "This isn't this session's scheduled start time."}{" "}
+        You&apos;re starting it {earlyOrLate}. Add a reason to proceed — it&apos;s stored on this
+        session.
       </AppText>
 
       <AppInput
         compact
-        label="Reason for delay"
+        label={`Reason for starting ${earlyOrLate}`}
         value={reason}
         onChangeText={setReason}
         placeholder="e.g. Venue access delayed, waiting on trainees"

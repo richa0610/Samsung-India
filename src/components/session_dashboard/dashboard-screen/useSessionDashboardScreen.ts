@@ -39,13 +39,16 @@ export type OutsideVenuePrompt = {
   locked: boolean;
 };
 
-export type LateStartPrompt = {
+export type ScheduleOverridePrompt = {
   photo: TrainerCheckInPhoto;
   trainerCoords: { latitude: number; longitude: number } | null;
   // Carried through when the trainer also corrected the venue location on the
   // way here, so the retried start keeps that fix.
   venueOverride?: { latitude: number; longitude: number };
   scheduledFor: string | null;
+  // True when starting before the scheduled time, false when after - drives
+  // "early"/"late" wording in the prompt.
+  early: boolean;
 };
 
 export function useSessionDashboardScreen() {
@@ -66,7 +69,7 @@ export function useSessionDashboardScreen() {
   const [startCoords, setStartCoords] = useState<{ latitude: number; longitude: number } | null>(null);
   const [requestingStartLocation, setRequestingStartLocation] = useState(false);
   const [outsideVenue, setOutsideVenue] = useState<OutsideVenuePrompt | null>(null);
-  const [lateStart, setLateStart] = useState<LateStartPrompt | null>(null);
+  const [scheduleOverride, setScheduleOverride] = useState<ScheduleOverridePrompt | null>(null);
   const [showCheckOutModal, setShowCheckOutModal] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
   const [startedForUid, setStartedForUid] = useState(conferenceUid);
@@ -170,7 +173,7 @@ export function useSessionDashboardScreen() {
     photo: TrainerCheckInPhoto,
     trainerCoords: { latitude: number; longitude: number } | null,
     venueOverride?: { latitude: number; longitude: number },
-    lateReason?: string,
+    overrideReason?: string,
   ) => {
     if (!adminToken) return;
     try {
@@ -184,13 +187,13 @@ export function useSessionDashboardScreen() {
           venueLatitude: venueOverride?.latitude,
           venueLongitude: venueOverride?.longitude,
         },
-        lateReason,
+        overrideReason,
       );
       // Only flip to the "started" view once the backend actually confirms
       // it - e.g. an unapproved session gets rejected with a 403, and the
       // dashboard shouldn't show as live when nothing actually started.
       setOutsideVenue(null);
-      setLateStart(null);
+      setScheduleOverride(null);
       setHasStarted(true);
       loadData("silent");
     } catch (err) {
@@ -221,10 +224,17 @@ export function useSessionDashboardScreen() {
         }
       }
       // Geofence (if any) already cleared by this point - the backend checks
-      // it before the late-start gate - so this is the trainer being late.
-      if (err instanceof ApiError && err.status === 409 && body?.code === "LATE_START" && !lateReason) {
-        const info = err.body as { scheduledFor?: string | null };
-        setLateStart({ photo, trainerCoords, venueOverride, scheduledFor: info.scheduledFor ?? null });
+      // it before the schedule-override gate - so this is the trainer
+      // starting earlier or later than planned.
+      if (err instanceof ApiError && err.status === 409 && body?.code === "SCHEDULE_OVERRIDE" && !overrideReason) {
+        const info = err.body as { scheduledFor?: string | null; early?: boolean };
+        setScheduleOverride({
+          photo,
+          trainerCoords,
+          venueOverride,
+          scheduledFor: info.scheduledFor ?? null,
+          early: info.early ?? false,
+        });
         return;
       }
       Alert.alert(
@@ -253,15 +263,20 @@ export function useSessionDashboardScreen() {
   // "No" - the session does not start (they must be at the venue to start).
   const dismissOutsideVenue = () => setOutsideVenue(null);
 
-  // Late-start override: the trainer typed a reason for starting after the
-  // scheduled time - retry the start with it (keeping any venue-location fix
-  // made earlier in the flow). The backend logs the reason on the activity log.
-  const handleSubmitLateStart = async (reason: string) => {
-    if (!lateStart) return;
-    await runStartSession(lateStart.photo, lateStart.trainerCoords, lateStart.venueOverride, reason);
+  // Schedule override: the trainer typed a reason for starting earlier or
+  // later than planned - retry the start with it (keeping any venue-location
+  // fix made earlier in the flow). The backend stores it on the conference.
+  const handleSubmitScheduleOverride = async (reason: string) => {
+    if (!scheduleOverride) return;
+    await runStartSession(
+      scheduleOverride.photo,
+      scheduleOverride.trainerCoords,
+      scheduleOverride.venueOverride,
+      reason,
+    );
   };
 
-  const dismissLateStart = () => setLateStart(null);
+  const dismissScheduleOverride = () => setScheduleOverride(null);
 
   const handleMarkAttendance = async (
     traineeUid: string,
@@ -417,9 +432,9 @@ export function useSessionDashboardScreen() {
     outsideVenue,
     handleUpdateVenueLocation,
     dismissOutsideVenue,
-    lateStart,
-    handleSubmitLateStart,
-    dismissLateStart,
+    scheduleOverride,
+    handleSubmitScheduleOverride,
+    dismissScheduleOverride,
     showCheckOutModal,
     setShowCheckOutModal,
     endingSession,

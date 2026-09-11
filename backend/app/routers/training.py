@@ -153,7 +153,7 @@ async def start_training(
     longitude: Optional[float] = Form(None),
     venueLatitude: Optional[float] = Form(None),
     venueLongitude: Optional[float] = Form(None),
-    lateStartReason: Optional[str] = Form(None),
+    scheduleOverrideReason: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
 ):
@@ -167,7 +167,7 @@ async def start_training(
         longitude=longitude,
         venue_latitude=venueLatitude,
         venue_longitude=venueLongitude,
-        late_start_reason=lateStartReason,
+        schedule_override_reason=scheduleOverrideReason,
     )
 
 

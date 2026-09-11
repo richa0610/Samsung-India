@@ -4,8 +4,8 @@ import { StyleSheet } from "react-native";
 import { SessionDashboardHeader } from "@/components/session_dashboard";
 import {
   DashboardScrollContent,
-  LateStartModal,
   OutsideVenueModal,
+  ScheduleOverrideModal,
   SessionQRModal,
   TrainerCheckInModal,
   TrainerCheckOutModal,
@@ -37,9 +37,9 @@ export default function SessionDashboardScreen() {
     outsideVenue,
     handleUpdateVenueLocation,
     dismissOutsideVenue,
-    lateStart,
-    handleSubmitLateStart,
-    dismissLateStart,
+    scheduleOverride,
+    handleSubmitScheduleOverride,
+    dismissScheduleOverride,
     showCheckOutModal,
     setShowCheckOutModal,
     endingSession,
@@ -115,10 +115,10 @@ export default function SessionDashboardScreen() {
         onSave={handleUpdateVenueLocation}
       />
 
-      <LateStartModal
-        prompt={lateStart}
-        onCancel={dismissLateStart}
-        onSubmit={handleSubmitLateStart}
+      <ScheduleOverrideModal
+        prompt={scheduleOverride}
+        onCancel={dismissScheduleOverride}
+        onSubmit={handleSubmitScheduleOverride}
       />
 
       <TrainerCheckOutModal

@@ -37,6 +37,11 @@ class Conference(Base):
     actualStartedAt = Column(DateTime)
     actualEndedAt = Column(DateTime)
     enableCheckIn = Column(Integer, server_default=text("0"))
+    # Reason the trainer gave for starting this session earlier or later than
+    # its scheduled conferenceDate/conferenceTime (see start_training's
+    # SCHEDULE_OVERRIDE gate) - required before an off-schedule start is
+    # allowed to proceed at all. None for a session started on schedule.
+    scheduleOverrideReason = Column(Text)
 
     trainingHub = Column(String(100))
     audience = Column(String(150))

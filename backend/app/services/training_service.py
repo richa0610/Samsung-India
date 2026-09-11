@@ -283,17 +283,17 @@ def _audit_log(db: Session, conference: Conference) -> list[AuditLogEntry]:
     now = datetime.now()
     entries: list[AuditLogEntry] = []
 
-    # Late-start overrides (recorded by start_training when a trainer starts a
-    # session after its scheduled time) sit at the top of the log - they
-    # happen before any module runs.
+    # Schedule overrides (recorded by start_training when a trainer starts a
+    # session earlier or later than its scheduled time) sit at the top of the
+    # log - they happen before any module runs.
     for log in logs:
-        if log.action != "LATE_START":
+        if log.action != "SCHEDULE_OVERRIDE":
             continue
         who = performer_names.get(log.performedBy, log.performedBy) if log.performedBy else None
         entries.append(
             AuditLogEntry(
-                moduleKey="LATE_START",
-                label="Late start (override)",
+                moduleKey="SCHEDULE_OVERRIDE",
+                label="Schedule override",
                 runNumber=1,
                 startedAt=to_utc_iso(log.timestamp),
                 endedAt=to_utc_iso(log.timestamp),
@@ -1024,6 +1024,49 @@ def _resolve_start_geofence(
     )
 
 
+def _resolve_schedule_override(conference: Conference, reason: str | None) -> bool:
+    """Off-schedule start gate: starting any time other than the exact
+    scheduled minute - earlier, later on the same day, or on a later day
+    entirely (there's a separate hard block further up against starting on
+    an EARLIER day) - requires the trainer to give a reason before the
+    session is allowed to proceed at all. `conferenceTime` is venue-local
+    (IST), so the "now" it's compared against has to be IST too, not the
+    host's naive clock.
+
+    Applies the reason onto `conference.scheduleOverrideReason` (the source
+    of truth) and returns whether this start actually was off-schedule -
+    False for an on-schedule start, where there's nothing to do. Raises 409
+    SCHEDULE_OVERRIDE if a reason was required but not given."""
+    override_reason = (reason or "").strip()[:500]
+    scheduled_start = parse_module_start(conference.conferenceDate, conference.conferenceTime)
+    off_schedule = (
+        conference.actualStartedAt is None
+        and scheduled_start is not None
+        and ist_now().replace(second=0, microsecond=0) != scheduled_start
+    )
+    if not off_schedule:
+        return False
+
+    if not override_reason:
+        scheduled_label = conference.conferenceTime or scheduled_start.strftime("%I:%M %p")
+        early = ist_now() < scheduled_start
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail={
+                "code": "SCHEDULE_OVERRIDE",
+                "message": (
+                    f"This session was scheduled to start at {scheduled_label}. "
+                    f"Add a reason for starting it {'early' if early else 'late'} to proceed."
+                ),
+                "scheduledFor": ist_to_iso(scheduled_start),
+                "early": early,
+            },
+        )
+
+    conference.scheduleOverrideReason = override_reason
+    return True
+
+
 async def start_training(
     db: Session,
     admin: Admin,
@@ -1034,7 +1077,7 @@ async def start_training(
     longitude: float | None = None,
     venue_latitude: float | None = None,
     venue_longitude: float | None = None,
-    late_start_reason: str | None = None,
+    schedule_override_reason: str | None = None,
 ) -> TrainingOut:
     conference = _get_owned_conference(db, admin, conference_uid)
     if conference.conferenceEndsOn is not None:
@@ -1051,32 +1094,12 @@ async def start_training(
         db, admin, conference, latitude, longitude, venue_latitude, venue_longitude
     )
 
-    # Late start: if the scheduled start time has already passed, the trainer
-    # must acknowledge the delay with a reason (recorded on the activity log)
-    # before the session can start. Checked AFTER the geofence gate so a
-    # geofenced session confirms the trainer is at the venue first, then asks
-    # for the reason. `conferenceTime` is venue-local (IST), so the "now" it's
-    # compared against has to be IST too - not the host's naive clock.
-    late_reason = (late_start_reason or "").strip()[:500]
-    scheduled_start = parse_module_start(conference.conferenceDate, conference.conferenceTime)
-    is_late_start = (
-        conference.actualStartedAt is None
-        and scheduled_start is not None
-        and ist_now() >= scheduled_start
-    )
-    if is_late_start and not late_reason:
-        raise HTTPException(
-            status_code=http_status.HTTP_409_CONFLICT,
-            detail={
-                "code": "LATE_START",
-                "message": (
-                    "This session was scheduled to start at "
-                    f"{conference.conferenceTime or scheduled_start.strftime('%I:%M %p')}. "
-                    "Add a reason for the delay to start it now."
-                ),
-                "scheduledFor": ist_to_iso(scheduled_start),
-            },
-        )
+    # Schedule override: checked AFTER the geofence gate so a geofenced
+    # session confirms the trainer is at the venue first, then asks for the
+    # reason. Raises 409 SCHEDULE_OVERRIDE if one's needed but missing;
+    # otherwise applies `conference.scheduleOverrideReason` and reports
+    # whether this start needed one at all (for the activity-log mirror below).
+    off_schedule = _resolve_schedule_override(conference, schedule_override_reason)
 
     # The trainer must capture a check-in photo to start the session - same
     # identity-verification idea as the trainee's secure attendance check-in.
@@ -1091,17 +1114,21 @@ async def start_training(
     if conference.actualStartedAt is None:
         conference.actualStartedAt = datetime.now()
 
-    if is_late_start and late_reason:
+    if off_schedule:
+        # Mirrored onto the activity log (who/when, alongside the trainer's
+        # location) so it also shows up in the Execution Flow audit log - the
+        # conference row (set by _resolve_schedule_override) is the source
+        # of truth.
         activity_log_repository.add(
             db,
             ConferenceActivityLog(
                 conferenceUid=conference.conferenceUid,
                 moduleId=None,
-                action="LATE_START",
+                action="SCHEDULE_OVERRIDE",
                 performedBy=admin.username,
                 trainerLat=latitude,
                 trainerLng=longitude,
-                locationRemark=late_reason,
+                locationRemark=conference.scheduleOverrideReason,
             ),
         )
 

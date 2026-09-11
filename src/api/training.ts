@@ -306,10 +306,10 @@ export function startTraining(
   conferenceUid: string,
   photo: { uri: string; name: string; type: string },
   location?: StartTrainingLocation,
-  /** Reason for starting after the scheduled time - required by the backend
-   *  (409 LATE_START) once the start time has passed, recorded on the
-   *  activity log. */
-  lateStartReason?: string,
+  /** Reason for starting earlier or later than the scheduled time - required
+   *  by the backend (409 SCHEDULE_OVERRIDE) for any off-schedule start,
+   *  stored on the conference row. */
+  scheduleOverrideReason?: string,
 ) {
   const formData = new FormData();
   formData.append("photo", { uri: photo.uri, name: photo.name, type: photo.type } as unknown as Blob);
@@ -322,7 +322,7 @@ export function startTraining(
   for (const [key, value] of fields) {
     if (value != null) formData.append(key, String(value));
   }
-  if (lateStartReason?.trim()) formData.append("lateStartReason", lateStartReason.trim());
+  if (scheduleOverrideReason?.trim()) formData.append("scheduleOverrideReason", scheduleOverrideReason.trim());
   return apiUpload<TrainingOut>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/start`, formData, token);
 }
 
