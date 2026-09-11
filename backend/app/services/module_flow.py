@@ -185,6 +185,24 @@ def auto_advance_if_due(db: Session, conference: Conference) -> bool:
     if start_at is None or ist_now() < start_at:
         return False
 
+    # Atomic claim: two concurrent pollers (a trainee's get_current_session
+    # and the trainer dashboard fetch, or two trainees) can both reach this
+    # point having each read activeModuleId as NULL before either commits -
+    # a check-then-act race. Without this, both proceed to log their own
+    # STARTED for the same module, which throws off the Execution Flow's
+    # start/stop-count pairing and leaves it permanently showing "Running"
+    # with no way to stop it, even after the whole session has ended. This
+    # UPDATE only succeeds for whichever request's transaction gets there
+    # first (MySQL row-locks it until commit); the loser matches 0 rows and
+    # backs off without logging anything.
+    claimed = (
+        db.query(Conference)
+        .filter(Conference.conferenceUid == conference.conferenceUid, Conference.activeModuleId.is_(None))
+        .update({"activeModuleId": next_module}, synchronize_session=False)
+    )
+    if not claimed:
+        return False
+
     conference.activeModuleId = next_module
     if next_module == "LIVE_QUIZ":
         conference.liveQuizState = LIVE_QUIZ_STATE_IDLE

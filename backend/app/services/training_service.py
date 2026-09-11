@@ -79,7 +79,16 @@ def _execution_flow(db: Session, conference: Conference) -> list[ExecutionFlowIt
         # A module can run more than once (Restart), so compare counts rather
         # than "has a STARTED / has a STOPPED": more starts than stops means
         # it's live right now; the latest pair is the run we report on.
-        if len(starts) > len(stops):
+        # Guarded by the module actually being `activeModuleId` - a stray
+        # extra STARTED with no matching STOPPED (e.g. from a since-fixed
+        # auto-advance race) would otherwise leave this permanently showing
+        # "Running" with no way to stop it, even after the session ended.
+        is_actually_running = (
+            len(starts) > len(stops)
+            and conference.conferenceStatus == "Ongoing"
+            and conference.activeModuleId == module_key
+        )
+        if is_actually_running:
             item_status = "Running"
             first_started = starts[0]
             last_started = starts[-1]
@@ -89,7 +98,11 @@ def _execution_flow(db: Session, conference: Conference) -> list[ExecutionFlowIt
         elif starts:
             item_status = "Completed"
             first_started = starts[0]
-            last_stopped = stops[-1]
+            # Prefer the real last STOPPED; fall back to the last STARTED as
+            # a synthetic end if the log is inconsistent (more starts than
+            # stops but this isn't actually the live module) rather than
+            # showing a runaway elapsed time.
+            last_stopped = stops[-1] if stops else starts[-1]
             elapsed = int((last_stopped.timestamp - starts[-1].timestamp).total_seconds())
             started_at = to_utc_iso(first_started.timestamp)
             ended_at = to_utc_iso(last_stopped.timestamp)
