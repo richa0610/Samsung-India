@@ -1024,14 +1024,17 @@ def _resolve_start_geofence(
     )
 
 
+SCHEDULE_GRACE_SECONDS = 60  # +/- tolerance before a start counts as "off schedule"
+
+
 def _resolve_schedule_override(conference: Conference, reason: str | None) -> bool:
-    """Off-schedule start gate: starting any time other than the exact
-    scheduled minute - earlier, later on the same day, or on a later day
-    entirely (there's a separate hard block further up against starting on
-    an EARLIER day) - requires the trainer to give a reason before the
-    session is allowed to proceed at all. `conferenceTime` is venue-local
-    (IST), so the "now" it's compared against has to be IST too, not the
-    host's naive clock.
+    """Off-schedule start gate: starting more than SCHEDULE_GRACE_SECONDS
+    away from the scheduled moment - earlier, later on the same day, or on a
+    later day entirely (there's a separate hard block further up against
+    starting on an EARLIER day) - requires the trainer to give a reason
+    before the session is allowed to proceed at all. `conferenceTime` is
+    venue-local (IST), so the "now" it's compared against has to be IST too,
+    not the host's naive clock.
 
     Applies the reason onto `conference.scheduleOverrideReason` (the source
     of truth) and returns whether this start actually was off-schedule -
@@ -1042,7 +1045,7 @@ def _resolve_schedule_override(conference: Conference, reason: str | None) -> bo
     off_schedule = (
         conference.actualStartedAt is None
         and scheduled_start is not None
-        and ist_now().replace(second=0, microsecond=0) != scheduled_start
+        and abs((ist_now() - scheduled_start).total_seconds()) > SCHEDULE_GRACE_SECONDS
     )
     if not off_schedule:
         return False
