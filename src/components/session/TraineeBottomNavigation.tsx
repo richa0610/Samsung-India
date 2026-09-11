@@ -117,14 +117,17 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   iconBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
   iconBadgeActive: {
     backgroundColor: Colors.headerBlue,
+    borderWidth: 3,
+    borderColor: Colors.white,
+    ...Shadows.homeButton,
   },
   tabLabel: {
     fontSize: Fonts.caption,
