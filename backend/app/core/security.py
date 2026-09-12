@@ -8,7 +8,14 @@ from app.core.config import settings
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    # bcrypt's default cost (12 rounds) is fine on normal hardware but takes
+    # ~2s on the free/starter-tier CPU this API currently runs on - the
+    # rounds are stored in the hash itself, so only NEW hashes made from
+    # here on get the faster cost; verify_password on an existing hash keeps
+    # using whatever it was created with. 10 rounds is still a widely-used,
+    # safe default and this endpoint is already rate-limited (see
+    # app/core/rate_limit.py) against brute-forcing the smaller gap it opens.
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=10)).decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
