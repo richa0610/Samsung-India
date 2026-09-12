@@ -26,6 +26,8 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
     hasPermission,
     requestPermission,
     device,
+    deviceTimedOut,
+    retryDevice,
     cameraOutputs,
     handleCameraStarted,
     faceDetected,
@@ -62,6 +64,8 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
             hasPermission={hasPermission}
             requestPermission={requestPermission}
             device={device}
+            deviceTimedOut={deviceTimedOut}
+            retryDevice={retryDevice}
             cameraOutputs={cameraOutputs}
             onCameraStarted={handleCameraStarted}
             faceDetected={faceDetected}

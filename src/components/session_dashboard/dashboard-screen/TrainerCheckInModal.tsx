@@ -26,6 +26,8 @@ export default function TrainerCheckInModal({ visible, onClose, onConfirm }: Tra
     hasPermission,
     requestPermission,
     device,
+    deviceTimedOut,
+    retryDevice,
     cameraOutputs,
     handleCameraStarted,
     faceDetected,
@@ -58,6 +60,8 @@ export default function TrainerCheckInModal({ visible, onClose, onConfirm }: Tra
           hasPermission={hasPermission}
           requestPermission={requestPermission}
           device={device}
+          deviceTimedOut={deviceTimedOut}
+          retryDevice={retryDevice}
           cameraOutputs={cameraOutputs}
           onCameraStarted={handleCameraStarted}
           faceDetected={faceDetected}

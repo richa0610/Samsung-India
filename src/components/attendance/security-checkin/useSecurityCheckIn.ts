@@ -13,9 +13,41 @@ import { MIN_FACE_SIZE } from "@/proctoring/onDevice/config";
 
 const DEFAULT_SAMPLE_PHOTO: ImageSourcePropType = require("@/assets/images/user_img/default_male.png");
 
+// How long to wait for `useCameraDevice` to find a front camera before
+// treating it as a real failure rather than still-initializing. Generous
+// enough to cover a slow/cold camera stack, short enough that a genuinely
+// broken camera doesn't leave the trainee/trainer staring at a spinner
+// with no explanation of what's wrong.
+const DEVICE_TIMEOUT_MS = 5000;
+
 export function useSecurityCheckIn() {
   const { hasPermission, requestPermission } = useCameraPermission();
   const device = useCameraDevice("front");
+
+  // True once DEVICE_TIMEOUT_MS has passed with no device found - the
+  // camera view shows a real "Camera failed to start" error with a Retry
+  // action instead of an indefinite spinner. `retryAttempt` just re-arms
+  // the timer for another window; there's no native "recheck devices" API
+  // to call directly, but the underlying device list can and does update
+  // on its own (e.g. another app releasing the camera), so giving it
+  // another timeout window is a real retry, not just a fake progress bar.
+  const [deviceTimedOut, setDeviceTimedOut] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
+
+  useEffect(() => {
+    // Once a device shows up, this branch stops mattering entirely - the
+    // camera view below only ever checks `deviceTimedOut` inside a `!device`
+    // condition, so a stale `true` left over from an earlier failed attempt
+    // is harmless once `device` exists.
+    if (device) return;
+    const timer = setTimeout(() => setDeviceTimedOut(true), DEVICE_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [device, retryAttempt]);
+
+  const retryDevice = () => {
+    setDeviceTimedOut(false);
+    setRetryAttempt((n) => n + 1);
+  };
   // mirrorMode defaults to "auto", which mirrors front-camera output to match
   // the mirrored live selfie preview — the same behavior the previous
   // expo-camera implementation needed an explicit isImageMirror flag for.
@@ -91,13 +123,15 @@ export function useSecurityCheckIn() {
     if (faceDetected) setPhotoReady(true);
   };
 
-  // No live camera device (an emulator/web with no virtual camera) means
-  // there's nothing to run face detection against - the detector will never
-  // fire, so faceDetected would stay false forever. Don't block the existing
-  // dev/testing fallback (a placeholder photo, see handleCapture) behind a
-  // signal that can't possibly become true in that environment; only real
-  // hardware devices are held to the face-must-be-visible requirement.
-  const canCapture = !device || (faceDetected && photoReady);
+  // Only web gets a pass on the face requirement (no real camera API there
+  // to run detection against at all - see handleCapture's sample-photo
+  // fallback, which is scoped the same way). A native device with no
+  // camera found is a real failure, not a reason to skip the check - it
+  // must still show a face before capture is allowed, same as everywhere
+  // else; previously `!device` alone satisfied this condition, which meant
+  // a device that failed to initialize its camera silently bypassed the
+  // face-detection requirement entirely instead of being blocked.
+  const canCapture = Platform.OS === "web" || (faceDetected && photoReady);
 
   // Request camera permission on mount
   useEffect(() => {
@@ -165,6 +199,8 @@ export function useSecurityCheckIn() {
     hasPermission,
     requestPermission,
     device,
+    deviceTimedOut,
+    retryDevice,
     cameraOutputs,
     handleCameraStarted,
     faceDetected,

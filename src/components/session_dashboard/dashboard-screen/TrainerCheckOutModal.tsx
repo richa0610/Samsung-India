@@ -63,6 +63,8 @@ export default function TrainerCheckOutModal({ visible, submitting, onClose, onC
           hasPermission={camera.hasPermission}
           requestPermission={camera.requestPermission}
           device={camera.device}
+          deviceTimedOut={camera.deviceTimedOut}
+          retryDevice={camera.retryDevice}
           cameraOutputs={camera.cameraOutputs}
           onCameraStarted={camera.handleCameraStarted}
           faceDetected={camera.faceDetected}

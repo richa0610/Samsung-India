@@ -13,6 +13,11 @@ type CameraViewfinderProps = {
   hasPermission: boolean;
   requestPermission: () => void;
   device: CameraDevice | undefined;
+  // True once no device has been found for a while - see
+  // useSecurityCheckIn.DEVICE_TIMEOUT_MS. Shows a real error instead of an
+  // indefinite spinner.
+  deviceTimedOut: boolean;
+  retryDevice: () => void;
   // Just the face detector while scanning, then just the photo output once
   // a face is found - see useSecurityCheckIn.cameraOutputs.
   cameraOutputs: CameraOutput[];
@@ -33,6 +38,8 @@ export default function CameraViewfinder({
   hasPermission,
   requestPermission,
   device,
+  deviceTimedOut,
+  retryDevice,
   cameraOutputs,
   onCameraStarted,
   faceDetected,
@@ -54,6 +61,23 @@ export default function CameraViewfinder({
           <Pressable style={styles.enablePermButton} onPress={requestPermission}>
             <AppText color={Colors.white} weight={FontWeight.medium} style={styles.enablePermText}>
               Enable Camera
+            </AppText>
+          </Pressable>
+        </View>
+      ) : !device && deviceTimedOut ? (
+        <View style={styles.placeholderBox}>
+          <View style={styles.cameraOutlineBox}>
+            <Ionicons name="alert-circle-outline" size={64} color="rgba(255, 255, 255, 0.9)" />
+          </View>
+          <AppText color={Colors.white} weight={FontWeight.semiBold} style={styles.errorTitle}>
+            Camera failed to start
+          </AppText>
+          <AppText color="rgba(255, 255, 255, 0.85)" style={styles.errorSubtitle}>
+            Check that no other app is using the camera, then try again.
+          </AppText>
+          <Pressable style={styles.enablePermButton} onPress={retryDevice}>
+            <AppText color={Colors.white} weight={FontWeight.medium} style={styles.enablePermText}>
+              Retry
             </AppText>
           </Pressable>
         </View>
@@ -109,6 +133,16 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.8)",
     alignItems: "center",
     justifyContent: "center",
+  },
+  errorTitle: {
+    fontSize: 15,
+    textAlign: "center",
+  },
+  errorSubtitle: {
+    fontSize: 12,
+    textAlign: "center",
+    paddingHorizontal: 24,
+    lineHeight: 17,
   },
   enablePermButton: {
     backgroundColor: "rgba(0, 102, 255, 0.85)",
