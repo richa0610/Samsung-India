@@ -14,24 +14,32 @@ export function useEditProfileForm({ onSuccess }: UseEditProfileFormOptions = {}
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const defaultValues: RegisterFormValues = {
+    name: trainee?.name ?? "",
+    phone: trainee?.phone ? String(trainee.phone) : "",
+    email: trainee?.email ?? "",
+    gender: trainee?.gender ?? "",
+    designation: trainee?.designation ?? "",
+    employee_id: trainee?.employee_id ?? "",
+    supervisorName: trainee?.supervisorName ?? "",
+    state: trainee?.state ?? "",
+    district: trainee?.district ?? "",
+  };
+
+  // The trainee may only fill in blanks - any field that already came back
+  // with a saved value is shown read-only.
+  const lockedFields = new Set(
+    (Object.keys(defaultValues) as (keyof RegisterFormValues)[]).filter(
+      (key) => defaultValues[key].trim() !== "",
+    ),
+  );
+
   const {
     control,
     handleSubmit,
     setValue,
     formState: { errors },
-  } = useForm<RegisterFormValues>({
-    defaultValues: {
-      name: trainee?.name ?? "",
-      phone: trainee?.phone ? String(trainee.phone) : "",
-      email: trainee?.email ?? "",
-      gender: trainee?.gender ?? "",
-      designation: trainee?.designation ?? "",
-      employee_id: trainee?.employee_id ?? "",
-      supervisorName: trainee?.supervisorName ?? "",
-      state: trainee?.state ?? "",
-      district: trainee?.district ?? "",
-    },
-  });
+  } = useForm<RegisterFormValues>({ defaultValues });
 
   const onSubmit = handleSubmit(async (values) => {
     if (!token) {
@@ -66,5 +74,5 @@ export function useEditProfileForm({ onSuccess }: UseEditProfileFormOptions = {}
     }
   });
 
-  return { control, errors, setValue, onSubmit, loading, error };
+  return { control, errors, setValue, onSubmit, loading, error, lockedFields };
 }

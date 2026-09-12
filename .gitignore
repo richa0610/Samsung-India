@@ -9,6 +9,7 @@ dist/
 web-build/
 expo-env.d.ts
 
+
 # Native
 .kotlin/
 *.orig.*
@@ -42,3 +43,15 @@ example
 # generated native folders
 /ios
 /android
+
+# local-only DB schema exports
+mmtbtwob_tops.sql
+backend/backups/
+
+
+*.md 
+*.claude
+database_dump.sql
+claudememory.md
+tasks.lessons.md
+primer.md

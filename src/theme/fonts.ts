@@ -1,23 +1,34 @@
+import { FontSize } from "./typography";
+
+export const IconDimensions = {
+  small: 14,
+  caption: 16,
+  default: 60,
+  profile: 131,
+  timer: 103,
+} as const;
+
+/** @deprecated Use `FontSize` or `Typography` from `@/theme/typography` */
 export const Fonts = {
-  h1: 26,
-  h2: 22,
-  h3: 18,
+  h1: FontSize.h1,
+  h2: FontSize.h2,
+  h3: FontSize.h3,
 
-  bodyLg: 16,
-  body: 14,
-  bodySm: 12,
+  bodyLg: FontSize.body,
+  body: FontSize.label,
+  bodySm: FontSize.caption,
 
-  caption: 11,
-  overline: 10,
+  caption: FontSize.overline,
+  overline: FontSize.tiny,
 
-  xs: 13,
-  xl: 20,
-  lg: 24,
-  br: 35,
+  xs: FontSize.caption,
+  xl: FontSize.h3,
+  lg: FontSize.h2,
+  br: FontSize.display,
 
-  smallIcon: 14,
-  captionIcon: 16,
-  iconSize:60,
-  profileIconSize:131,
-  timerIconSize:103,
+  smallIcon: IconDimensions.small,
+  captionIcon: IconDimensions.caption,
+  iconSize: IconDimensions.default,
+  profileIconSize: IconDimensions.profile,
+  timerIconSize: IconDimensions.timer,
 } as const;

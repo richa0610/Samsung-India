@@ -13,18 +13,23 @@ interface AppSelectProps {
     label: string;
     value: string;
   }[];
+  // When false the picker is greyed out and can't be opened - used by
+  // Edit Profile to lock fields that already have a saved value.
+  enabled?: boolean;
 }
 
 export default function AppSelect({
   selectedValue,
   onValueChange,
   items,
+  enabled = true,
 }: AppSelectProps) {
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, !enabled && styles.containerDisabled]}>
       <Picker
         selectedValue={selectedValue}
         onValueChange={onValueChange}
+        enabled={enabled}
         style={styles.picker}
       >
         {items.map((item) => (
@@ -51,6 +56,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: Colors.white,
     justifyContent: "center",
+  },
+
+  containerDisabled: {
+    backgroundColor: Colors.gray100,
   },
 
   picker: {

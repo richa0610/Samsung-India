@@ -1,6 +1,8 @@
-from typing import List, Optional
+from typing import Annotated, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from app.schemas._common import IdStr
 
 
 class QuestionOption(BaseModel):
@@ -23,13 +25,13 @@ class AssessmentQuestionsOut(BaseModel):
 
 
 class AnswerIn(BaseModel):
-    questionId: int
-    selectedOption: Optional[str] = None
+    questionId: Annotated[int, Field(ge=1)]
+    selectedOption: Optional[Annotated[str, Field(max_length=200)]] = None
 
 
 class SubmitRequest(BaseModel):
-    conferenceUid: str
-    answers: List[AnswerIn]
+    conferenceUid: IdStr
+    answers: Annotated[List[AnswerIn], Field(max_length=500)]
 
 
 class SubmitResult(BaseModel):
@@ -38,3 +40,27 @@ class SubmitResult(BaseModel):
     percentage: float
     correctCount: int
     totalQuestions: int
+
+
+class LeaderboardUserOut(BaseModel):
+    rank: int
+    traineeUid: str
+    name: str
+    score: str
+    accuracy: str
+    percentage: float
+    timeTaken: str
+    isYou: bool
+
+
+class LeaderboardResponse(BaseModel):
+    title: Optional[str] = None
+    totalQuestions: int = 0
+    userRank: Optional[int] = None
+    userScore: Optional[float] = None
+    userAccuracy: Optional[float] = None
+    timeTakenFormatted: Optional[str] = None
+    correctCount: Optional[int] = None
+    incorrectCount: Optional[int] = None
+    leaderboard: List[LeaderboardUserOut]
+

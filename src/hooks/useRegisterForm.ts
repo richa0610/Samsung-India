@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 
 import { ApiError, loginTrainee, registerTrainee } from "@/api/auth";
+import { joinSession } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
 
 export type RegisterFormValues = {
@@ -29,10 +30,15 @@ const defaultValues: RegisterFormValues = {
 };
 
 type UseRegisterFormOptions = {
+  // When set (QR-join flow), a successful registration also signs the new
+  // trainee in and binds them to this session before `onSuccess` fires.
+  // Plain registration (no code) keeps the old behaviour: register only,
+  // then the user logs in themselves.
+  joinCode?: string;
   onSuccess?: () => void;
 };
 
-export function useRegisterForm({ onSuccess }: UseRegisterFormOptions = {}) {
+export function useRegisterForm({ joinCode, onSuccess }: UseRegisterFormOptions = {}) {
   const { setSession } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,9 +55,10 @@ export function useRegisterForm({ onSuccess }: UseRegisterFormOptions = {}) {
     setLoading(true);
     setError(null);
     try {
-      const trainee = await registerTrainee({
+      const phone = values.phone.trim();
+      await registerTrainee({
         name: values.name.trim(),
-        phone: values.phone.trim(),
+        phone,
         email: values.email.trim(),
         gender: values.gender || undefined,
         designation: values.designation || undefined,
@@ -61,9 +68,16 @@ export function useRegisterForm({ onSuccess }: UseRegisterFormOptions = {}) {
         district: values.district || undefined,
       });
 
-      // Registration has no password, so log the trainee straight in.
-      const session = await loginTrainee(String(trainee.phone));
-      setSession(session);
+      if (joinCode) {
+        const session = await loginTrainee(phone);
+        setSession(session);
+        try {
+          await joinSession(joinCode, session.access_token, true);
+        } catch {
+          // Non-fatal - they still land on /session.
+        }
+      }
+
       reset(defaultValues);
       onSuccess?.();
     } catch (err) {

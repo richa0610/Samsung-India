@@ -1,22 +1,39 @@
-import { API_BASE_URL } from "@/constants/api";
+import { getApiBaseUrl } from "@/constants/api";
 
 export class ApiError extends Error {
   status: number;
+  /** The parsed `detail` from the error response - a string, or an object
+   *  like `{ code, message, ... }` for structured errors the UI branches on. */
+  body: unknown;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, body?: unknown) {
     super(message);
     this.status = status;
+    this.body = body;
   }
 }
 
+function errorFromResponse(status: number, data: unknown): ApiError {
+  const detail = (data as { detail?: unknown } | null)?.detail;
+  const message =
+    typeof detail === "string"
+      ? detail
+      : typeof (detail as { message?: unknown })?.message === "string"
+        ? (detail as { message: string }).message
+        : "Something went wrong. Please try again.";
+  return new ApiError(message, status, detail);
+}
+
+// Only called when USE_MOCK_DATA is false (see src/config/dataSource.ts).
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   let response: Response;
+  const base = getApiBaseUrl();
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${base}${path}`, {
       ...options,
       headers: {
         "Content-Type": "application/json",
@@ -24,7 +41,7 @@ export async function apiRequest<T>(
       },
     });
   } catch (err) {
-    console.warn(`[apiRequest] ${API_BASE_URL}${path} failed:`, err instanceof Error ? err.message : err);
+    console.warn(`[apiRequest] ${base}${path} failed:`, err instanceof Error ? err.message : err);
     throw new ApiError(
       "Couldn't reach the server. Check your connection and try again.",
       0
@@ -34,11 +51,7 @@ export async function apiRequest<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message =
-      typeof data?.detail === "string"
-        ? data.detail
-        : "Something went wrong. Please try again.";
-    throw new ApiError(message, response.status);
+    throw errorFromResponse(response.status, data);
   }
 
   return data as T;
@@ -53,18 +66,20 @@ export async function apiUpload<T>(
   timeoutMs = 25000
 ): Promise<T> {
   let response: Response;
+  const base = getApiBaseUrl();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${base}${path}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
       body: formData,
       signal: controller.signal,
     });
   } catch (err) {
-    console.warn(`[apiUpload] ${API_BASE_URL}${path} failed:`, err instanceof Error ? `${err.name}: ${err.message}` : err);
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.warn(`[apiUpload] ${base}${path} failed:`, detail);
     // Weak venue Wi-Fi can stall a multipart upload long enough to trip the
     // AbortController above - give that case a message that points at the
     // connection quality rather than the generic "can't reach server" one.
@@ -85,11 +100,7 @@ export async function apiUpload<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message =
-      typeof data?.detail === "string"
-        ? data.detail
-        : "Something went wrong. Please try again.";
-    throw new ApiError(message, response.status);
+    throw errorFromResponse(response.status, data);
   }
 
   return data as T;

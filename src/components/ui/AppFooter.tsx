@@ -3,10 +3,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
-import { Fonts } from "@/theme/fonts";
 import { Radius } from "@/theme/radius";
 import { Shadows } from "@/theme/shadows";
 import { Spacing } from "@/theme/spacing";
+import { FontWeight } from "@/theme/typography";
 
 export type AppFooterItem = {
   key: string;
@@ -62,10 +62,10 @@ export default function AppFooter({ items }: AppFooterProps) {
             </Pressable>
             {centerItem.label && (
               <AppText
-                style={[
-                  styles.centerLabel,
-                  centerItem.disabled && styles.centerLabelDisabled,
-                ]}
+                variant="overline"
+                weight={FontWeight.medium}
+                color={centerItem.disabled ? Colors.gray400 : Colors.mainColour1}
+                style={styles.centerLabel}
               >
                 {centerItem.label}
               </AppText>
@@ -91,10 +91,9 @@ function NavItem({ item }: { item: AppFooterItem }) {
       {item.icon({ size: 23, color })}
       {item.label && (
         <AppText
-          style={[
-            styles.navLabel,
-            item.active && styles.navLabelActive,
-          ]}
+          variant="overline"
+          weight={item.active ? FontWeight.semiBold : FontWeight.regular}
+          color={color}
         >
           {item.label}
         </AppText>
@@ -107,7 +106,6 @@ const styles = StyleSheet.create({
   bottomArea: {
     backgroundColor: Colors.white,
     paddingTop: Spacing.lg,
-    // paddingBottom: Spacing.lg,
     paddingBottom: 50,
     paddingHorizontal: 50,
     ...Shadows.footer,
@@ -132,15 +130,6 @@ const styles = StyleSheet.create({
   navItem: {
     alignItems: "center",
     gap: Spacing.xs,
-  },
-
-  navLabel: {
-    fontSize: Fonts.caption,
-    color: Colors.gray600,
-  },
-
-  navLabelActive: {
-    color: Colors.mainColour1,
   },
 
   centerWrap: {
@@ -169,11 +158,5 @@ const styles = StyleSheet.create({
 
   centerLabel: {
     marginTop: 4,
-    fontSize: Fonts.caption,
-    color: Colors.mainColour1,
-  },
-
-  centerLabelDisabled: {
-    color: Colors.gray400,
   },
 });

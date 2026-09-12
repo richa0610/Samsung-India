@@ -1,0 +1,12 @@
+env: load .env
+env: export EXPO_PUBLIC_API_URL EXPO_PUBLIC_BYPASS_LOGIN EXPO_PUBLIC_USE_RN_FETCH
+Starting project at C:\Users\jay mata di\OneDrive\Desktop\Samsung-India
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Starting Metro Bundler
+
+Waiting on http://localhost:8081
+
+An update for expo is available: 57.0.4 → ~57.0.14
+19 other packages may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.

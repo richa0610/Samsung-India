@@ -1,16 +1,18 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Animated,
   Dimensions,
   KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { styles } from "./styles"
-import { AppModalProps } from "./types";
 import ModalHeader from "./ModalHeader";
+import { styles } from "./styles";
+import { AppModalProps } from "./types";
 
 const { width, height } = Dimensions.get("window");
 
@@ -36,13 +38,18 @@ export default function AppModal({
   containerStyle,
   contentStyle,
 }: AppModalProps) {
+  const insets = useSafeAreaInsets();
   const [isMounted, setIsMounted] = useState(visible);
 
-  const translate = useRef(new Animated.Value(0)).current;
-  const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.9)).current;
+  if (visible && !isMounted) {
+    setIsMounted(true);
+  }
 
-  const getInitialValue = () => {
+  const translate = useMemo(() => new Animated.Value(0), []);
+  const opacity = useMemo(() => new Animated.Value(0), []);
+  const scale = useMemo(() => new Animated.Value(0.9), []);
+
+  const getInitialValue = useCallback(() => {
     switch (position) {
       case "bottom":
         return height;
@@ -59,12 +66,12 @@ export default function AppModal({
       default:
         return 0;
     }
-  };
+  }, [position]);
 
   useEffect(() => {
-    if (visible) {
-      setIsMounted(true);
+    const useNativeDriver = Platform.OS !== "web";
 
+    if (visible) {
       translate.setValue(getInitialValue());
       opacity.setValue(0);
       scale.setValue(0.9);
@@ -73,18 +80,18 @@ export default function AppModal({
         Animated.timing(translate, {
           toValue: 0,
           duration: animationDuration,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
 
         Animated.timing(opacity, {
           toValue: 1,
           duration: animationDuration,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
 
         Animated.spring(scale, {
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
       ]).start();
     } else if (isMounted) {
@@ -92,25 +99,25 @@ export default function AppModal({
         Animated.timing(translate, {
           toValue: getInitialValue(),
           duration: animationDuration,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
 
         Animated.timing(opacity, {
           toValue: 0,
           duration: animationDuration,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
 
         Animated.timing(scale, {
           toValue: 0.9,
           duration: animationDuration,
-          useNativeDriver: true,
+          useNativeDriver,
         }),
       ]).start(() => {
         setIsMounted(false);
       });
     }
-  }, [visible]);
+  }, [visible, isMounted, animationDuration, getInitialValue, opacity, scale, translate]);
 
   if (!isMounted) return null;
 
@@ -135,11 +142,7 @@ export default function AppModal({
   }
 
   return (
-    <Modal
-      transparent
-      visible={isMounted}
-      onRequestClose={onClose}
-    >
+    <Modal transparent visible={isMounted} onRequestClose={onClose}>
       <View style={[styles.container, containerStyle]}>
         <Pressable
           style={[
@@ -164,6 +167,12 @@ export default function AppModal({
             style={[
               styles.content,
               styles[position],
+              // Keep a centered modal within the visible screen (status bar +
+              // gesture/nav bar excluded) so tall content scrolls instead of
+              // spilling off both edges.
+              position === "center" && {
+                maxHeight: height - insets.top - insets.bottom - 24,
+              },
               contentStyle,
               {
                 opacity,
@@ -180,6 +189,9 @@ export default function AppModal({
               />
             )}
             {children}
+            {/* Clears the device's gesture/nav bar so bottom-sheet content
+                (e.g. the last row of a long list) is never obscured by it. */}
+            {position === "bottom" && <View style={{ height: insets.bottom }} />}
           </Animated.View>
         </KeyboardAvoidingView>
       </View>

@@ -9,7 +9,9 @@ import { FontWeight } from "@/theme/fontWeight";
 export default function SecurityFooter() {
   return (
     <View style={styles.container}>
-      <Ionicons name="lock-closed-outline" size={18} color={Colors.inputColour} />
+      <View style={styles.lockIcon}>
+        <Ionicons name="lock-closed-outline" size={17} color={Colors.inputColour} />
+      </View>
       <AppText style={styles.text}>Your information is secure</AppText>
     </View>
   );
@@ -21,9 +23,15 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
   },
+  lockIcon: {
+    width: 15,
+    height: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   text: {
     color: Colors.inputColour,
-    fontSize: Fonts.bodySm,
+    fontSize: 14,
     fontWeight: FontWeight.regular,
     marginLeft: 8,
   },

@@ -12,6 +12,13 @@ ALLOWED_IMAGE_CONTENT_TYPES = {
     "image/webp": "webp",
 }
 
+# Attendance-sheet upload at session check-out: a scan/photo of the signed
+# sheet, or a PDF. No spreadsheets - just what a printed sheet comes back as.
+ALLOWED_DOCUMENT_CONTENT_TYPES = {
+    **ALLOWED_IMAGE_CONTENT_TYPES,
+    "application/pdf": "pdf",
+}
+
 
 def media_subdir(name: str) -> Path:
     path = MEDIA_ROOT / name
