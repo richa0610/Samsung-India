@@ -49,13 +49,6 @@ export function DocumentsSection({ form }: { form: TrainerProfileForm }) {
         editable={isEditing}
         onChangeText={(v) => setField("aadharFile", v)}
       />
-      <FileFieldLabel label="Profile Picture" />
-      <AppInput
-        compact
-        value={profile.profilePicture}
-        editable={isEditing}
-        onChangeText={(v) => setField("profilePicture", v)}
-      />
       <AppInput
         compact
         label="About"

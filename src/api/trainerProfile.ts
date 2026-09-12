@@ -1,5 +1,5 @@
 import { USE_MOCK_DATA } from "@/config/dataSource";
-import { apiRequest } from "./client";
+import { apiRequest, apiUpload } from "./client";
 import * as mock from "./mockService";
 
 export type TrainerProfile = {
@@ -63,6 +63,20 @@ export function updateTrainerProfile(token: string, payload: Partial<TrainerProf
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });
+}
+
+export type PickedTrainerPhoto = { uri: string; name: string; type: string };
+
+export function uploadTrainerPhoto(token: string, image: PickedTrainerPhoto) {
+  if (USE_MOCK_DATA) return mock.uploadTrainerPhoto(token, image);
+  const formData = new FormData();
+  formData.append("file", {
+    uri: image.uri,
+    name: image.name,
+    type: image.type,
+  } as unknown as Blob);
+
+  return apiUpload<TrainerProfile>("/admin/profile/photo", formData, token);
 }
 
 export { ApiError } from "./client";

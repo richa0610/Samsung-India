@@ -5,6 +5,7 @@ import { useRouter } from "expo-router";
 
 import DashboardBottomNav, { DashboardTab } from "@/components/trainer/dashboard/DashboardBottomNav";
 import TrainerMoreMenu from "@/components/trainer/dashboard/TrainerMoreMenu";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { Colors } from "@/theme/colors";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -24,8 +25,15 @@ export default function TrainerProfileScreen() {
   const form = useTrainerProfileForm();
   const [bottomTab, setBottomTab] = useState<DashboardTab>("profile");
   const [moreOpen, setMoreOpen] = useState(false);
+  // Same confirm-before-logout flow as the Trainer Dashboard's power button
+  // (see useTrainerDashboardScreen) - opening the popup here is separate
+  // from actually logging out, which only happens on confirm.
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
 
-  const handleLogout = () => {
+  const requestLogout = () => setConfirmLogoutOpen(true);
+  const cancelLogout = () => setConfirmLogoutOpen(false);
+  const confirmLogout = () => {
+    setConfirmLogoutOpen(false);
     adminLogout();
     router.replace("/trainer_login");
   };
@@ -44,7 +52,13 @@ export default function TrainerProfileScreen() {
   return (
     <SafeAreaView style={styles.container} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <ProfileHeaderCard name={admin?.name ?? "Demo Trainer"} onLogout={handleLogout} />
+        <ProfileHeaderCard
+          name={admin?.name ?? "Demo Trainer"}
+          onLogout={requestLogout}
+          photoUrl={form.profile?.profilePicture}
+          uploading={form.uploadingPhoto}
+          onPickPhoto={form.handlePickPhoto}
+        />
 
         {form.loading ? (
           <View style={styles.centered}>
@@ -65,6 +79,16 @@ export default function TrainerProfileScreen() {
       <DashboardBottomNav activeTab={bottomTab} onSelectTab={handleBottomNavSelect} />
 
       <TrainerMoreMenu visible={moreOpen} onClose={() => setMoreOpen(false)} />
+
+      <ConfirmModal
+        visible={confirmLogoutOpen}
+        icon="log-out-outline"
+        tone="danger"
+        title="Log Out?"
+        message="Are you sure you want to go to the login page?"
+        onCancel={cancelLogout}
+        onConfirm={confirmLogout}
+      />
     </SafeAreaView>
   );
 }

@@ -1,12 +1,14 @@
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import not_found
+from app.core.media import media_subdir
 from app.core.security import hash_password
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.repositories import admin_repository
 from app.schemas.catalog import SelectOptionOut
 from app.schemas.trainer_profile import TrainerProfileOut, TrainerProfileUpdate
+from app.utils.validators import validate_image_upload
 
 
 def _find_trainer(common_db: Session, db: Session, username: str) -> Admin | AgencyTeam | None:
@@ -246,6 +248,32 @@ def update_profile(
         admin_repository.save(common_db, admin)
     else:
         _apply_profile_update(admin, updates, _AGENCY_FIELD_MAP)
+        admin_repository.save(db, admin)
+
+    return get_profile(admin)
+
+
+async def upload_profile_photo(
+    common_db: Session, db: Session, admin: Admin | AgencyTeam, file
+) -> TrainerProfileOut:
+    """Same pattern as the trainee's own profile-photo upload
+    (trainee_service.upload_profile_photo): named after the account so a
+    re-upload replaces the old file instead of littering the disk with
+    orphans. Admin (Common DB) and AgencyTeam (tenant DB) ids come from
+    separate auto-increment sequences and can collide, so which table this
+    account is in has to be part of the filename."""
+    contents = await file.read()
+    extension = validate_image_upload(file.content_type, contents, size_error_detail="Image must be 5MB or smaller")
+
+    photo_dir = media_subdir("trainer_photos")
+    is_admin = isinstance(admin, Admin)
+    filename = f"{'admin' if is_admin else 'agency'}_{admin.id}.{extension}"
+    (photo_dir / filename).write_bytes(contents)
+
+    admin.profilePhoto = f"trainer_photos/{filename}"
+    if is_admin:
+        admin_repository.save(common_db, admin)
+    else:
         admin_repository.save(db, admin)
 
     return get_profile(admin)

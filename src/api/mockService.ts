@@ -124,6 +124,15 @@ export async function updateTrainerProfile(_token: string, payload: Partial<type
   return { ..._trainerProfile };
 }
 
+export async function uploadTrainerPhoto(
+  _token: string,
+  image: { uri: string; name: string; type: string },
+) {
+  await delay(1200);
+  _trainerProfile = { ..._trainerProfile, profilePicture: image.uri };
+  return { ..._trainerProfile };
+}
+
 // ─── Session ──────────────────────────────────────────────────────────────────
 export type SessionFlowState =
   | "JOINED"
