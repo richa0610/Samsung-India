@@ -4,6 +4,7 @@ import RecordedCard from "../RecordedCard";
 import SessionButton from "../SessionButton";
 import WaitingCard from "../WaitingCard";
 import LockedViolationCard from "./LockedViolationCard";
+import LocationVerifyingCard from "./LocationVerifyingCard";
 import MissedBanner from "./MissedBanner";
 
 type ActivityCtaProps = {
@@ -11,10 +12,26 @@ type ActivityCtaProps = {
   isAttendance: boolean;
   onMarkAttendance: () => void;
   onEnterAction: () => void;
+  onCheckInLocation: () => void;
 };
 
-export default function ActivityCta({ activity, isAttendance, onMarkAttendance, onEnterAction }: ActivityCtaProps) {
-  const { isCompleted, isLive, isMissed, isLocked, lockReason, securityCheckInCompleted } = activity;
+export default function ActivityCta({
+  activity,
+  isAttendance,
+  onMarkAttendance,
+  onEnterAction,
+  onCheckInLocation,
+}: ActivityCtaProps) {
+  const {
+    isCompleted,
+    isLive,
+    isMissed,
+    isLocked,
+    lockReason,
+    securityCheckInCompleted,
+    locationGateEnabled,
+    locationGateStatus,
+  } = activity;
 
   if (isCompleted) {
     return (
@@ -40,6 +57,23 @@ export default function ActivityCta({ activity, isAttendance, onMarkAttendance, 
         icon={securityCheckInCompleted ? undefined : "camera"}
         onPress={onMarkAttendance}
         backgroundColor={Colors.recordedGreen}
+      />
+    );
+  }
+
+  // Non-attendance module on a geofenced training: the trainee must check
+  // in with their live GPS before "Enter Session" appears, so we can track
+  // them at every module, not just Attendance.
+  if (isLive && locationGateEnabled && locationGateStatus !== "verified") {
+    if (locationGateStatus === "checking") {
+      return <LocationVerifyingCard />;
+    }
+    return (
+      <SessionButton
+        title="Check-In to Enter"
+        icon="location"
+        onPress={onCheckInLocation}
+        backgroundColor={Colors.headerBlue}
       />
     );
   }

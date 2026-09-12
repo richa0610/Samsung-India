@@ -13,6 +13,7 @@ export type SessionTimelineItemProps = {
   onEnterQuiz: () => void;
   onEnterPostTest: () => void;
   onEnterSurvey: () => void;
+  onCheckInLocation: (moduleKey: SessionActivityData["key"]) => void;
 };
 
 export default function SessionTimelineItem({
@@ -22,6 +23,7 @@ export default function SessionTimelineItem({
   onEnterQuiz,
   onEnterPostTest,
   onEnterSurvey,
+  onCheckInLocation,
 }: SessionTimelineItemProps) {
   const dotColor = activity.isCompleted
     ? Colors.recordedGreen
@@ -54,6 +56,7 @@ export default function SessionTimelineItem({
         onEnterQuiz={onEnterQuiz}
         onEnterPostTest={onEnterPostTest}
         onEnterSurvey={onEnterSurvey}
+        onCheckInLocation={onCheckInLocation}
       />
     </View>
   );

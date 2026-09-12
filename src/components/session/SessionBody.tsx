@@ -25,6 +25,7 @@ type SessionBodyProps = {
   onEnterLiveQuiz: () => void;
   onEnterPostTest: () => void;
   onEnterSurvey: () => void;
+  onCheckInLocation: (moduleKey: SessionActivityData["key"]) => void;
 };
 
 export default function SessionBody({
@@ -42,6 +43,7 @@ export default function SessionBody({
   onEnterLiveQuiz,
   onEnterPostTest,
   onEnterSurvey,
+  onCheckInLocation,
 }: SessionBodyProps) {
   if (loading && !session) {
     return (
@@ -140,6 +142,7 @@ export default function SessionBody({
         onEnterQuiz={onEnterLiveQuiz}
         onEnterPostTest={onEnterPostTest}
         onEnterSurvey={onEnterSurvey}
+        onCheckInLocation={onCheckInLocation}
         footerComponent={<SessionNotification />}
         refreshControl={
           <RefreshControl

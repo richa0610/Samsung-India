@@ -14,6 +14,7 @@ type Props = {
   onEnterQuiz: () => void;
   onEnterPostTest: () => void;
   onEnterSurvey: () => void;
+  onCheckInLocation: (moduleKey: SessionActivityData["key"]) => void;
   footerComponent?: ReactNode;
   refreshControl?: ReactElement<RefreshControlProps>;
 };
@@ -26,6 +27,7 @@ export default function SessionTimeline({
   onEnterQuiz,
   onEnterPostTest,
   onEnterSurvey,
+  onCheckInLocation,
   footerComponent,
   refreshControl,
 }: Props) {
@@ -67,6 +69,7 @@ export default function SessionTimeline({
             onEnterQuiz={onEnterQuiz}
             onEnterPostTest={onEnterPostTest}
             onEnterSurvey={onEnterSurvey}
+            onCheckInLocation={onCheckInLocation}
           />
         ))}
       </View>

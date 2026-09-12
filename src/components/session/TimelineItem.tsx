@@ -64,6 +64,9 @@ export default function TimelineItem({
       onEnterQuiz={onEnterQuiz}
       onEnterPostTest={onEnterPostTest}
       onEnterSurvey={onEnterSurvey}
+      // This wrapper's `SessionItem` never sets `locationGateEnabled`, so the
+      // gate is always off here - no handler ever fires.
+      onCheckInLocation={() => {}}
     />
   );
 }

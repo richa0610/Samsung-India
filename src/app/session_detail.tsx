@@ -31,6 +31,7 @@ export default function SessionDetailScreen() {
     setHistoryVisible,
     loadSession,
     handleMarkAttendance,
+    handleCheckInToModule,
     handleEnterLiveQuiz,
     handleEnterPostTest,
     handleEnterSurvey,
@@ -71,6 +72,7 @@ export default function SessionDetailScreen() {
             refreshing={refreshing}
             loadSession={loadSession}
             onMarkAttendance={handleMarkAttendance}
+            onCheckInLocation={handleCheckInToModule}
             onEnterLiveQuiz={handleEnterLiveQuiz}
             onEnterPostTest={handleEnterPostTest}
             onEnterSurvey={handleEnterSurvey}

@@ -14,6 +14,7 @@ export type SessionActivityCardProps = {
   onEnterQuiz: () => void;
   onEnterPostTest: () => void;
   onEnterSurvey: () => void;
+  onCheckInLocation: (moduleKey: SessionActivityData["key"]) => void;
 };
 
 export default function SessionActivityCard({
@@ -22,6 +23,7 @@ export default function SessionActivityCard({
   onEnterQuiz,
   onEnterPostTest,
   onEnterSurvey,
+  onCheckInLocation,
 }: SessionActivityCardProps) {
   const { key } = activity;
   const isAttendance = key === "ATTENDANCE";
@@ -59,7 +61,13 @@ export default function SessionActivityCard({
 
       <ActivityMetaRow activity={activity} isAttendance={isAttendance} isQuizOrPostTest={isQuiz || isPostTest} />
 
-      <ActivityCta activity={activity} isAttendance={isAttendance} onMarkAttendance={onMarkAttendance} onEnterAction={handleEnterAction} />
+      <ActivityCta
+        activity={activity}
+        isAttendance={isAttendance}
+        onMarkAttendance={onMarkAttendance}
+        onEnterAction={handleEnterAction}
+        onCheckInLocation={() => onCheckInLocation(activity.key)}
+      />
     </View>
   );
 }

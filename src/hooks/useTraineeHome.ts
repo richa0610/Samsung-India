@@ -1,6 +1,8 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
+import { Alert } from "react-native";
 
+import { verifyLocation } from "@/api/attendance";
 import {
   ApiError,
   AttendanceState,
@@ -15,6 +17,7 @@ import {
 import { isSessionLocked, resetSessionViolations, setProctoringSettings } from "@/components/proctoring/violations";
 import { useAuth } from "@/hooks/useAuth";
 import { useLiveQuizChannel } from "@/hooks/useLiveQuizChannel";
+import { useLocationPermission } from "@/hooks/useLocationPermission";
 
 export type TraineeTab = "rank" | "dashboard" | "home" | "profile";
 
@@ -40,7 +43,13 @@ export interface SessionActivityData {
   geoFencing?: boolean;
   securityCheckInCompleted?: boolean;
   attendanceState?: AttendanceState;
+  /** Non-attendance module on a geofenced training - the trainee must pass a
+   *  GPS check-in before "Enter Session" appears. See `locationGateStatus`. */
+  locationGateEnabled?: boolean;
+  locationGateStatus?: ModuleLocationGateStatus;
 }
+
+export type ModuleLocationGateStatus = "idle" | "checking" | "verified";
 
 // Which conference's Live Quiz this trainee has already been pulled into (or
 // left). Module scope so it survives `session_detail` remounting - the trainee
@@ -73,6 +82,13 @@ export function useTraineeHome() {
   );
   const [notAssigned, setNotAssigned] = useState(false);
   const [activeTab, setActiveTab] = useState<TraineeTab>("home");
+  // Keyed by `${conferenceUid}:${moduleKey}` so a fresh training always
+  // starts every non-attendance module back at "idle" - once per module per
+  // session, per the attendance check-in's own behaviour.
+  const [moduleLocationStatus, setModuleLocationStatus] = useState<
+    Record<string, ModuleLocationGateStatus>
+  >({});
+  const { requestLocationWithRationale } = useLocationPermission();
 
   const loadSession = useCallback(
     async (mode: "load" | "refresh" | "silent" = "load") => {
@@ -329,6 +345,10 @@ export function useTraineeHome() {
             currentFlow === "ATTENDANCE_RECORDED"
           : undefined,
         attendanceState: isAttendance ? currentFlow : undefined,
+        locationGateEnabled: !isAttendance && !!session?.attendanceGeoFencing,
+        locationGateStatus: isAttendance
+          ? undefined
+          : moduleLocationStatus[`${session?.conferenceUid}:${module.key}`] ?? "idle",
       };
     },
   );
@@ -382,6 +402,52 @@ export function useTraineeHome() {
           mode: "entry",
         },
       });
+    }
+  };
+
+  // Non-attendance modules on a geofenced training: the trainee taps
+  // "Check-In to Enter", we fetch their live GPS (no camera, unlike
+  // Attendance) and re-run the same venue distance check the backend already
+  // exposes for Attendance. Reusing `verifyLocation` here since it's keyed
+  // only by conferenceUid, not by module - it was never actually
+  // attendance-specific.
+  const handleCheckInToModule = async (moduleKey: SessionModuleKey) => {
+    if (!session?.conferenceUid || !token) return;
+    const statusKey = `${session.conferenceUid}:${moduleKey}`;
+    setModuleLocationStatus((prev) => ({ ...prev, [statusKey]: "checking" }));
+
+    const { coords, status, error: permError } = await requestLocationWithRationale();
+
+    if (status !== "granted" || !coords) {
+      setModuleLocationStatus((prev) => ({ ...prev, [statusKey]: "idle" }));
+      if (permError) {
+        Alert.alert("Location required", permError);
+      }
+      return;
+    }
+
+    try {
+      const result = await verifyLocation(token, session.conferenceUid, coords.latitude, coords.longitude);
+      if (result.withinRadius === false) {
+        const radius = result.radiusMeters ?? 100;
+        const away =
+          result.distanceMeters != null ? ` (about ${Math.round(result.distanceMeters)} m away)` : "";
+        Alert.alert(
+          "You're too far from the venue",
+          `Please come within the venue radius of ${radius} m to enter this module.${
+            away ? `\n\nYou're currently${away}.` : ""
+          }`,
+        );
+        setModuleLocationStatus((prev) => ({ ...prev, [statusKey]: "idle" }));
+        return;
+      }
+      setModuleLocationStatus((prev) => ({ ...prev, [statusKey]: "verified" }));
+    } catch (err) {
+      Alert.alert(
+        "Couldn't verify your location",
+        err instanceof ApiError ? err.message : "Please try again.",
+      );
+      setModuleLocationStatus((prev) => ({ ...prev, [statusKey]: "idle" }));
     }
   };
 
@@ -482,6 +548,7 @@ export function useTraineeHome() {
     setViolationLockedVisible,
     loadSession,
     handleMarkAttendance,
+    handleCheckInToModule,
     handleEnterLiveQuiz,
     handleEnterPostTest,
     handleEnterSurvey,
