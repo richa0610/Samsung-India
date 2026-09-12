@@ -21,7 +21,6 @@ export type LiveQuizControls = {
   onStopTimer: () => void;
   onLeaderboard: () => void;
   onLobby: () => void;
-  onFinish: () => void;
 };
 
 export type ProctoringStatus = {

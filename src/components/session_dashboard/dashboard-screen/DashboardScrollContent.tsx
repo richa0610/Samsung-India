@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { RefreshControl, ScrollView, StyleSheet } from "react-native";
+import { useRouter } from "expo-router";
+import { useEffect, useRef, useState } from "react";
+import { LayoutChangeEvent, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 
 import { SessionDashboard } from "@/api/training";
 import { LiveQuizControls } from "@/components/session_dashboard/sessionDashboardTypes";
@@ -44,6 +45,24 @@ export default function DashboardScrollContent({
   onUnlockExam,
   liveQuizControls,
 }: DashboardScrollContentProps) {
+  const router = useRouter();
+  const scrollViewRef = useRef<ScrollView>(null);
+  const topPerformersYRef = useRef(0);
+
+  // Pressing the Live Studio's LEADERBOARD button should bring the Top
+  // Performers card (further up the page) into view, not just refetch data -
+  // otherwise a trainer scrolled down into Live Studio never sees it update.
+  const scrollToTopPerformers = () => {
+    scrollViewRef.current?.scrollTo({ y: Math.max(0, topPerformersYRef.current - 12), animated: true });
+  };
+  const liveQuizControlsWithScroll: LiveQuizControls = {
+    ...liveQuizControls,
+    onLeaderboard: () => {
+      liveQuizControls.onLeaderboard();
+      scrollToTopPerformers();
+    },
+  };
+
   // Server-authoritative sum of each module's own active time (see
   // _module_active_seconds on the backend) - ticks locally only while a
   // module is actually live, so it doesn't drift ahead of the real value
@@ -69,6 +88,7 @@ export default function DashboardScrollContent({
 
   return (
     <ScrollView
+      ref={scrollViewRef}
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
       refreshControl={
@@ -106,16 +126,24 @@ export default function DashboardScrollContent({
         hasStarted={showSessionData}
       />
 
-      <TopPerformersCard
-        performers={(data?.topPerformers ?? []).map((p) => ({
-          id: p.traineeUid,
-          name: p.name,
-          score: Math.round(p.score),
-          maxScore: Math.round(p.maxScore),
-          percentage: Math.round(p.percentage),
-        }))}
-        hasStarted={showSessionData}
-      />
+      <View onLayout={(e: LayoutChangeEvent) => (topPerformersYRef.current = e.nativeEvent.layout.y)}>
+        <TopPerformersCard
+          performers={(data?.topPerformers ?? []).map((p) => ({
+            id: p.traineeUid,
+            name: p.name,
+            score: Math.round(p.score),
+            maxScore: Math.round(p.maxScore),
+            percentage: Math.round(p.percentage),
+          }))}
+          hasStarted={showSessionData}
+          onViewAll={() =>
+            router.push({
+              pathname: "/all_performers",
+              params: { conferenceUid: data?.conferenceUid ?? "", title: data?.title ?? "" },
+            })
+          }
+        />
+      </View>
 
       <SessionHeroesCard
         heroes={data?.sessionHeroes ?? []}
@@ -144,7 +172,7 @@ export default function DashboardScrollContent({
         <LiveStudioSection
           participants={participants}
           liveStudio={data?.liveStudio ?? null}
-          liveQuizControls={liveQuizControls}
+          liveQuizControls={liveQuizControlsWithScroll}
           onRefresh={onRefresh}
           canEditAttendance={data?.conferenceStatus === "Ongoing"}
           onMarkAttendance={onMarkAttendance}

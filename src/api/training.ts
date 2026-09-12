@@ -203,6 +203,10 @@ export type LiveStudio = {
   state: "IDLE" | "WAITING" | "QUESTION_LIVE" | "LEADERBOARD" | "FINISHED" | string;
   activeQuestionId: number | null;
   timerEndsAt: number | null;
+  // Set (milliseconds) only while the trainer has paused the current
+  // question's clock via Stop Timer - show this frozen value instead of
+  // counting down from timerEndsAt while it's non-null.
+  timerRemainingMs: number | null;
   // Server clock when this was sent (epoch ms) - for clock-skew-correct countdown.
   serverNowMs: number | null;
   participants: number;
@@ -257,6 +261,16 @@ export function fetchTrainerAgenda(token: string, range?: { start?: string; end?
 
 export function fetchSessionDashboard(token: string, conferenceUid: string) {
   return apiRequest<SessionDashboard>(`/admin/trainings/${encodeURIComponent(conferenceUid)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/** Every trainee ranked on whichever assessment Top Performers is currently
+ *  tracking (Live Quiz while it's the active module, Post Test otherwise) -
+ *  unlike SessionDashboard.topPerformers, this isn't capped to 5. Powers the
+ *  card's "View All" page. */
+export function fetchAllPerformers(token: string, conferenceUid: string) {
+  return apiRequest<TopPerformer[]>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/performers`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

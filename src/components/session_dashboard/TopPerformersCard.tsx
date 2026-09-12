@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { Ionicons } from "@expo/vector-icons";
@@ -10,13 +9,14 @@ import { TopPerformer } from "./sessionDashboardTypes";
 type TopPerformersCardProps = {
   performers: TopPerformer[];
   hasStarted?: boolean;
+  onViewAll?: () => void;
 };
 
 export default function TopPerformersCard({
   performers,
   hasStarted = true,
+  onViewAll,
 }: TopPerformersCardProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const hasData = performers.length > 0;
 
   return (
@@ -28,22 +28,16 @@ export default function TopPerformersCard({
           <AppText style={styles.title}>TOP PERFORMERS</AppText>
         </View>
 
-        {hasStarted && hasData && (
+        {hasStarted && hasData && onViewAll && (
           <Pressable
             style={styles.toggleBtn}
-            onPress={() => setIsCollapsed((prev) => !prev)}
+            onPress={onViewAll}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={isCollapsed ? "View More" : "View Less"}
+            accessibilityLabel="View All"
           >
-            <AppText style={styles.toggleText}>
-              {isCollapsed ? "View More" : "View Less"}
-            </AppText>
-            <Ionicons
-              name={isCollapsed ? "chevron-down" : "chevron-forward"}
-              size={13}
-              color="#0066FF"
-            />
+            <AppText style={styles.toggleText}>View All</AppText>
+            <Ionicons name="chevron-forward" size={13} color="#0066FF" />
           </Pressable>
         )}
       </View>
@@ -60,7 +54,7 @@ export default function TopPerformersCard({
       )}
 
       {/* List */}
-      {hasStarted && hasData && !isCollapsed && (
+      {hasStarted && hasData && (
         <View style={styles.list}>
           {performers.map((performer, index) => (
             <View key={`${performer.id}-${index}`} style={styles.performerRow}>

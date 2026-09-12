@@ -34,6 +34,12 @@ class Conference(Base):
     liveQuizState = Column(String(50), nullable=False, server_default=text("'IDLE'"))
     liveQuestionId = Column(String(100))
     liveTimerEndsAt = Column(BigInteger, server_default=text("0"))
+    # Milliseconds left on the current question's clock at the moment the
+    # trainer paused it via Stop Timer - NULL whenever the timer is running
+    # (or no question is live). While this is set, liveTimerEndsAt is stale
+    # and ignored; resuming recomputes it as now + this value. See
+    # live_quiz_service.stop_timer.
+    liveTimerRemainingMs = Column(BigInteger, nullable=True)
     actualStartedAt = Column(DateTime)
     actualEndedAt = Column(DateTime)
     enableCheckIn = Column(Integer, server_default=text("0"))

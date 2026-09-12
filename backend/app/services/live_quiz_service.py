@@ -103,6 +103,30 @@ def _sum_response_ms(rows) -> int:
     return total
 
 
+def _result_response_ms(result: AssessmentResult) -> int:
+    try:
+        return int(json.loads(result.answersSnapshot or "{}").get("totalResponseMs", 0))
+    except (ValueError, TypeError):
+        return 0
+
+
+def live_quiz_ranked_results(db: Session, conference: Conference) -> list[AssessmentResult]:
+    """Every trainee's latest Live Quiz result, ranked score DESC then
+    total-response-time ASC - live in the sense that it's built from
+    whoever has hit Final Submit (or been scored by the trainer's Finish)
+    so far, not just once the quiz is over. Shared by the trainee's own
+    Rank tab (get_live_quiz_results) and the trainer's Top Performers card
+    (training_service.get_session_dashboard) while Live Quiz is running."""
+    suite_uid = live_quiz_suite_uid(conference)
+    if not suite_uid:
+        return []
+    results = assessment_repository.list_results_for_conference_suite(db, conference.conferenceUid, suite_uid)
+    latest: dict[str, AssessmentResult] = {}
+    for r in results:
+        latest.setdefault(r.traineeUid, r)
+    return sorted(latest.values(), key=lambda r: (-float(r.percentage), _result_response_ms(r)))
+
+
 # --- Trainer: Live Studio view (folded into SessionDashboardOut) -------------
 
 def build_live_studio(db: Session, conference: Conference) -> Optional[LiveStudioOut]:
@@ -125,7 +149,12 @@ def build_live_studio(db: Session, conference: Conference) -> Optional[LiveStudi
         suiteTitle=(suite.examTitle or suite.courseName or "Live Quiz") if suite else "Live Quiz",
         state=conference.liveQuizState or LIVE_QUIZ_STATE_IDLE,
         activeQuestionId=active_qid,
+        # While paused, liveTimerEndsAt is stale (frozen at whatever it was
+        # when Stop Timer was pressed) - the client must use
+        # timerRemainingMs as the frozen display value instead of counting
+        # down from this.
         timerEndsAt=conference.liveTimerEndsAt or None,
+        timerRemainingMs=conference.liveTimerRemainingMs,
         serverNowMs=_now_ms(),
         participants=participants,
         totalResponses=responders.get(conference.liveQuestionId or "", 0),
@@ -180,14 +209,33 @@ def broadcast_question(
     conference.liveQuizState = LIVE_QUIZ_STATE_QUESTION_LIVE
     conference.liveQuestionId = str(question_id)
     conference.liveTimerEndsAt = _now_ms() + _question_timer_seconds(question) * 1000
+    # A fresh question always starts running, never inheriting a pause left
+    # over from whatever question was live before it.
+    conference.liveTimerRemainingMs = None
     conference_repository.save(db, conference)
     _nudge(background_tasks, conference_uid)
     return _dashboard(db, admin, conference_uid)
 
 
 def stop_timer(db: Session, admin: Admin, conference_uid: str, background_tasks: BackgroundTasks):
+    """Toggles the current question's clock between running and paused -
+    this is the trainer's Stop Timer / Play Timer button. Pausing freezes
+    the countdown at whatever time is left (never dropping it to 0);
+    pressing it again resumes from exactly that point rather than
+    restarting the question."""
     conference = _owned_live_conference(db, admin, conference_uid)
-    conference.liveTimerEndsAt = _now_ms()
+    if conference.liveQuizState != LIVE_QUIZ_STATE_QUESTION_LIVE:
+        raise conflict("No question is currently live")
+
+    if conference.liveTimerRemainingMs is not None:
+        # Paused -> resume: pick the clock back up with whatever was left.
+        conference.liveTimerEndsAt = _now_ms() + conference.liveTimerRemainingMs
+        conference.liveTimerRemainingMs = None
+    else:
+        # Running -> pause: freeze at whatever's left, clamped to 0 so a
+        # press after the deadline already passed can't store a negative.
+        conference.liveTimerRemainingMs = max(0, (conference.liveTimerEndsAt or _now_ms()) - _now_ms())
+
     conference_repository.save(db, conference)
     _nudge(background_tasks, conference_uid)
     return _dashboard(db, admin, conference_uid)
@@ -197,6 +245,7 @@ def show_leaderboard(db: Session, admin: Admin, conference_uid: str, background_
     conference = _owned_live_conference(db, admin, conference_uid)
     conference.liveQuizState = LIVE_QUIZ_STATE_LEADERBOARD
     conference.liveQuestionId = None
+    conference.liveTimerRemainingMs = None
     conference_repository.save(db, conference)
     _nudge(background_tasks, conference_uid)
     return _dashboard(db, admin, conference_uid)
@@ -206,6 +255,7 @@ def show_lobby(db: Session, admin: Admin, conference_uid: str, background_tasks:
     conference = _owned_live_conference(db, admin, conference_uid)
     conference.liveQuizState = LIVE_QUIZ_STATE_IDLE
     conference.liveQuestionId = None
+    conference.liveTimerRemainingMs = None
     conference_repository.save(db, conference)
     _nudge(background_tasks, conference_uid)
     return _dashboard(db, admin, conference_uid)
@@ -548,18 +598,8 @@ def get_live_quiz_results(db: Session, trainee: Trainee, conference_uid: str) ->
 
     finished = conference.liveQuizState == LIVE_QUIZ_STATE_FINISHED
     questions = assessment_repository.list_questions_for_suite(db, suite_uid)
-    results = assessment_repository.list_results_for_conference_suite(db, conference_uid, suite_uid)
-    # Latest attempt per trainee.
-    latest: dict[str, AssessmentResult] = {}
-    for r in results:
-        latest.setdefault(r.traineeUid, r)
-    mine = latest.get(trainee.traineeUid)
-
-    def _response_ms(result: AssessmentResult) -> int:
-        try:
-            return int(json.loads(result.answersSnapshot or "{}").get("totalResponseMs", 0))
-        except (ValueError, TypeError):
-            return 0
+    ranked = live_quiz_ranked_results(db, conference)
+    mine = next((r for r in ranked if r.traineeUid == trainee.traineeUid), None)
 
     my_answers = [
         r
@@ -574,8 +614,7 @@ def get_live_quiz_results(db: Session, trainee: Trainee, conference_uid: str) ->
             continue
     _, _, _, my_correct = score_answers(questions, my_picks)
 
-    ranked = sorted(latest.values(), key=lambda r: (-float(r.percentage), _response_ms(r)))
-    names = {t.traineeUid: t.name for t in trainee_repository.get_by_uids(db, set(latest.keys()))}
+    names = {t.traineeUid: t.name for t in trainee_repository.get_by_uids(db, {r.traineeUid for r in ranked})}
     rows = [
         LiveQuizRankRow(
             rank=i + 1,
@@ -584,7 +623,7 @@ def get_live_quiz_results(db: Session, trainee: Trainee, conference_uid: str) ->
             score=float(r.totalScore),
             maxScore=float(r.maxScore),
             percentage=float(r.percentage),
-            totalResponseMs=_response_ms(r),
+            totalResponseMs=_result_response_ms(r),
             isYou=r.traineeUid == trainee.traineeUid,
         )
         for i, r in enumerate(ranked)

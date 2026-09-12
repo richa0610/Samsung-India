@@ -19,6 +19,7 @@ from app.schemas.training import (
     QuestionCreate,
     SessionDashboardOut,
     SessionReportOut,
+    TopPerformer,
     TrainerAgendaResponse,
     TrainingCreate,
     TrainingOut,
@@ -133,6 +134,15 @@ def get_session_dashboard(
     admin: Admin = Depends(get_current_admin),
 ):
     return training_service.get_session_dashboard(db, admin, conference_uid)
+
+
+@router.get("/trainings/{conference_uid}/performers", response_model=list[TopPerformer])
+def list_all_performers(
+    conference_uid: str,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+):
+    return training_service.list_all_performers(db, admin, conference_uid)
 
 
 @router.get("/trainings/{conference_uid}/report", response_model=SessionReportOut)

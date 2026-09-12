@@ -371,6 +371,10 @@ class LiveStudioOut(BaseModel):
     state: str
     activeQuestionId: Optional[int] = None
     timerEndsAt: Optional[int] = None
+    # Set (in milliseconds) only while the trainer has paused the current
+    # question's clock via Stop Timer - the client shows this frozen value
+    # instead of counting down from timerEndsAt while it's non-null.
+    timerRemainingMs: Optional[int] = None
     # Server clock at response time (epoch ms). The client subtracts its own
     # Date.now() to get the clock offset, so the countdown is right even when
     # the device clock disagrees with the server's.

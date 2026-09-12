@@ -25,8 +25,14 @@ export default function LiveStudioCard({
   liveStudio: LiveStudio;
   controls: LiveQuizControls;
 }) {
-  const { state, activeQuestionId, timerEndsAt, serverNowMs, totalResponses, participants, questions } = liveStudio;
-  const secondsLeft = useCountdown(state === "QUESTION_LIVE" ? timerEndsAt : null, serverNowMs);
+  const { state, activeQuestionId, timerEndsAt, timerRemainingMs, serverNowMs, totalResponses, participants, questions } =
+    liveStudio;
+  const isPaused = timerRemainingMs != null;
+  // While paused, timerEndsAt is stale (frozen at whatever it was when Stop
+  // Timer was pressed) - show the frozen remaining value instead of letting
+  // the countdown keep ticking against it.
+  const runningSecondsLeft = useCountdown(state === "QUESTION_LIVE" && !isPaused ? timerEndsAt : null, serverNowMs);
+  const secondsLeft = isPaused ? Math.ceil(timerRemainingMs / 1000) : runningSecondsLeft;
   const activeOrder = questions.find((q) => q.id === activeQuestionId)?.order ?? null;
 
   return (
@@ -40,7 +46,7 @@ export default function LiveStudioCard({
       </View>
 
       <View style={styles.summaryRow}>
-        <Summary label="STATE" value={STATE_LABELS[state] ?? state} color="#2563EB" />
+        <Summary label="STATE" value={isPaused ? "PAUSED" : (STATE_LABELS[state] ?? state)} color="#2563EB" />
         <Summary label="ACTIVE Q" value={activeOrder ? `Q${activeOrder}` : "—"} />
         <Summary
           label="TIME LEFT"
@@ -79,6 +85,7 @@ export default function LiveStudioCard({
 
       <LiveStudioActions
         state={state}
+        isPaused={isPaused}
         questions={questions}
         activeQuestionId={activeQuestionId}
         controls={controls}

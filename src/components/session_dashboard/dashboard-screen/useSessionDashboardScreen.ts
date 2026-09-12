@@ -10,7 +10,6 @@ import {
   checkTrainingSchedule,
   endTraining,
   fetchSessionDashboard,
-  finishLiveQuiz,
   markAttendance,
   restartModule,
   showLiveLeaderboard,
@@ -137,7 +136,6 @@ export function useSessionDashboardScreen() {
   const handleStopLiveTimer = () => runLiveQuizAction(stopLiveTimer);
   const handleShowLiveLeaderboard = () => runLiveQuizAction(showLiveLeaderboard);
   const handleShowLiveLobby = () => runLiveQuizAction(showLiveLobby);
-  const handleFinishLiveQuiz = () => runLiveQuizAction(finishLiveQuiz);
 
   const handleCopyLink = async () => {
     try {
@@ -507,7 +505,6 @@ export function useSessionDashboardScreen() {
       onStopTimer: handleStopLiveTimer,
       onLeaderboard: handleShowLiveLeaderboard,
       onLobby: handleShowLiveLobby,
-      onFinish: handleFinishLiveQuiz,
     },
     handleBottomNavSelect,
     isSessionClosed,

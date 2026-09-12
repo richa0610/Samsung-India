@@ -430,6 +430,34 @@ def _get_owned_conference(db: Session, admin: Admin, conference_uid: str) -> Con
     return conference
 
 
+def list_all_performers(db: Session, admin: Admin, conference_uid: str) -> list[TopPerformer]:
+    """Every trainee ranked on whichever assessment the dashboard's Top
+    Performers card is currently tracking - Live Quiz while it's the
+    active module, Post Test otherwise (see _build_dashboard's own
+    top_performers). Powers the card's "View All" page; unlike the card
+    itself, this isn't capped to 5."""
+    conference = _get_owned_conference(db, admin, conference_uid)
+
+    if conference.activeModuleId == "LIVE_QUIZ":
+        ranked = live_quiz_service.live_quiz_ranked_results(db, conference)
+    else:
+        ranked = sorted(
+            _latest_post_test_results(db, conference).values(), key=lambda r: float(r.percentage), reverse=True
+        )
+
+    trainees_by_uid = {t.traineeUid: t for t in trainee_repository.get_by_uids(db, {r.traineeUid for r in ranked})}
+    return [
+        TopPerformer(
+            traineeUid=r.traineeUid,
+            name=trainees_by_uid[r.traineeUid].name if r.traineeUid in trainees_by_uid else "Unknown Trainee",
+            score=float(r.totalScore),
+            maxScore=float(r.maxScore),
+            percentage=float(r.percentage),
+        )
+        for r in ranked
+    ]
+
+
 def _real_trainee_uids_by_conference(db: Session, conference_uids: list[str]) -> dict[str, set[str]]:
     """Real headcount per conference - the same "who actually showed up or
     attempted the test" definition used by the single-session dashboard
@@ -683,6 +711,22 @@ def _audience_class(attendance) -> str:
     return "UNASSIGNED"
 
 
+def _latest_post_test_results(db: Session, conference: Conference) -> dict[str, object]:
+    """Latest Post Test attempt per trainee, keyed by traineeUid (rows are
+    already ordered by attemptNumber desc, so the first one seen per
+    trainee wins). Shared by the dashboard build below and
+    list_all_performers's non-Live-Quiz branch."""
+    if not conference.postAssessmentUid:
+        return {}
+    result_rows = assessment_repository.list_results_for_conference_suite(
+        db, conference.conferenceUid, conference.postAssessmentUid
+    )
+    latest: dict[str, object] = {}
+    for result in result_rows:
+        latest.setdefault(result.traineeUid, result)
+    return latest
+
+
 def _build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut:
     auto_advance_if_due(db, conference)
     conference_uid = conference.conferenceUid
@@ -694,16 +738,7 @@ def _build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut
     # up / signed in, not the whole assigned roster.
     participating_uids = {a.traineeUid for a in attendance_rows if a.status != "Pending"}
 
-    result_rows: list = []
-    if conference.postAssessmentUid:
-        result_rows = assessment_repository.list_results_for_conference_suite(
-            db, conference_uid, conference.postAssessmentUid
-        )
-    # Keep only the latest attempt per trainee (rows are already ordered by
-    # attemptNumber desc, so the first one seen per trainee wins).
-    latest_result_by_trainee: dict[str, object] = {}
-    for result in result_rows:
-        latest_result_by_trainee.setdefault(result.traineeUid, result)
+    latest_result_by_trainee = _latest_post_test_results(db, conference)
 
     participant_uids = participating_uids | set(latest_result_by_trainee.keys())
     trainees_by_uid = {t.traineeUid: t for t in trainee_repository.get_by_uids(db, participant_uids)}
@@ -784,9 +819,18 @@ def _build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut
     )
     fail_count = len(latest_result_by_trainee) - pass_count
 
-    top_performers = sorted(
-        latest_result_by_trainee.values(), key=lambda r: float(r.percentage), reverse=True
-    )[:5]
+    # While Live Quiz is running, Top Performers tracks it instead of Post
+    # Test - live_quiz_ranked_results is already ordered (score DESC, then
+    # response time ASC), the same board the trainees' own Rank tab polls,
+    # so this updates as trainees hit Final Submit rather than waiting for
+    # the whole quiz to end. Doesn't touch latest_result_by_trainee, which
+    # stays Post-Test-based for the Trainee Master List / pass-fail counts
+    # above - only what Top Performers itself ranks changes here.
+    top_performers = (
+        live_quiz_service.live_quiz_ranked_results(db, conference)[:5]
+        if conference.activeModuleId == "LIVE_QUIZ"
+        else sorted(latest_result_by_trainee.values(), key=lambda r: float(r.percentage), reverse=True)[:5]
+    )
 
     runtime_seconds = _module_active_seconds(db, conference)
 
