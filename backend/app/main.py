@@ -1,8 +1,10 @@
+import asyncio
 import logging
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from app.core.config import settings
@@ -102,8 +104,37 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     )
 
 
+# Below Aiven's (and the network path's) idle-connection timeout, and well
+# under pool_recycle=280s on every engine - keeps each pool's connection
+# alive so a login after a few quiet minutes doesn't pay for a fresh
+# TCP+TLS handshake to the remote DB inline (that reconnect is what made an
+# otherwise-instant login take ~10s).
+DB_KEEPALIVE_INTERVAL_SECONDS = 120
+
+_keepalive_task: "asyncio.Task | None" = None
+
+
+async def _db_keepalive_loop() -> None:
+    while True:
+        await asyncio.sleep(DB_KEEPALIVE_INTERVAL_SECONDS)
+        try:
+            with common_engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+        except SQLAlchemyError as exc:
+            logger.warning("Common DB keep-alive ping failed: %s", exc)
+        tenant_manager.ping_all()
+
+
+@app.on_event("startup")
+async def on_startup():
+    global _keepalive_task
+    _keepalive_task = asyncio.create_task(_db_keepalive_loop())
+
+
 @app.on_event("shutdown")
 def on_shutdown():
+    if _keepalive_task:
+        _keepalive_task.cancel()
     tenant_manager.close_all()
 
 

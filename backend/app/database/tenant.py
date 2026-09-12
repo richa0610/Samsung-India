@@ -3,7 +3,7 @@ import threading
 from typing import Dict, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import URL, create_engine
+from sqlalchemy import URL, create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -151,6 +151,22 @@ class TenantConnectionManager:
         self.get_engine(tenant_uid, common_db)
         maker = self._sessionmakers[tenant_uid]
         return maker()
+
+    def ping_all(self) -> None:
+        """Runs a trivial query against every tenant's pooled connection.
+        Called periodically from a background loop (see main.py) purely to
+        keep each pool's connection alive - Aiven (and the network path to
+        it) closes idle connections well before pool_recycle's 280s would,
+        so without this the *first* login after a few quiet minutes pays for
+        a fresh TCP+TLS handshake to the remote DB inline, which is what
+        made that one login take ~10s. Paying that cost here instead, off
+        the request path, is the whole point."""
+        for tenant_uid, engine in list(self._engines.items()):
+            try:
+                with engine.connect() as conn:
+                    conn.execute(text("SELECT 1"))
+            except SQLAlchemyError as exc:
+                logger.warning("Keep-alive ping failed for tenant '%s': %s", tenant_uid, exc)
 
     def close_all(self) -> None:
         """Disposes all active tenant connection pools."""
