@@ -6,9 +6,12 @@ import { Colors } from "@/theme/colors";
 import { FontWeight } from "@/theme/fontWeight";
 
 type NoPhotoControlsProps = {
+  // True while either capturing the photo or running the post-capture face
+  // check on it (see useSecurityCheckIn.handleCapture) - one continuous
+  // busy state from the trainee/trainer's point of view.
   capturing: boolean;
-  // False while no face is currently detected in the live preview - the
-  // button stays disabled and relabeled until one is (see useSecurityCheckIn).
+  // False while the camera itself isn't ready yet (permission/device) -
+  // whether a face is present is only known after capture, not before.
   canCapture: boolean;
   onCapture: () => void;
 };
@@ -29,9 +32,9 @@ export default function NoPhotoControls({ capturing, canCapture, onCapture }: No
           <ActivityIndicator size="small" color={Colors.white} />
         ) : (
           <>
-            <Ionicons name={canCapture ? "camera" : "scan-outline"} size={20} color={Colors.white} />
+            <Ionicons name="camera" size={20} color={Colors.white} />
             <AppText color={Colors.white} weight={FontWeight.semiBold} style={styles.captureButtonText}>
-              {canCapture ? "Capture Photo" : "Face not detected"}
+              Capture Photo
             </AppText>
           </>
         )}

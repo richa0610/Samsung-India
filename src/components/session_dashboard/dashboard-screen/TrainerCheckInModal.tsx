@@ -28,10 +28,7 @@ export default function TrainerCheckInModal({ visible, onClose, onConfirm }: Tra
     device,
     deviceTimedOut,
     retryDevice,
-    cameraOutputs,
-    handleCameraStarted,
-    faceDetected,
-    photoReady,
+    photoOutput,
     canCapture,
     cameraRef,
     capturing,
@@ -62,11 +59,7 @@ export default function TrainerCheckInModal({ visible, onClose, onConfirm }: Tra
           device={device}
           deviceTimedOut={deviceTimedOut}
           retryDevice={retryDevice}
-          cameraOutputs={cameraOutputs}
-          onCameraStarted={handleCameraStarted}
-          faceDetected={faceDetected}
-          photoReady={photoReady}
-          canCapture={canCapture}
+          photoOutput={photoOutput}
           cameraRef={cameraRef}
         />
 

@@ -1,13 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Image, ImageSourcePropType, Platform } from "react-native";
-import {
-  CameraRef,
-  CommonResolutions,
-  useCameraDevice,
-  useCameraPermission,
-  usePhotoOutput,
-} from "react-native-vision-camera";
-import { useFaceDetectorOutput } from "react-native-vision-camera-face-detector";
+import { CameraRef, CommonResolutions, useCameraDevice, useCameraPermission, usePhotoOutput } from "react-native-vision-camera";
+import { useImageFaceDetector } from "react-native-vision-camera-face-detector";
 
 import { MIN_FACE_SIZE } from "@/proctoring/onDevice/config";
 
@@ -48,6 +42,7 @@ export function useSecurityCheckIn() {
     setDeviceTimedOut(false);
     setRetryAttempt((n) => n + 1);
   };
+
   // mirrorMode defaults to "auto", which mirrors front-camera output to match
   // the mirrored live selfie preview — the same behavior the previous
   // expo-camera implementation needed an explicit isImageMirror flag for.
@@ -67,55 +62,26 @@ export function useSecurityCheckIn() {
   const [capturing, setCapturing] = useState(false);
   const [photoSource, setPhotoSource] = useState<ImageSourcePropType | null>(null);
 
-  // Live, per-frame "is a face currently in the viewfinder" signal - this is
-  // presence only (not full proctoring: no pose/liveness/single-face
-  // checks), just enough to stop a blank or pointed-away photo from ever
-  // being captured for a check-in/check-out.
-  const [faceDetected, setFaceDetected] = useState(false);
-
-  const faceDetectorOutput = useFaceDetectorOutput({
+  // Detects faces on the already-captured still photo, not on live camera
+  // frames - an earlier version ran a live per-frame detector as a second,
+  // concurrent camera output, which is what made capture itself fail on
+  // some devices (they can't negotiate two outputs sharing the camera at
+  // once). Checking the one resulting file after a normal single-output
+  // capture needs no second output at all. Same ML Kit engine and
+  // threshold as live proctoring (see @/proctoring/onDevice/config).
+  const imageFaceDetector = useImageFaceDetector({
     performanceMode: "fast",
     runLandmarks: false,
     runContours: false,
     runClassifications: false,
     trackingEnabled: false,
     minFaceSize: MIN_FACE_SIZE,
-    onFacesDetected(faces) {
-      setFaceDetected(faces.length > 0);
-    },
-    onError(error) {
-      // Skip the frame rather than flipping faceDetected either way - a
-      // transient detector error shouldn't silently bypass the requirement,
-      // but it also shouldn't permanently brick capture off one bad frame.
-      console.warn("useSecurityCheckIn: face detector error, skipping frame.", error);
-    },
   });
 
-  // Both outputs run together, the whole time - an earlier version of this
-  // hook swapped between a face-detector-only phase and a photo-only phase
-  // to work around a theorized "camera can't negotiate two outputs at once"
-  // failure, but that was never actually confirmed, it added a real
-  // reconfiguration delay to every check-in, and the real bug turned out to
-  // be the `!device` fallback below. Reverted back to the simple/fast form.
-  const cameraOutputs = useMemo(() => [photoOutput, faceDetectorOutput], [photoOutput, faceDetectorOutput]);
-
-  // No-op now that outputs never change - kept so CameraViewfinder can keep
-  // wiring `onStarted` unconditionally without a special case.
-  const handleCameraStarted = () => {};
-  // Always true - there's no output-reconfiguration phase to wait for
-  // anymore. Kept (rather than removed) purely so CameraViewfinder's hint
-  // banner logic doesn't need touching.
-  const photoReady = true;
-
-  // Only web gets a pass on the face requirement (no real camera API there
-  // to run detection against at all - see handleCapture's sample-photo
-  // fallback, which is scoped the same way). A native device with no
-  // camera found is a real failure, not a reason to skip the check - it
-  // must still show a face before capture is allowed, same as everywhere
-  // else; previously `!device` alone satisfied this condition, which meant
-  // a device that failed to initialize its camera silently bypassed the
-  // face-detection requirement entirely instead of being blocked.
-  const canCapture = Platform.OS === "web" || faceDetected;
+  // Camera is ready to attempt a capture - this is about device/permission
+  // readiness now, not face presence (that's checked after capture, on the
+  // resulting file - see handleCapture).
+  const canCapture = Platform.OS === "web" || !!device;
 
   // Request camera permission on mount
   useEffect(() => {
@@ -132,9 +98,6 @@ export function useSecurityCheckIn() {
   };
 
   const handleCapture = async () => {
-    // Belt-and-suspenders: the capture button is already disabled while this
-    // is false, but never actually take the photo without a face in frame
-    // even if something slips past that (e.g. a very fast double-tap).
     if (!canCapture) return;
 
     setCapturing(true);
@@ -142,6 +105,20 @@ export function useSecurityCheckIn() {
       if (cameraRef.current && device) {
         const photoFile = await photoOutput.capturePhotoToFile({}, {});
         const uri = photoFile.filePath.startsWith("file://") ? photoFile.filePath : `file://${photoFile.filePath}`;
+
+        let faces: unknown[] = [];
+        try {
+          faces = imageFaceDetector.detectFaces(uri);
+        } catch (err) {
+          // Couldn't even run the check - treat as "not verified" rather
+          // than silently accepting an unverified photo.
+          console.warn("useSecurityCheckIn: image face detection failed.", err);
+        }
+        if (faces.length === 0) {
+          Alert.alert("Face not detected", "We couldn't find a face in that photo. Please try again with your face clearly visible.");
+          return;
+        }
+
         setPhotoSource({ uri });
         return;
       }
@@ -173,7 +150,6 @@ export function useSecurityCheckIn() {
 
   const handleRetake = () => {
     setPhotoSource(null);
-    setFaceDetected(false);
   };
 
   return {
@@ -182,10 +158,7 @@ export function useSecurityCheckIn() {
     device,
     deviceTimedOut,
     retryDevice,
-    cameraOutputs,
-    handleCameraStarted,
-    faceDetected,
-    photoReady,
+    photoOutput,
     canCapture,
     cameraRef,
     capturing,

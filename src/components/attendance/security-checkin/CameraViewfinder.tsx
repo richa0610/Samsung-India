@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { RefObject } from "react";
 import { ActivityIndicator, Image, ImageSourcePropType, Pressable, StyleSheet, View } from "react-native";
-import { Camera, CameraDevice, CameraOutput, CameraRef } from "react-native-vision-camera";
+import { Camera, CameraDevice, CameraPhotoOutput, CameraRef } from "react-native-vision-camera";
 
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
@@ -18,17 +18,7 @@ type CameraViewfinderProps = {
   // indefinite spinner.
   deviceTimedOut: boolean;
   retryDevice: () => void;
-  // Just the face detector while scanning, then just the photo output once
-  // a face is found - see useSecurityCheckIn.cameraOutputs.
-  cameraOutputs: CameraOutput[];
-  onCameraStarted: () => void;
-  faceDetected: boolean;
-  // False until the camera has finished reconfiguring onto the photo
-  // output after a face was found - see useSecurityCheckIn.photoReady.
-  photoReady: boolean;
-  // False while capture isn't allowed yet (real device only - see
-  // useSecurityCheckIn) - shows a hint over the live preview.
-  canCapture: boolean;
+  photoOutput: CameraPhotoOutput;
   cameraRef: RefObject<CameraRef | null>;
 };
 
@@ -40,15 +30,9 @@ export default function CameraViewfinder({
   device,
   deviceTimedOut,
   retryDevice,
-  cameraOutputs,
-  onCameraStarted,
-  faceDetected,
-  photoReady,
-  canCapture,
+  photoOutput,
   cameraRef,
 }: CameraViewfinderProps) {
-  const hintText = !faceDetected ? "Position your face in the frame" : !photoReady ? "Preparing camera..." : null;
-
   return (
     <View style={styles.viewfinderBox}>
       {hasPhoto ? (
@@ -84,24 +68,7 @@ export default function CameraViewfinder({
       ) : !device ? (
         <ActivityIndicator color={Colors.white} />
       ) : (
-        <>
-          <Camera
-            ref={cameraRef}
-            style={styles.cameraStream}
-            device={device}
-            isActive
-            outputs={cameraOutputs}
-            onStarted={onCameraStarted}
-          />
-          {!canCapture && hintText && (
-            <View style={styles.faceHintBanner} pointerEvents="none">
-              <Ionicons name="scan-outline" size={16} color={Colors.white} />
-              <AppText color={Colors.white} weight={FontWeight.medium} style={styles.faceHintText}>
-                {hintText}
-              </AppText>
-            </View>
-          )}
-        </>
+        <Camera ref={cameraRef} style={styles.cameraStream} device={device} isActive outputs={[photoOutput]} />
       )}
     </View>
   );
@@ -161,22 +128,5 @@ const styles = StyleSheet.create({
   photoImage: {
     width: "100%",
     height: "100%",
-  },
-  faceHintBanner: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    backgroundColor: "rgba(17, 24, 39, 0.75)",
-  },
-  faceHintText: {
-    fontSize: 12,
   },
 });
