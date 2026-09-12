@@ -28,7 +28,10 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
     device,
     deviceTimedOut,
     retryDevice,
-    photoOutput,
+    cameraOutputs,
+    handleCameraStarted,
+    faceDetected,
+    photoReady,
     canCapture,
     cameraRef,
     capturing,
@@ -63,7 +66,11 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
             device={device}
             deviceTimedOut={deviceTimedOut}
             retryDevice={retryDevice}
-            photoOutput={photoOutput}
+            cameraOutputs={cameraOutputs}
+            onCameraStarted={handleCameraStarted}
+            faceDetected={faceDetected}
+            photoReady={photoReady}
+            canCapture={canCapture}
             cameraRef={cameraRef}
           />
 

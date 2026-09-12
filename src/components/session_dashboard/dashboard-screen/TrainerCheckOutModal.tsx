@@ -65,7 +65,11 @@ export default function TrainerCheckOutModal({ visible, submitting, onClose, onC
           device={camera.device}
           deviceTimedOut={camera.deviceTimedOut}
           retryDevice={camera.retryDevice}
-          photoOutput={camera.photoOutput}
+          cameraOutputs={camera.cameraOutputs}
+          onCameraStarted={camera.handleCameraStarted}
+          faceDetected={camera.faceDetected}
+          photoReady={camera.photoReady}
+          canCapture={camera.canCapture}
           cameraRef={camera.cameraRef}
         />
 
