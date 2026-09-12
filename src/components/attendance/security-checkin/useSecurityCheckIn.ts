@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Image, ImageSourcePropType } from "react-native";
-import { CameraRef, useCameraDevice, useCameraPermission, usePhotoOutput } from "react-native-vision-camera";
+import {
+  CameraRef,
+  CommonResolutions,
+  useCameraDevice,
+  useCameraPermission,
+  usePhotoOutput,
+} from "react-native-vision-camera";
 import { useFaceDetectorOutput } from "react-native-vision-camera-face-detector";
 
 import { MIN_FACE_SIZE } from "@/proctoring/onDevice/config";
@@ -13,7 +19,17 @@ export function useSecurityCheckIn() {
   // mirrorMode defaults to "auto", which mirrors front-camera output to match
   // the mirrored live selfie preview — the same behavior the previous
   // expo-camera implementation needed an explicit isImageMirror flag for.
-  const photoOutput = usePhotoOutput();
+  //
+  // This is a face-presence check-in photo, not a print-quality shot - the
+  // hook's own defaults (UHD_4_3 = 3024x4032 @ 0.9 quality) produce a
+  // multi-megabyte JPEG that then gets uploaded with no further compression
+  // (see secureCheckIn), which is what actually made "Mark Attendance" feel
+  // slow on venue Wi-Fi/mobile data. HD_4_3 at a lower quality is still
+  // plenty to see a face and cuts the upload to a fraction of the size.
+  const photoOutput = usePhotoOutput({
+    targetResolution: CommonResolutions.HD_4_3,
+    quality: 0.7,
+  });
   const cameraRef = useRef<CameraRef>(null);
 
   const [capturing, setCapturing] = useState(false);
