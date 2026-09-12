@@ -72,10 +72,6 @@ export function useSecurityCheckIn() {
   // checks), just enough to stop a blank or pointed-away photo from ever
   // being captured for a check-in/check-out.
   const [faceDetected, setFaceDetected] = useState(false);
-  // True once the camera has reconfigured onto photoOutput alone after a
-  // face was found - see cameraOutputs below for why that reconfiguration
-  // has to happen at all, and handleCameraStarted for when this flips true.
-  const [photoReady, setPhotoReady] = useState(false);
 
   const faceDetectorOutput = useFaceDetectorOutput({
     performanceMode: "fast",
@@ -85,17 +81,7 @@ export function useSecurityCheckIn() {
     trackingEnabled: false,
     minFaceSize: MIN_FACE_SIZE,
     onFacesDetected(faces) {
-      const detected = faces.length > 0;
-      setFaceDetected((prev) => {
-        if (detected && !prev) {
-          // Just found a face for the first time this attempt - the camera
-          // is about to drop this output and reconfigure onto photoOutput
-          // alone (see cameraOutputs), so capture stays gated until
-          // handleCameraStarted confirms that finished.
-          setPhotoReady(false);
-        }
-        return detected;
-      });
+      setFaceDetected(faces.length > 0);
     },
     onError(error) {
       // Skip the frame rather than flipping faceDetected either way - a
@@ -105,23 +91,21 @@ export function useSecurityCheckIn() {
     },
   });
 
-  // Run the camera with ONE output at a time rather than both concurrently:
-  // scan with just the (lightweight) face detector until a face shows up,
-  // then swap to just the photo output for the actual capture. Some
-  // devices' front cameras can't negotiate a format both outputs can share
-  // simultaneously, which made the whole camera session fail to start the
-  // moment live face detection was added - sequencing them avoids ever
-  // asking for both formats at once.
-  const cameraOutputs = useMemo(
-    () => (faceDetected ? [photoOutput] : [faceDetectorOutput]),
-    [faceDetected, photoOutput, faceDetectorOutput],
-  );
+  // Both outputs run together, the whole time - an earlier version of this
+  // hook swapped between a face-detector-only phase and a photo-only phase
+  // to work around a theorized "camera can't negotiate two outputs at once"
+  // failure, but that was never actually confirmed, it added a real
+  // reconfiguration delay to every check-in, and the real bug turned out to
+  // be the `!device` fallback below. Reverted back to the simple/fast form.
+  const cameraOutputs = useMemo(() => [photoOutput, faceDetectorOutput], [photoOutput, faceDetectorOutput]);
 
-  const handleCameraStarted = () => {
-    // Only meaningful once we've actually switched onto photoOutput - the
-    // very first "started" event (still scanning) shouldn't count.
-    if (faceDetected) setPhotoReady(true);
-  };
+  // No-op now that outputs never change - kept so CameraViewfinder can keep
+  // wiring `onStarted` unconditionally without a special case.
+  const handleCameraStarted = () => {};
+  // Always true - there's no output-reconfiguration phase to wait for
+  // anymore. Kept (rather than removed) purely so CameraViewfinder's hint
+  // banner logic doesn't need touching.
+  const photoReady = true;
 
   // Only web gets a pass on the face requirement (no real camera API there
   // to run detection against at all - see handleCapture's sample-photo
@@ -131,7 +115,7 @@ export function useSecurityCheckIn() {
   // else; previously `!device` alone satisfied this condition, which meant
   // a device that failed to initialize its camera silently bypassed the
   // face-detection requirement entirely instead of being blocked.
-  const canCapture = Platform.OS === "web" || (faceDetected && photoReady);
+  const canCapture = Platform.OS === "web" || faceDetected;
 
   // Request camera permission on mount
   useEffect(() => {
@@ -189,10 +173,7 @@ export function useSecurityCheckIn() {
 
   const handleRetake = () => {
     setPhotoSource(null);
-    // Back to scanning: cameraOutputs swaps back to the face detector on
-    // its own once faceDetected flips false.
     setFaceDetected(false);
-    setPhotoReady(false);
   };
 
   return {
