@@ -52,7 +52,17 @@ export function useProfile() {
         name: `profile.${extension}`,
         type,
       });
-      setSession({ access_token: token, token_type: "bearer", trainee: updated });
+      // The server saves every re-upload under the same filename
+      // (traineeUid.ext), so profilePhoto's value - and therefore the
+      // resolved media URL - would otherwise be byte-identical to before,
+      // and the avatar <Image> would keep showing its cached copy of the
+      // old photo. A cache-busting query param forces it to refetch. This
+      // only touches the in-memory copy set below, not what's persisted -
+      // the media route already ignores unknown query params.
+      const bustedTrainee = updated.profilePhoto
+        ? { ...updated, profilePhoto: `${updated.profilePhoto}?v=${Date.now()}` }
+        : updated;
+      setSession({ access_token: token, token_type: "bearer", trainee: bustedTrainee });
     } catch (err) {
       Alert.alert(
         "Upload failed",
