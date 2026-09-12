@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { RefObject } from "react";
 import { ActivityIndicator, Image, ImageSourcePropType, Pressable, StyleSheet, View } from "react-native";
-import { Camera, CameraDevice, CameraOutput, CameraPhotoOutput, CameraRef } from "react-native-vision-camera";
+import { Camera, CameraDevice, CameraOutput, CameraRef } from "react-native-vision-camera";
 
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
@@ -13,10 +13,16 @@ type CameraViewfinderProps = {
   hasPermission: boolean;
   requestPermission: () => void;
   device: CameraDevice | undefined;
-  photoOutput: CameraPhotoOutput;
-  faceDetectorOutput: CameraOutput;
-  // False while no face is in view (real device only - see useSecurityCheckIn) -
-  // shows a "position your face" hint over the live preview.
+  // Just the face detector while scanning, then just the photo output once
+  // a face is found - see useSecurityCheckIn.cameraOutputs.
+  cameraOutputs: CameraOutput[];
+  onCameraStarted: () => void;
+  faceDetected: boolean;
+  // False until the camera has finished reconfiguring onto the photo
+  // output after a face was found - see useSecurityCheckIn.photoReady.
+  photoReady: boolean;
+  // False while capture isn't allowed yet (real device only - see
+  // useSecurityCheckIn) - shows a hint over the live preview.
   canCapture: boolean;
   cameraRef: RefObject<CameraRef | null>;
 };
@@ -27,11 +33,15 @@ export default function CameraViewfinder({
   hasPermission,
   requestPermission,
   device,
-  photoOutput,
-  faceDetectorOutput,
+  cameraOutputs,
+  onCameraStarted,
+  faceDetected,
+  photoReady,
   canCapture,
   cameraRef,
 }: CameraViewfinderProps) {
+  const hintText = !faceDetected ? "Position your face in the frame" : !photoReady ? "Preparing camera..." : null;
+
   return (
     <View style={styles.viewfinderBox}>
       {hasPhoto ? (
@@ -56,13 +66,14 @@ export default function CameraViewfinder({
             style={styles.cameraStream}
             device={device}
             isActive
-            outputs={[photoOutput, faceDetectorOutput]}
+            outputs={cameraOutputs}
+            onStarted={onCameraStarted}
           />
-          {!canCapture && (
+          {!canCapture && hintText && (
             <View style={styles.faceHintBanner} pointerEvents="none">
               <Ionicons name="scan-outline" size={16} color={Colors.white} />
               <AppText color={Colors.white} weight={FontWeight.medium} style={styles.faceHintText}>
-                Position your face in the frame
+                {hintText}
               </AppText>
             </View>
           )}

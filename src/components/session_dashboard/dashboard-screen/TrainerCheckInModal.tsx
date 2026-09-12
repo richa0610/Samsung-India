@@ -26,8 +26,10 @@ export default function TrainerCheckInModal({ visible, onClose, onConfirm }: Tra
     hasPermission,
     requestPermission,
     device,
-    photoOutput,
-    faceDetectorOutput,
+    cameraOutputs,
+    handleCameraStarted,
+    faceDetected,
+    photoReady,
     canCapture,
     cameraRef,
     capturing,
@@ -56,8 +58,10 @@ export default function TrainerCheckInModal({ visible, onClose, onConfirm }: Tra
           hasPermission={hasPermission}
           requestPermission={requestPermission}
           device={device}
-          photoOutput={photoOutput}
-          faceDetectorOutput={faceDetectorOutput}
+          cameraOutputs={cameraOutputs}
+          onCameraStarted={handleCameraStarted}
+          faceDetected={faceDetected}
+          photoReady={photoReady}
           canCapture={canCapture}
           cameraRef={cameraRef}
         />

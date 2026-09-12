@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Image, ImageSourcePropType } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Alert, Image, ImageSourcePropType, Platform } from "react-native";
 import {
   CameraRef,
   CommonResolutions,
@@ -40,6 +40,10 @@ export function useSecurityCheckIn() {
   // checks), just enough to stop a blank or pointed-away photo from ever
   // being captured for a check-in/check-out.
   const [faceDetected, setFaceDetected] = useState(false);
+  // True once the camera has reconfigured onto photoOutput alone after a
+  // face was found - see cameraOutputs below for why that reconfiguration
+  // has to happen at all, and handleCameraStarted for when this flips true.
+  const [photoReady, setPhotoReady] = useState(false);
 
   const faceDetectorOutput = useFaceDetectorOutput({
     performanceMode: "fast",
@@ -49,7 +53,17 @@ export function useSecurityCheckIn() {
     trackingEnabled: false,
     minFaceSize: MIN_FACE_SIZE,
     onFacesDetected(faces) {
-      setFaceDetected(faces.length > 0);
+      const detected = faces.length > 0;
+      setFaceDetected((prev) => {
+        if (detected && !prev) {
+          // Just found a face for the first time this attempt - the camera
+          // is about to drop this output and reconfigure onto photoOutput
+          // alone (see cameraOutputs), so capture stays gated until
+          // handleCameraStarted confirms that finished.
+          setPhotoReady(false);
+        }
+        return detected;
+      });
     },
     onError(error) {
       // Skip the frame rather than flipping faceDetected either way - a
@@ -59,13 +73,31 @@ export function useSecurityCheckIn() {
     },
   });
 
+  // Run the camera with ONE output at a time rather than both concurrently:
+  // scan with just the (lightweight) face detector until a face shows up,
+  // then swap to just the photo output for the actual capture. Some
+  // devices' front cameras can't negotiate a format both outputs can share
+  // simultaneously, which made the whole camera session fail to start the
+  // moment live face detection was added - sequencing them avoids ever
+  // asking for both formats at once.
+  const cameraOutputs = useMemo(
+    () => (faceDetected ? [photoOutput] : [faceDetectorOutput]),
+    [faceDetected, photoOutput, faceDetectorOutput],
+  );
+
+  const handleCameraStarted = () => {
+    // Only meaningful once we've actually switched onto photoOutput - the
+    // very first "started" event (still scanning) shouldn't count.
+    if (faceDetected) setPhotoReady(true);
+  };
+
   // No live camera device (an emulator/web with no virtual camera) means
   // there's nothing to run face detection against - the detector will never
   // fire, so faceDetected would stay false forever. Don't block the existing
   // dev/testing fallback (a placeholder photo, see handleCapture) behind a
   // signal that can't possibly become true in that environment; only real
   // hardware devices are held to the face-must-be-visible requirement.
-  const canCapture = !device || faceDetected;
+  const canCapture = !device || (faceDetected && photoReady);
 
   // Request camera permission on mount
   useEffect(() => {
@@ -73,6 +105,13 @@ export function useSecurityCheckIn() {
       requestPermission();
     }
   }, [hasPermission, requestPermission]);
+
+  const applySamplePhoto = () => {
+    // Resolve the bundled asset to a real `{ uri }` so the upload paths
+    // (which need a URI, not a require() id) still work.
+    const resolved = Image.resolveAssetSource(DEFAULT_SAMPLE_PHOTO);
+    setPhotoSource(resolved?.uri ? { uri: resolved.uri } : DEFAULT_SAMPLE_PHOTO);
+  };
 
   const handleCapture = async () => {
     // Belt-and-suspenders: the capture button is already disabled while this
@@ -86,32 +125,50 @@ export function useSecurityCheckIn() {
         const photoFile = await photoOutput.capturePhotoToFile({}, {});
         const uri = photoFile.filePath.startsWith("file://") ? photoFile.filePath : `file://${photoFile.filePath}`;
         setPhotoSource({ uri });
-        setCapturing(false);
         return;
       }
-    } catch {
-      // Fallback for emulator / web / environment without active hardware camera stream
-    }
 
-    // Fallback sample photo for development / simulators / a camera that
-    // won't capture. Resolve the bundled asset to a real `{ uri }` so the
-    // upload paths (which need a URI, not a require() id) still work.
-    const resolved = Image.resolveAssetSource(DEFAULT_SAMPLE_PHOTO);
-    setPhotoSource(resolved?.uri ? { uri: resolved.uri } : DEFAULT_SAMPLE_PHOTO);
-    setCapturing(false);
+      // No live camera device - only expected on web, which has no real
+      // camera API in this app, so a sample photo lets the flow still be
+      // exercised there. On a real device this means the camera genuinely
+      // never initialized - fall through to the error below instead of
+      // quietly accepting a placeholder for what's a face-verification
+      // check-in.
+      if (Platform.OS === "web") {
+        applySamplePhoto();
+        return;
+      }
+      Alert.alert(
+        "Camera unavailable",
+        "Couldn't access the camera. Please check that camera permission is granted and try again.",
+      );
+    } catch {
+      if (Platform.OS === "web") {
+        applySamplePhoto();
+      } else {
+        Alert.alert("Capture failed", "Couldn't capture a photo. Please try again.");
+      }
+    } finally {
+      setCapturing(false);
+    }
   };
 
   const handleRetake = () => {
     setPhotoSource(null);
+    // Back to scanning: cameraOutputs swaps back to the face detector on
+    // its own once faceDetected flips false.
+    setFaceDetected(false);
+    setPhotoReady(false);
   };
 
   return {
     hasPermission,
     requestPermission,
     device,
-    photoOutput,
-    faceDetectorOutput,
+    cameraOutputs,
+    handleCameraStarted,
     faceDetected,
+    photoReady,
     canCapture,
     cameraRef,
     capturing,
