@@ -82,7 +82,9 @@
             "usesCleartextTraffic": true,
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "buildArchs": ["arm64-v8a"],
+            "buildArchs": [
+              "arm64-v8a"
+            ],
             "extraProguardRules": "-keep class com.margelo.nitro.** { *; }\n-keep class com.mrousavy.** { *; }"
           }
         }
@@ -95,9 +97,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "a2846bf3-9cb5-40eb-8bad-db3e6325906f"
+        "projectId": "2c249ca0-f2f6-4d4c-ba93-d0b7c7dc15a1"
       }
     },
-    "owner": "richa_06"
+    "owner": "rica120"
   }
 }
