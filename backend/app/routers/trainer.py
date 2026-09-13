@@ -55,3 +55,13 @@ async def upload_profile_photo(
     admin: Admin | AgencyTeam = Depends(get_current_admin),
 ):
     return await trainer_service.upload_profile_photo(common_db, db, admin, file)
+
+
+@router.post("/profile/aadhar", response_model=TrainerProfileOut)
+async def upload_aadhar_document(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    common_db: Session = Depends(get_common_db),
+    admin: Admin | AgencyTeam = Depends(get_current_admin),
+):
+    return await trainer_service.upload_aadhar_document(common_db, db, admin, file)

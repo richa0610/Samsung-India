@@ -32,9 +32,17 @@ class TrainerProfileOut(BaseModel):
     state: str
     pincode: str
     landmark: str
-    # No backing column on either table (see below) - always true, PATCH
-    # accepts but doesn't persist it.
+    # No backing column on either table - always true, PATCH accepts but
+    # doesn't persist it. The permanent fields below are real columns
+    # though; when this is true the frontend keeps them mirroring the
+    # local fields above and saves them equal, so unlike the flag itself
+    # the actual addresses this implies are never lost.
     permanentSameAsLocal: bool
+    permanentCity: str
+    permanentDistrict: str
+    permanentState: str
+    permanentPincode: str
+    permanentLandmark: str
 
     aadharNumber: str
     aadharFile: str
@@ -88,6 +96,11 @@ class TrainerProfileUpdate(BaseModel):
     pincode: OptDigitStr = None
     landmark: OptShortStr = None
     permanentSameAsLocal: Optional[bool] = None
+    permanentCity: OptShortStr = None
+    permanentDistrict: OptShortStr = None
+    permanentState: OptShortStr = None
+    permanentPincode: OptDigitStr = None
+    permanentLandmark: OptShortStr = None
 
     aadharNumber: OptDigitStr = None
     aadharFile: OptShortStr = None

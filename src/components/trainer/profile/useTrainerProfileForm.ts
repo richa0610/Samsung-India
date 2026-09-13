@@ -1,10 +1,18 @@
+import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { Alert } from "react-native";
 import ImageCropPicker from "react-native-image-crop-picker";
 
-import { ApiError, TrainerProfile, fetchTrainerProfile, updateTrainerProfile, uploadTrainerPhoto } from "@/api/trainerProfile";
+import {
+  ApiError,
+  TrainerProfile,
+  fetchTrainerProfile,
+  updateTrainerProfile,
+  uploadTrainerAadhar,
+  uploadTrainerPhoto,
+} from "@/api/trainerProfile";
 import { useAuth } from "@/hooks/useAuth";
 import { ProfileSectionKey, PROFILE_SECTION_FIELDS } from "./types";
 import { sanitizeProfileSection, validateProfileSection } from "./sanitizeProfile";
@@ -28,6 +36,7 @@ export function useTrainerProfileForm() {
   const [savingSection, setSavingSection] = useState<ProfileSectionKey | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [uploadingAadhar, setUploadingAadhar] = useState(false);
 
   const load = useCallback(async () => {
     if (!adminToken) return;
@@ -160,6 +169,45 @@ export function useTrainerProfileForm() {
     }
   };
 
+  const handlePickAadhar = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: [
+        "image/jpeg",
+        "image/png",
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    if (asset.size && asset.size > MAX_PHOTO_BYTES) {
+      Alert.alert("File too large", "Please choose a file smaller than 5MB.");
+      return;
+    }
+    if (!adminToken) return;
+
+    setUploadingAadhar(true);
+    try {
+      const updated = await uploadTrainerAadhar(adminToken, {
+        uri: asset.uri,
+        name: asset.name || "aadhar",
+        type: asset.mimeType || "application/octet-stream",
+      });
+      setProfile(updated);
+    } catch (err) {
+      Alert.alert(
+        "Upload failed",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+    } finally {
+      setUploadingAadhar(false);
+    }
+  };
+
   return {
     profile,
     loading,
@@ -167,10 +215,12 @@ export function useTrainerProfileForm() {
     savingSection,
     notice,
     uploadingPhoto,
+    uploadingAadhar,
     setField,
     toggleEdit,
     saveSection,
     handlePickPhoto,
+    handlePickAadhar,
   };
 }
 

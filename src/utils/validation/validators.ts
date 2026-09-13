@@ -29,11 +29,21 @@ export function email(value: string, label = "Email"): ValidationResult {
   return EMAIL_RE.test(trimmed) ? null : `Enter a valid ${label.toLowerCase()}.`;
 }
 
-/** Exactly 10 digits (Indian mobile number). */
+/**
+ * A real Indian mobile number: exactly 10 digits, first digit 6-9. Real
+ * Indian mobile numbers never start 0-5, so this also rules out a leading
+ * 0 and a country code left in by mistake (e.g. "91XXXXXXXXXX" is 12
+ * digits, and even truncated to 10 wouldn't start 6-9 the way a real
+ * number does).
+ */
 export function mobile10(value: string, label = "Phone number"): ValidationResult {
   const trimmed = value.trim();
   if (!trimmed) return null;
-  return /^\d{10}$/.test(trimmed) ? null : `${label} must be a 10 digit mobile number.`;
+  if (!/^\d{10}$/.test(trimmed)) return `${label} must be a 10 digit mobile number.`;
+  if (!/^[6-9]/.test(trimmed)) {
+    return `${label} must not include a country code or a leading 0 - enter the 10 digit number only.`;
+  }
+  return null;
 }
 
 /** Exactly 6 digits (Indian pincode). */

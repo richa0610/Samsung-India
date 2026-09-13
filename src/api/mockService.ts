@@ -133,6 +133,15 @@ export async function uploadTrainerPhoto(
   return { ..._trainerProfile };
 }
 
+export async function uploadTrainerAadhar(
+  _token: string,
+  file: { uri: string; name: string; type: string },
+) {
+  await delay(1200);
+  _trainerProfile = { ..._trainerProfile, aadharFile: file.uri };
+  return { ..._trainerProfile };
+}
+
 // ─── Session ──────────────────────────────────────────────────────────────────
 export type SessionFlowState =
   | "JOINED"

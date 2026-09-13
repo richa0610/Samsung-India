@@ -8,7 +8,7 @@ from app.models.trainee import Trainee
 from app.repositories import trainee_repository
 from app.routers.ws import manager as ws_manager
 from app.schemas.trainee import TokenResponse, TraineeLogin, TraineeRegister, TraineeUpdate
-from app.utils.validators import validate_image_upload
+from app.utils.validators import validate_profile_photo_upload
 
 
 def register(db: Session, payload: TraineeRegister, background_tasks: BackgroundTasks) -> Trainee:
@@ -60,7 +60,7 @@ def update_me(db: Session, trainee: Trainee, payload: TraineeUpdate, tenant_id: 
 
 async def upload_profile_photo(db: Session, trainee: Trainee, file) -> Trainee:
     contents = await file.read()
-    extension = validate_image_upload(file.content_type, contents, size_error_detail="Image must be 5MB or smaller")
+    extension = validate_profile_photo_upload(file.content_type, contents, size_error_detail="Image must be 5MB or smaller")
 
     # Named after the trainee (not the upload), so re-uploading replaces
     # the old file instead of littering the disk with orphans.

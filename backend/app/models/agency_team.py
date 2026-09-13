@@ -15,7 +15,11 @@ class AgencyTeam(Base):
     here for an AgencyTeam-backed login. `district`/`landmark` were added
     by scripts/add_agencyteam_district_landmark.py - the Local Address
     section requires both, but a real trainer's profile had nowhere to
-    persist them until that migration."""
+    persist them until that migration. `permanent*` columns were added by
+    scripts/add_agencyteam_permanent_address.py for the same reason, for
+    the Permanent Address block. `aadharImage` was added by
+    scripts/add_agencyteam_aadhar.py for the Documents section's Aadhaar
+    upload."""
 
     __tablename__ = "agencyteam"
 
@@ -43,6 +47,12 @@ class AgencyTeam(Base):
     jobPincode = Column(String(50))
     district = Column(String(80))
     landmark = Column(String(200))
+    permanentCity = Column(String(180))
+    permanentDistrict = Column(String(180))
+    permanentState = Column(String(180))
+    permanentPinCode = Column(String(180))
+    permanentLandmark = Column(String(180))
+    aadharImage = Column(String(300))
     profilePhoto = Column(String(250))
 
     username = Column(String(100), unique=True, nullable=True, index=True)

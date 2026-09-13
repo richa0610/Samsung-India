@@ -16,6 +16,11 @@ export type TrainerProfile = {
   pincode: string;
   landmark: string;
   permanentSameAsLocal: boolean;
+  permanentCity: string;
+  permanentDistrict: string;
+  permanentState: string;
+  permanentPincode: string;
+  permanentLandmark: string;
 
   aadharNumber: string;
   aadharFile: string;
@@ -77,6 +82,20 @@ export function uploadTrainerPhoto(token: string, image: PickedTrainerPhoto) {
   } as unknown as Blob);
 
   return apiUpload<TrainerProfile>("/admin/profile/photo", formData, token);
+}
+
+export type PickedTrainerDocument = { uri: string; name: string; type: string };
+
+export function uploadTrainerAadhar(token: string, file: PickedTrainerDocument) {
+  if (USE_MOCK_DATA) return mock.uploadTrainerAadhar(token, file);
+  const formData = new FormData();
+  formData.append("file", {
+    uri: file.uri,
+    name: file.name,
+    type: file.type,
+  } as unknown as Blob);
+
+  return apiUpload<TrainerProfile>("/admin/profile/aadhar", formData, token);
 }
 
 export { ApiError } from "./client";

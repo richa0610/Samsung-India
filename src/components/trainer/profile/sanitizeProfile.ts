@@ -45,6 +45,11 @@ export function validateProfileSection(
         required(profile.district, "District"),
         required(profile.state, "State"),
         pincode6(profile.pincode),
+        // Skipped entirely when permanentSameAsLocal is true - sanitizeProfileSection
+        // below overwrites these with the (already-validated) local values before
+        // saving, so validating whatever's currently in them here would be
+        // validating soon-to-be-discarded data.
+        ...(profile.permanentSameAsLocal ? [] : [pincode6(profile.permanentPincode, "Permanent pincode")]),
       );
     case "documents":
       return aadhar12(profile.aadharNumber);
@@ -89,6 +94,11 @@ const SECTION_CLEANERS: Partial<
     state: text(80),
     pincode: digitsOnly,
     landmark: text(200),
+    permanentCity: text(180),
+    permanentDistrict: text(180),
+    permanentState: text(180),
+    permanentPincode: digitsOnly,
+    permanentLandmark: text(180),
   },
   documents: { aadharNumber: digitsOnly, about: text(1000) },
   social: {
@@ -115,13 +125,32 @@ export function sanitizeProfileSection(
   profile: TrainerProfile,
 ): TrainerProfile {
   const cleaners = SECTION_CLEANERS[section];
-  if (!cleaners) return profile;
-  const next = { ...profile };
-  (Object.keys(cleaners) as (keyof TrainerProfile)[]).forEach((key) => {
-    const value = profile[key];
-    if (typeof value === "string") {
-      (next as Record<string, unknown>)[key] = cleaners[key]!(value);
-    }
-  });
+  let next = profile;
+  if (cleaners) {
+    next = { ...profile };
+    (Object.keys(cleaners) as (keyof TrainerProfile)[]).forEach((key) => {
+      const value = profile[key];
+      if (typeof value === "string") {
+        (next as Record<string, unknown>)[key] = cleaners[key]!(value);
+      }
+    });
+  }
+
+  // "Same as local" is enforced here, at save time, rather than by writing
+  // into the permanent fields on every local keystroke - the UI only needs
+  // to *display* them mirrored while the toggle is on (see
+  // LocalAddressSection), and this is the one place that decides what
+  // actually reaches the backend.
+  if (section === "address" && next.permanentSameAsLocal) {
+    next = {
+      ...next,
+      permanentCity: next.city,
+      permanentDistrict: next.district,
+      permanentState: next.state,
+      permanentPincode: next.pincode,
+      permanentLandmark: next.landmark,
+    };
+  }
+
   return next;
 }

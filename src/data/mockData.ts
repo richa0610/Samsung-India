@@ -49,6 +49,11 @@ export const DEMO_TRAINER_PROFILE = {
   pincode: "110030",
   landmark: "SBI Bank Sultanpur Branch",
   permanentSameAsLocal: false,
+  permanentCity: "",
+  permanentDistrict: "",
+  permanentState: "",
+  permanentPincode: "",
+  permanentLandmark: "",
 
   aadharNumber: "",
   aadharFile: "",

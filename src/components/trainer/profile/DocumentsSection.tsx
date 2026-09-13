@@ -1,9 +1,12 @@
-import { Alert, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
 import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
+import { FontWeight } from "@/theme/fontWeight";
+import { Radius } from "@/theme/radius";
 import { digitsOnly } from "@/utils/validation";
 import { TrainerProfileForm } from "./useTrainerProfileForm";
 import { ProfileSection } from "./ProfileSection";
@@ -19,8 +22,60 @@ function FileFieldLabel({ label }: { label: string }) {
   );
 }
 
+// Aadhaar is a real upload (JPEG/PNG/PDF/Word), not free text like Resume/
+// Other Document still are - shows an upload button when nothing's on file
+// yet, or the current filename with a Replace action once something is.
+function AadharFileField({
+  value,
+  editable,
+  uploading,
+  onPick,
+}: {
+  value: string;
+  editable: boolean;
+  uploading: boolean;
+  onPick: () => void;
+}) {
+  const filename = value ? value.split("/").pop() : null;
+
+  return (
+    <View style={styles.fieldBlock}>
+      <AppText style={styles.label} color={Colors.black}>Aadhar (File)</AppText>
+      {filename ? (
+        <View style={styles.fileRow}>
+          <Ionicons name="document-text-outline" size={16} color="#374151" />
+          <AppText style={styles.fileName} numberOfLines={1}>{filename}</AppText>
+          {editable && (
+            <Pressable onPress={onPick} disabled={uploading} hitSlop={8}>
+              <AppText style={styles.replaceText} color={Colors.mainColour1} weight={FontWeight.semiBold}>
+                {uploading ? "Uploading…" : "Replace"}
+              </AppText>
+            </Pressable>
+          )}
+        </View>
+      ) : (
+        editable && (
+          <Pressable style={styles.uploadBtn} onPress={onPick} disabled={uploading} accessibilityRole="button">
+            {uploading ? (
+              <ActivityIndicator size="small" color="#0066FF" />
+            ) : (
+              <Ionicons name="cloud-upload-outline" size={18} color="#0066FF" />
+            )}
+            <AppText color="#0066FF" weight={FontWeight.semiBold} style={styles.uploadText}>
+              {uploading ? "Uploading…" : "Upload Aadhar (JPEG, PNG, PDF or Word)"}
+            </AppText>
+          </Pressable>
+        )
+      )}
+      {!filename && !editable && (
+        <AppText style={styles.notUploadedText} color={Colors.gray400}>Not uploaded yet</AppText>
+      )}
+    </View>
+  );
+}
+
 export function DocumentsSection({ form }: { form: TrainerProfileForm }) {
-  const { profile, editing, savingSection, setField, toggleEdit, saveSection } = form;
+  const { profile, editing, savingSection, uploadingAadhar, setField, toggleEdit, saveSection, handlePickAadhar } = form;
   if (!profile) return null;
   const isEditing = editing.documents;
 
@@ -42,12 +97,11 @@ export function DocumentsSection({ form }: { form: TrainerProfileForm }) {
         maxLength={12}
         onChangeText={(v) => setField("aadharNumber", digitsOnly(v))}
       />
-      <FileFieldLabel label="Aadhar (File)" />
-      <AppInput
-        compact
+      <AadharFileField
         value={profile.aadharFile}
         editable={isEditing}
-        onChangeText={(v) => setField("aadharFile", v)}
+        uploading={uploadingAadhar}
+        onPick={handlePickAadhar}
       />
       <AppInput
         compact
@@ -73,6 +127,33 @@ export function DocumentsSection({ form }: { form: TrainerProfileForm }) {
 
 const styles = StyleSheet.create({
   labelRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-  label: { fontSize: Fonts.body },
+  label: { fontSize: Fonts.body, marginBottom: 8 },
   viewExisting: { fontSize: Fonts.bodySm },
+  fieldBlock: { marginBottom: 12 },
+  uploadBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    height: 44,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    backgroundColor: "#EFF6FF",
+  },
+  uploadText: { fontSize: 13, flexShrink: 1, textAlign: "center" },
+  fileRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    backgroundColor: Colors.white,
+  },
+  fileName: { flex: 1, fontSize: 12, color: "#374151" },
+  replaceText: { fontSize: 13 },
+  notUploadedText: { fontSize: Fonts.bodySm },
 });

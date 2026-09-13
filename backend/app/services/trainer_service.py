@@ -8,7 +8,7 @@ from app.models.agency_team import AgencyTeam
 from app.repositories import admin_repository
 from app.schemas.catalog import SelectOptionOut
 from app.schemas.trainer_profile import TrainerProfileOut, TrainerProfileUpdate
-from app.utils.validators import validate_image_upload
+from app.utils.validators import validate_aadhar_upload, validate_profile_photo_upload
 
 
 def _find_trainer(common_db: Session, db: Session, username: str) -> Admin | AgencyTeam | None:
@@ -79,6 +79,11 @@ def _admin_to_profile(admin: Admin) -> TrainerProfileOut:
         pincode=admin.localPinCode or "",
         landmark=admin.localLandmark or "",
         permanentSameAsLocal=True,
+        permanentCity=admin.permanentCity or "",
+        permanentDistrict=admin.permanentDistrict or "",
+        permanentState=admin.permanentState or "",
+        permanentPincode=admin.permanentPinCode or "",
+        permanentLandmark=admin.permanentLandmark or "",
         aadharNumber=admin.aadharNo or "",
         aadharFile=admin.aadharImage or "",
         profilePicture=admin.profilePhoto or "",
@@ -111,10 +116,12 @@ def _admin_to_profile(admin: Admin) -> TrainerProfileOut:
 
 def _agency_to_profile(agent: AgencyTeam) -> TrainerProfileOut:
     """AgencyTeam-backed login (the real trainers seeded via
-    seed_more_trainers.py etc.): that table has no Aadhar/documents/
-    social-media/salary/official-docs columns at all, so those fields
-    come back blank rather than fabricated. district/landmark are real
-    columns (see scripts/add_agencyteam_district_landmark.py)."""
+    seed_more_trainers.py etc.): that table has no documents/social-media/
+    salary/official-docs columns at all, so those fields come back blank
+    rather than fabricated. district/landmark/permanent*/aadharImage are
+    real columns (see scripts/add_agencyteam_district_landmark.py,
+    scripts/add_agencyteam_permanent_address.py and
+    scripts/add_agencyteam_aadhar.py)."""
     return TrainerProfileOut(
         name=agent.name or "",
         email=agent.email or "",
@@ -128,8 +135,13 @@ def _agency_to_profile(agent: AgencyTeam) -> TrainerProfileOut:
         pincode=agent.jobPincode or "",
         landmark=agent.landmark or "",
         permanentSameAsLocal=True,
+        permanentCity=agent.permanentCity or "",
+        permanentDistrict=agent.permanentDistrict or "",
+        permanentState=agent.permanentState or "",
+        permanentPincode=agent.permanentPinCode or "",
+        permanentLandmark=agent.permanentLandmark or "",
         aadharNumber="",
-        aadharFile="",
+        aadharFile=agent.aadharImage or "",
         profilePicture=agent.profilePhoto or "",
         about="",
         resume="",
@@ -168,6 +180,11 @@ _ADMIN_FIELD_MAP = {
     "state": "localState",
     "pincode": "localPinCode",
     "landmark": "localLandmark",
+    "permanentCity": "permanentCity",
+    "permanentDistrict": "permanentDistrict",
+    "permanentState": "permanentState",
+    "permanentPincode": "permanentPinCode",
+    "permanentLandmark": "permanentLandmark",
     "aadharNumber": "aadharNo",
     "aadharFile": "aadharImage",
     "profilePicture": "profilePhoto",
@@ -204,6 +221,11 @@ _AGENCY_FIELD_MAP = {
     "pincode": "jobPincode",
     "district": "district",
     "landmark": "landmark",
+    "permanentCity": "permanentCity",
+    "permanentDistrict": "permanentDistrict",
+    "permanentState": "permanentState",
+    "permanentPincode": "permanentPinCode",
+    "permanentLandmark": "permanentLandmark",
     "profilePicture": "profilePhoto",
     "designation": "designation",
     "companyEmail": "officialEmail",
@@ -266,7 +288,7 @@ async def upload_profile_photo(
     separate auto-increment sequences and can collide, so which table this
     account is in has to be part of the filename."""
     contents = await file.read()
-    extension = validate_image_upload(file.content_type, contents, size_error_detail="Image must be 5MB or smaller")
+    extension = validate_profile_photo_upload(file.content_type, contents, size_error_detail="Image must be 5MB or smaller")
 
     photo_dir = media_subdir("trainer_photos")
     is_admin = isinstance(admin, Admin)
@@ -274,6 +296,30 @@ async def upload_profile_photo(
     (photo_dir / filename).write_bytes(contents)
 
     admin.profilePhoto = f"trainer_photos/{filename}"
+    if is_admin:
+        admin_repository.save(common_db, admin)
+    else:
+        admin_repository.save(db, admin)
+
+    return get_profile(admin)
+
+
+async def upload_aadhar_document(
+    common_db: Session, db: Session, admin: Admin | AgencyTeam, file
+) -> TrainerProfileOut:
+    """Same overwrite-on-reupload pattern as upload_profile_photo, in its
+    own trainer_documents/aadhar/ folder rather than trainer_photos/ - a
+    different kind of file, worth keeping browsable separately rather
+    than mixed in with profile pictures."""
+    contents = await file.read()
+    extension = validate_aadhar_upload(file.content_type, contents, size_error_detail="File must be 5MB or smaller")
+
+    doc_dir = media_subdir("trainer_documents/aadhar")
+    is_admin = isinstance(admin, Admin)
+    filename = f"{'admin' if is_admin else 'agency'}_{admin.id}.{extension}"
+    (doc_dir / filename).write_bytes(contents)
+
+    admin.aadharImage = f"trainer_documents/aadhar/{filename}"
     if is_admin:
         admin_repository.save(common_db, admin)
     else:
