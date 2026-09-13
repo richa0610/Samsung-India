@@ -16,7 +16,6 @@ export default function ConfirmedAttendanceScreen() {
       refreshing={refreshing}
       onRefresh={refresh}
       onBack={() => router.back()}
-      onViewCandidate={(row) => router.push({ pathname: "/session_dashboard", params: { conferenceUid: row.conferenceId ?? "" } })}
       exportFileName="confirmed-attendance-list"
       emptyLabel="No confirmed attendance yet."
     />

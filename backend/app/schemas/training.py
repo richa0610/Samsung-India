@@ -179,8 +179,10 @@ class AttendanceListItemOut(BaseModel):
     phone: Optional[str] = None
     state: Optional[str] = None
     location: Optional[str] = None
+    district: Optional[str] = None
     reportingManagerOfPromoter: Optional[str] = None
     attendanceStatus: str
+    markedAt: Optional[str] = None
     checkIn: Optional[str] = None
     checkOut: Optional[str] = None
     postTestScore: Optional[str] = None
@@ -188,6 +190,8 @@ class AttendanceListItemOut(BaseModel):
     sessionTypeMethod: Optional[str] = None
     conferenceId: Optional[str] = None
     lastUpdates: Optional[str] = None
+    updatedBy: Optional[str] = None
+    updationOn: Optional[str] = None
     marked: bool
     # How many of this trainer's trainings the participant is on, across all
     # of them - same value repeats on each of that participant's rows.

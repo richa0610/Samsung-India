@@ -14,8 +14,10 @@ export type AttendanceListItem = {
   phone: string | null;
   state: string | null;
   location: string | null;
+  district: string | null;
   reportingManagerOfPromoter: string | null;
   attendanceStatus: string;
+  markedAt: string | null;
   checkIn: string | null;
   checkOut: string | null;
   postTestScore: string | null;
@@ -23,6 +25,8 @@ export type AttendanceListItem = {
   sessionTypeMethod: string | null;
   conferenceId: string | null;
   lastUpdates: string | null;
+  updatedBy: string | null;
+  updationOn: string | null;
   marked: boolean;
   // Tallies of this participant across all of this trainer's trainings - the
   // same numbers repeat on each of the participant's rows.
