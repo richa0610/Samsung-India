@@ -8,6 +8,9 @@
  */
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Scheme optional (people paste "facebook.com/name" as often as the full
+// URL) but a real domain shape is required - rejects plain usernames/garbage.
+const URL_RE = /^(https?:\/\/)?[^\s/]+\.[^\s]{2,}$/i;
 
 export type ValidationResult = string | null;
 
@@ -45,6 +48,32 @@ export function aadhar12(value: string, label = "Aadhaar number"): ValidationRes
   const trimmed = value.trim();
   if (!trimmed) return null;
   return /^\d{12}$/.test(trimmed) ? null : `${label} must be 12 digits.`;
+}
+
+/** A real-looking URL (scheme optional, e.g. "linkedin.com/in/name"). */
+export function url(value: string, label = "URL"): ValidationResult {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return URL_RE.test(trimmed) ? null : `Enter a valid ${label.toLowerCase()}.`;
+}
+
+/**
+ * A real calendar date, not in the future, and implying a plausible working
+ * adult's age (18-75) - rejects the unstructured garbage a free-text date
+ * field could previously hold ("banana", a future date, a 5-year-old's DOB).
+ * Expects "YYYY-MM-DD" (what the date picker feeding this field produces).
+ */
+export function plausibleDob(value: string, label = "Date of birth"): ValidationResult {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const date = new Date(`${trimmed.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return `Enter a valid ${label.toLowerCase()}.`;
+  const now = new Date();
+  if (date.getTime() > now.getTime()) return `${label} can't be in the future.`;
+  const ageYears = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+  if (ageYears < 18) return `${label} must reflect an age of at least 18.`;
+  if (ageYears > 75) return `${label} must reflect an age of 75 or under.`;
+  return null;
 }
 
 /** Letters, digits and hyphens, 4-15 characters (e.g. "OFF26002", "EMP26001"). */

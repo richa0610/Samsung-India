@@ -1,9 +1,9 @@
 import AppInput from "@/components/ui/AppInput";
+import { digitsOnly } from "@/utils/validation";
 import { TrainerProfileForm } from "./useTrainerProfileForm";
 import { ProfileSection } from "./ProfileSection";
 
-const TEXT_FIELDS: { key: "salary" | "companyEmail" | "visitingCard" | "idCard" | "offerLetter" | "letterhead" | "promocode"; label: string; placeholder?: string }[] = [
-  { key: "salary", label: "Salary", placeholder: "Salary in Rupees" },
+const TEXT_FIELDS: { key: "companyEmail" | "visitingCard" | "idCard" | "offerLetter" | "letterhead" | "promocode"; label: string; placeholder?: string }[] = [
   { key: "companyEmail", label: "Company Official Email", placeholder: "official email" },
   { key: "visitingCard", label: "Visiting Card" },
   { key: "idCard", label: "ID Card" },
@@ -52,6 +52,15 @@ export function OfficialInfoSection({ form }: { form: TrainerProfileForm }) {
         value={profile.designation}
         editable={isEditing}
         onChangeText={(v) => setField("designation", v)}
+      />
+      <AppInput
+        compact
+        label="Salary"
+        placeholder="Salary in Rupees"
+        value={profile.salary}
+        editable={isEditing}
+        keyboardType="number-pad"
+        onChangeText={(v) => setField("salary", digitsOnly(v))}
       />
       {TEXT_FIELDS.map((field) => (
         <AppInput

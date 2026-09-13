@@ -10,14 +10,22 @@ import {
   digitsOnly,
   email,
   firstError,
+  intInRange,
   mobile10,
   normalizeEmail,
   pincode6,
+  plausibleDob,
+  required,
+  url,
   ValidationResult,
 } from "@/utils/validation";
 import { ProfileSectionKey } from "./types";
 
-/** Reject a section save when a format-checked field is filled but malformed. */
+// Fields genuinely required for a trainer profile, not just decorative "*"
+// labels: identity (Name), the number that also doubles as their login
+// (Mobile Number), and the region fields real reports/geofencing use
+// elsewhere in the app (District, State). City is deliberately excluded -
+// nothing outside this one field reads it.
 export function validateProfileSection(
   section: ProfileSectionKey,
   profile: TrainerProfile,
@@ -25,16 +33,35 @@ export function validateProfileSection(
   switch (section) {
     case "personal":
       return firstError(
+        required(profile.name, "Name"),
         email(profile.email, "Email"),
+        required(profile.mobileNumber, "Mobile number"),
         mobile10(profile.mobileNumber, "Mobile number"),
         mobile10(profile.altPhone, "Alt phone"),
+        plausibleDob(profile.dob),
       );
     case "address":
-      return pincode6(profile.pincode);
+      return firstError(
+        required(profile.district, "District"),
+        required(profile.state, "State"),
+        pincode6(profile.pincode),
+      );
     case "documents":
       return aadhar12(profile.aadharNumber);
+    case "social":
+      return firstError(
+        url(profile.facebookUsername, "Facebook URL"),
+        url(profile.twitterUsername, "Twitter URL"),
+        url(profile.instagramUsername, "Instagram URL"),
+        url(profile.linkedinUsername, "LinkedIn URL"),
+        url(profile.youtubeUsername, "YouTube URL"),
+        url(profile.github, "GitHub URL"),
+      );
     case "official":
-      return email(profile.companyEmail, "Company email");
+      return firstError(
+        email(profile.companyEmail, "Company email"),
+        intInRange(profile.salary, 1, 99_999_999, "Salary"),
+      );
     default:
       return null;
   }

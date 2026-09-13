@@ -24,7 +24,7 @@ export function LocalAddressSection({ form }: { form: TrainerProfileForm }) {
     >
       <AppInput
         compact
-        label="City *"
+        label="City"
         value={profile.city}
         editable={isEditing}
         onChangeText={(v) => setField("city", v)}

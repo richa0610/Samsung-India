@@ -20,6 +20,7 @@ export function DateTimeField({
   disabled = false,
   compact = false,
   minimumDate,
+  maximumDate,
 }: {
   label?: string;
   value: string;
@@ -34,6 +35,9 @@ export function DateTimeField({
   // Earliest selectable date - e.g. today, so training dates can't be
   // backdated.
   minimumDate?: Date;
+  // Latest selectable date - e.g. 18 years ago, so a date-of-birth picker
+  // can't select someone too young.
+  maximumDate?: Date;
 }) {
   const [showPicker, setShowPicker] = useState(false);
 
@@ -45,6 +49,7 @@ export function DateTimeField({
         mode,
         is24Hour: false,
         minimumDate,
+        maximumDate,
         onChange: (_event, selected) => {
           if (selected) onChange(mode === "date" ? formatDate(selected) : formatTime(selected));
         },
@@ -95,6 +100,7 @@ export function DateTimeField({
             mode={mode}
             display="spinner"
             minimumDate={minimumDate}
+            maximumDate={maximumDate}
             onChange={(_event, selected) => {
               if (selected) onChange(mode === "date" ? formatDate(selected) : formatTime(selected));
             }}

@@ -32,6 +32,8 @@ export function SocialMediaSection({ form }: { form: TrainerProfileForm }) {
           placeholder={field.placeholder}
           value={profile[field.key]}
           editable={isEditing}
+          keyboardType="url"
+          autoCapitalize="none"
           onChangeText={(v) => setField(field.key, v)}
         />
       ))}
