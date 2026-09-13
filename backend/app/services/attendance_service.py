@@ -1,4 +1,3 @@
-import uuid
 from datetime import datetime
 
 from fastapi import BackgroundTasks, UploadFile
@@ -96,23 +95,45 @@ async def check_in_secure(
 ) -> AttendanceOut:
     """Geofenced check-in: captures the trainee's location and a face photo
     alongside the usual attendance row. Used instead of `check_in` when the
-    session's attendance module has `geoFencing` enabled."""
+    session's attendance module has `geoFencing` enabled.
+
+    The photo is stored at attendance_photos/{conferenceUid}/{traineeUid}.{ext}
+    - one folder per conference (everyone who checked in to a given session
+    lives together, easy to browse), and the trainee's own UID as the
+    filename makes it unique per (conference, trainee) and deterministic -
+    a retake overwrites the same file instead of a random uuid4 name
+    orphaning the old one on disk forever.
+
+    Trainee already has a row for this conference (e.g. "Pending" from
+    being pre-seeded onto the roster, or already "Present" from a previous
+    attempt) - update that row in place rather than creating a duplicate.
+    Previously this branch never touched checkInPhoto/checkInDistance at
+    all: the photo was read and validated but silently discarded, so a
+    pre-assigned trainee's Secure Check-In never actually saved a photo."""
     contents = await photo.read()
     extension = validate_image_upload(photo.content_type, contents, size_error_detail="Photo must be 5MB or smaller")
-
-    existing = _clear_existing_if_retest_allowed(db, conference_uid, trainee.traineeUid)
-    if existing:
-        return _promote_if_pending(db, existing)
 
     conference = conference_repository.get_by_uid(db, conference_uid)
 
     venue_lat = float(conference.geoLatitude) if conference and conference.geoLatitude is not None else None
     venue_lng = float(conference.geoLongitude) if conference and conference.geoLongitude is not None else None
     distance = distance_meters(latitude, longitude, venue_lat, venue_lng)
+    check_in_distance = f"{distance:.0f}" if distance is not None else None
 
-    photo_dir = media_subdir("attendance_photos")
-    filename = f"{uuid.uuid4().hex}.{extension}"
+    photo_dir = media_subdir(f"attendance_photos/{conference_uid}")
+    filename = f"{trainee.traineeUid}.{extension}"
     (photo_dir / filename).write_bytes(contents)
+    check_in_photo = f"attendance_photos/{conference_uid}/{filename}"
+
+    existing = _clear_existing_if_retest_allowed(db, conference_uid, trainee.traineeUid)
+    if existing:
+        existing.checkInPhoto = check_in_photo
+        existing.checkInDistance = check_in_distance
+        if existing.status != "Present":
+            existing.status = "Present"
+            existing.markedOn = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        attendance_repository.save(db)
+        return AttendanceOut(status=existing.status, markedOn=existing.markedOn, distanceMeters=distance)
 
     attendance = attendance_repository.create(
         db,
@@ -123,8 +144,8 @@ async def check_in_secure(
             phone=trainee.phone,
             markedOn=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             status="Present",
-            checkInDistance=f"{distance:.0f}" if distance is not None else None,
-            checkInPhoto=f"attendance_photos/{filename}",
+            checkInDistance=check_in_distance,
+            checkInPhoto=check_in_photo,
         ),
     )
 
