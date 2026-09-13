@@ -66,16 +66,12 @@ export default function TrainingSessionHeader({
         )}
 
         <View style={styles.profileSection}>
-          {/* Avatar with Online Status Dot */}
+          {/* Avatar with Online Status Dot - same styling as the trainee
+              Profile screen's avatar (ProfileHeader.tsx), for a consistent
+              look across every screen that shows this photo. */}
           <View style={styles.avatarContainer}>
-            <Image
-              source={avatar}
-              style={[
-                styles.avatar,
-                profilePhoto ? styles.avatarPhoto : undefined,
-              ]}
-              contentFit="cover"
-            />
+            <Image source={avatar} style={styles.avatar} contentFit="cover" />
+            <View style={styles.onlineDot} />
           </View>
 
           {/* User Details */}
@@ -204,11 +200,21 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   avatar: {
-    width: 81,
+    width: 60,
     height: 60,
+    borderRadius: 30,
+    backgroundColor: "#DCEBFE",
   },
-  avatarPhoto: {
-    borderRadius: 24,
+  onlineDot: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#22C55E",
+    borderWidth: 2,
+    borderColor: Colors.headerBlue,
   },
   userMeta: {
     gap: 1,

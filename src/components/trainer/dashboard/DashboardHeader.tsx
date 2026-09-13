@@ -115,19 +115,25 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
   },
+  // Same avatar styling as the trainee Profile screen's avatar
+  // (ProfileHeader.tsx) and the trainee Home/Dashboard header
+  // (TrainingSessionHeader.tsx), for a consistent look everywhere this
+  // photo appears across both the trainer and trainee flows.
   avatarImage: {
-    width: 64,
-    height: 64,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#DCEBFE",
   },
   avatarOnlineBadge: {
     position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
     backgroundColor: "#22C55E",
-    borderWidth: 2.5,
+    borderWidth: 2,
     borderColor: Colors.mainColour1,
   },
   companyIdContainer: {

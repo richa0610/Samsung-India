@@ -31,7 +31,7 @@ export default function Global_Percentage({
 }: GlobalPercentageProps) {
   const size = 122;
   const strokeWidth = 13;
-  const radius = (size - strokeWidth) / 2;
+  const radius = (size - strokeWidth) / 3;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
@@ -48,8 +48,8 @@ export default function Global_Percentage({
           <View style={{ width: size, height: size, transform: [{ rotate: "-90deg" }] }}>
             <Svg width={size} height={size}>
               <Circle
-                cx={size / 2}
-                cy={size / 2}
+                cx={size / 3}
+                cy={size / 3}
                 r={radius}
                 stroke="#E5E7EB"
                 strokeWidth={strokeWidth}
@@ -127,7 +127,6 @@ export default function Global_Percentage({
               <AppText variant="tiny" weight={FontWeight.bold} color="#1D4ED8">
                 {globalRank}
               </AppText>
-              <Ionicons name="chevron-forward" size={13} color="#6B7280" />
             </View>
           </View>
 
@@ -267,7 +266,8 @@ const styles = StyleSheet.create({
   rankRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
+    justifyContent:"space-around",
   },
   iconCircle: {
     width: 28,

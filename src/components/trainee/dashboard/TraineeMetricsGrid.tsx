@@ -94,9 +94,9 @@ export default function TraineeMetricsGrid({
 const styles = StyleSheet.create({
   grid: {
     flexDirection: "row",
-    gap: 8,
-    paddingHorizontal: 16,
-    marginTop: 14,
+    gap: 4,
+    paddingHorizontal: 10,
+    marginTop: 10,
   },
   card: {
     flex: 1,
