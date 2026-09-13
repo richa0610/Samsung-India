@@ -1,27 +1,14 @@
 import AppInput from "@/components/ui/AppInput";
 import { DateTimeField } from "@/components/training/add-training/DateTimeField";
-import { digitsOnly } from "@/utils/validation";
+import { digitsOnly, dobPickerRange } from "@/utils/validation";
 import { TrainerProfileForm } from "./useTrainerProfileForm";
 import { ProfileSection } from "./ProfileSection";
-
-// A trainer must be at least 18 and no more than 75 - see
-// utils/validation/validators.ts's plausibleDob, which enforces the same
-// range server-side-of-the-form on save. Constraining the picker itself
-// means a garbage/implausible DOB can't be entered in the first place,
-// rather than only being caught after the fact.
-function dobRange() {
-  const now = new Date();
-  return {
-    maximumDate: new Date(now.getFullYear() - 18, now.getMonth(), now.getDate()),
-    minimumDate: new Date(now.getFullYear() - 75, now.getMonth(), now.getDate()),
-  };
-}
 
 export function PersonalDetailsSection({ form }: { form: TrainerProfileForm }) {
   const { profile, editing, savingSection, setField, toggleEdit, saveSection } = form;
   if (!profile) return null;
   const isEditing = editing.personal;
-  const { minimumDate, maximumDate } = dobRange();
+  const { minimumDate, maximumDate } = dobPickerRange();
 
   return (
     <ProfileSection

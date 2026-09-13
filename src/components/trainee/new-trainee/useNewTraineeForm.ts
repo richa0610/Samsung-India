@@ -16,6 +16,7 @@ import {
   mobile10,
   normalizeEmail,
   pincode6,
+  plausibleDob,
   required,
 } from "@/utils/validation";
 
@@ -118,6 +119,7 @@ export function useNewTraineeForm() {
       mobile10(altPhone, "Alt phone"),
       pincode6(jobPincode, "Job pincode"),
       companyId(agencyId, "Agency/Company ID"),
+      plausibleDob(dob),
     );
     if (formatError) {
       setNotice(formatError);

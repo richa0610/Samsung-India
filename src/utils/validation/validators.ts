@@ -57,11 +57,18 @@ export function url(value: string, label = "URL"): ValidationResult {
   return URL_RE.test(trimmed) ? null : `Enter a valid ${label.toLowerCase()}.`;
 }
 
+// Shared across every DOB field in the app (trainer profile, new trainee
+// registration, ...) so the picker's allowed range and this save-time check
+// can never drift apart from each other.
+export const DOB_MIN_AGE_YEARS = 17;
+export const DOB_MAX_AGE_YEARS = 75;
+
 /**
- * A real calendar date, not in the future, and implying a plausible working
- * adult's age (18-75) - rejects the unstructured garbage a free-text date
- * field could previously hold ("banana", a future date, a 5-year-old's DOB).
- * Expects "YYYY-MM-DD" (what the date picker feeding this field produces).
+ * A real calendar date, not in the future, and implying a plausible age
+ * (see DOB_MIN_AGE_YEARS/DOB_MAX_AGE_YEARS above) - rejects the unstructured
+ * garbage a free-text date field could previously hold ("banana", a future
+ * date, a 5-year-old's DOB). Expects "YYYY-MM-DD" (what the date picker
+ * feeding this field produces).
  */
 export function plausibleDob(value: string, label = "Date of birth"): ValidationResult {
   const trimmed = value.trim();
@@ -71,9 +78,22 @@ export function plausibleDob(value: string, label = "Date of birth"): Validation
   const now = new Date();
   if (date.getTime() > now.getTime()) return `${label} can't be in the future.`;
   const ageYears = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-  if (ageYears < 18) return `${label} must reflect an age of at least 18.`;
-  if (ageYears > 75) return `${label} must reflect an age of 75 or under.`;
+  if (ageYears < DOB_MIN_AGE_YEARS) return `${label} must reflect an age of at least ${DOB_MIN_AGE_YEARS}.`;
+  if (ageYears > DOB_MAX_AGE_YEARS) return `${label} must reflect an age of ${DOB_MAX_AGE_YEARS} or under.`;
   return null;
+}
+
+/**
+ * The Date range a DOB date-picker should allow, matching plausibleDob's
+ * age rule - constrains the picker itself so an implausible date can't be
+ * selected in the first place, rather than only being caught after the fact.
+ */
+export function dobPickerRange(): { minimumDate: Date; maximumDate: Date } {
+  const now = new Date();
+  return {
+    maximumDate: new Date(now.getFullYear() - DOB_MIN_AGE_YEARS, now.getMonth(), now.getDate()),
+    minimumDate: new Date(now.getFullYear() - DOB_MAX_AGE_YEARS, now.getMonth(), now.getDate()),
+  };
 }
 
 /** Letters, digits and hyphens, 4-15 characters (e.g. "OFF26002", "EMP26001"). */

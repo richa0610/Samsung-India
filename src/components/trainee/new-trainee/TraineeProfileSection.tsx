@@ -13,11 +13,13 @@ import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { Radius } from "@/theme/radius";
 import { Spacing } from "@/theme/spacing";
+import { dobPickerRange } from "@/utils/validation";
 import { AGENCY_OPTIONS, DESIGNATION_OPTIONS, GENDER_OPTIONS } from "./constants";
 import { NewTraineeForm } from "./useNewTraineeForm";
 
 export function TraineeProfileSection({ form }: { form: NewTraineeForm }) {
   const [picking, setPicking] = useState(false);
+  const { minimumDate, maximumDate } = dobPickerRange();
 
   const handlePickPhoto = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -105,7 +107,14 @@ export function TraineeProfileSection({ form }: { form: NewTraineeForm }) {
         options={GENDER_OPTIONS}
         onSelect={(option) => form.setGender(option.value)}
       />
-      <DateTimeField label="Date of Birth" mode="date" value={form.dob} onChange={form.setDob} />
+      <DateTimeField
+        label="Date of Birth"
+        mode="date"
+        value={form.dob}
+        minimumDate={minimumDate}
+        maximumDate={maximumDate}
+        onChange={form.setDob}
+      />
     </AppCard>
   );
 }
