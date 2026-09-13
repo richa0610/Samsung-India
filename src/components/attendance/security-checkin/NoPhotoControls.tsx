@@ -7,21 +7,16 @@ import { FontWeight } from "@/theme/fontWeight";
 
 type NoPhotoControlsProps = {
   capturing: boolean;
-  // False while no face is currently detected in the live preview - the
-  // button stays disabled and relabeled until one is (see useSecurityCheckIn).
-  canCapture: boolean;
   onCapture: () => void;
 };
 
-export default function NoPhotoControls({ capturing, canCapture, onCapture }: NoPhotoControlsProps) {
-  const disabled = capturing || !canCapture;
-
+export default function NoPhotoControls({ capturing, onCapture }: NoPhotoControlsProps) {
   return (
     <>
       <Pressable
-        style={[styles.captureButton, disabled && styles.captureButtonDisabled]}
+        style={[styles.captureButton, capturing && styles.captureButtonDisabled]}
         onPress={onCapture}
-        disabled={disabled}
+        disabled={capturing}
         accessibilityRole="button"
         accessibilityLabel="Capture Photo"
       >
@@ -29,9 +24,9 @@ export default function NoPhotoControls({ capturing, canCapture, onCapture }: No
           <ActivityIndicator size="small" color={Colors.white} />
         ) : (
           <>
-            <Ionicons name={canCapture ? "camera" : "scan-outline"} size={20} color={Colors.white} />
+            <Ionicons name="camera" size={20} color={Colors.white} />
             <AppText color={Colors.white} weight={FontWeight.semiBold} style={styles.captureButtonText}>
-              {canCapture ? "Capture Photo" : "Face not detected"}
+              Capture Photo
             </AppText>
           </>
         )}
