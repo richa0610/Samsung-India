@@ -2,6 +2,7 @@ import * as ImagePicker from "expo-image-picker";
 import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { Alert } from "react-native";
+import ImageCropPicker from "react-native-image-crop-picker";
 
 import { ApiError, TrainerProfile, fetchTrainerProfile, updateTrainerProfile, uploadTrainerPhoto } from "@/api/trainerProfile";
 import { useAuth } from "@/hooks/useAuth";
@@ -91,13 +92,38 @@ export function useTrainerProfileForm() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       quality: 0.8,
-      allowsEditing: true,
-      aspect: [1, 1],
+      // Cropping now happens in the step below, via a dedicated cropper
+      // that gives a consistent Cancel/Rotate/Done screen on every device -
+      // the OS's own built-in editor (previously used here) looks
+      // completely different depending on the phone's manufacturer.
+      allowsEditing: false,
     });
     if (result.canceled || !result.assets?.[0]) return;
 
     const asset = result.assets[0];
-    if (asset.fileSize && asset.fileSize > MAX_PHOTO_BYTES) {
+
+    let cropped;
+    try {
+      cropped = await ImageCropPicker.openCropper({
+        path: asset.uri,
+        mediaType: "photo",
+        width: 512,
+        height: 512,
+        cropperToolbarTitle: "Crop Photo",
+        cropperCancelText: "Cancel",
+        cropperChooseText: "Done",
+        compressImageQuality: 0.8,
+        freeStyleCropEnabled: false,
+      });
+    } catch (err) {
+      // User backed out of the crop screen - not a failure, just no photo
+      // picked this time.
+      if ((err as { code?: string } | null)?.code === "E_PICKER_CANCELLED") return;
+      Alert.alert("Crop failed", "Couldn't crop that photo. Please try again.");
+      return;
+    }
+
+    if (cropped.size > MAX_PHOTO_BYTES) {
       Alert.alert("Image too large", "Please choose an image smaller than 5MB.");
       return;
     }
@@ -105,14 +131,12 @@ export function useTrainerProfileForm() {
 
     setUploadingPhoto(true);
     try {
-      const extension = asset.uri.split(".").pop()?.toLowerCase() || "jpg";
-      const type =
-        asset.mimeType ??
-        (extension === "png" ? "image/png" : extension === "webp" ? "image/webp" : "image/jpeg");
+      const extension = cropped.mime.split("/").pop() || "jpg";
+      const uri = cropped.path.startsWith("file://") ? cropped.path : `file://${cropped.path}`;
       const updated = await uploadTrainerPhoto(adminToken, {
-        uri: asset.uri,
+        uri,
         name: `profile.${extension}`,
-        type,
+        type: cropped.mime,
       });
       // The server saves every re-upload under the same filename, so the
       // resolved media URL would otherwise be identical to before and the
