@@ -1,5 +1,6 @@
-import { ActivityIndicator, Image, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 
 import AppCard from "@/components/ui/AppCard";
 import AppText from "@/components/ui/AppText";
@@ -41,6 +42,7 @@ export function ProfileHeaderCard({ name, onLogout, photoUrl, uploading = false,
           <Image
             source={{ uri: resolvedPhotoUrl, headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined }}
             style={styles.avatarImage}
+            contentFit="cover"
           />
         ) : (
           <AppText style={styles.avatarText} weight={FontWeight.bold} color={Colors.mainColour1}>

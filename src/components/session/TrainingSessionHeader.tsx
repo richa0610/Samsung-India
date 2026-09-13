@@ -1,11 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
-  Image,
   ImageSourcePropType,
   Pressable,
   StyleSheet,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 
 import CalendarIcon from "@/assets/images/svg/calender2.svg";
 import AppText from "@/components/ui/AppText";
@@ -74,6 +74,7 @@ export default function TrainingSessionHeader({
                 styles.avatar,
                 profilePhoto ? styles.avatarPhoto : undefined,
               ]}
+              contentFit="cover"
             />
           </View>
 

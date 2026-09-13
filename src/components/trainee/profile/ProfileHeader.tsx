@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { ActivityIndicator, Image, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import { Image } from "expo-image";
 
 import Calendar from "@/assets/images/svg/calender2.svg";
 import AppText from "@/components/ui/AppText";
@@ -31,7 +32,7 @@ export default function ProfileHeader({ trainee, uploading, sessionPillLabel, on
             accessibilityRole="button"
             accessibilityLabel="Change profile picture"
           >
-            <Image source={traineeAvatar(trainee, token)} style={styles.avatar} />
+            <Image source={traineeAvatar(trainee, token)} style={styles.avatar} contentFit="cover" />
             <View style={styles.onlineDot} />
             {uploading && (
               <View style={styles.uploadingOverlay}>

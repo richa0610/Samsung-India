@@ -8,7 +8,7 @@ import { traineeAvatar } from "@/utils/traineeAvatar";
 export function useSessionScreen() {
   const router = useRouter();
   const { trainee, token, logout } = useAuth();
-  const avatar = traineeAvatar(trainee);
+  const avatar = traineeAvatar(trainee, token);
 
   const [session, setSession] = useState<CurrentSession | null>(null);
   const [loading, setLoading] = useState(true);
