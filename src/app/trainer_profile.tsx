@@ -5,8 +5,10 @@ import { useRouter } from "expo-router";
 
 import DashboardBottomNav, { DashboardTab } from "@/components/trainer/dashboard/DashboardBottomNav";
 import TrainerMoreMenu from "@/components/trainer/dashboard/TrainerMoreMenu";
+import AppText from "@/components/ui/AppText";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { Colors } from "@/theme/colors";
+import { Fonts } from "@/theme/fonts";
 import { useAuth } from "@/hooks/useAuth";
 import {
   DocumentsSection,
@@ -60,6 +62,18 @@ export default function TrainerProfileScreen() {
           onPickPhoto={form.handlePickPhoto}
         />
 
+        {/* A section's own validation error (bad email/mobile/pincode/etc.)
+            surfaces here rather than inline in that section - notice is one
+            shared string on the form, not tracked per-section, and the
+            failing section could be scrolled out of view by the time the
+            error comes back. Previously this was computed but never
+            rendered anywhere, so a failed save looked like nothing happened. */}
+        {form.notice && (
+          <AppText style={styles.notice} color={Colors.danger}>
+            {form.notice}
+          </AppText>
+        )}
+
         {form.loading ? (
           <View style={styles.centered}>
             <ActivityIndicator color={Colors.mainColour1} />
@@ -97,4 +111,5 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   content: { flexGrow: 1, padding: 16, paddingTop: 4, paddingBottom: 16, gap: 4 },
   centered: { paddingVertical: 60, alignItems: "center" },
+  notice: { fontSize: Fonts.bodySm, textAlign: "center", marginTop: 4, marginBottom: 4 },
 });
