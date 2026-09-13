@@ -40,6 +40,7 @@ export default function TrainerDashboardScreen() {
         <TrainerDashboardScrollContent
           adminName={admin?.name ?? ""}
           companyId={admin?.offerId ?? admin?.username ?? ""}
+          avatarUri={admin?.profilePicture}
           dateRange={dateRange}
           datePreset={datePreset}
           onApplyDateRange={applyDateRange}

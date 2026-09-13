@@ -1,11 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Image } from "expo-image";
 
 import AppText from "@/components/ui/AppText";
 import ScreenBanner from "@/components/ui/ScreenBanner";
+import { useAuth } from "@/hooks/useAuth";
 import { Colors } from "@/theme/colors";
 import { FontWeight } from "@/theme/fontWeight";
 import { Shadows } from "@/theme/shadows";
+import { resolveMediaUrl } from "@/utils/media";
 
 type DashboardHeaderProps = {
   name: string;
@@ -22,6 +25,9 @@ export default function DashboardHeader({
   onOpenProfile,
   onLogout,
 }: DashboardHeaderProps) {
+  const { adminToken } = useAuth();
+  const resolvedAvatarUri = resolveMediaUrl(avatarUri);
+
   return (
     <ScreenBanner backgroundColor={Colors.mainColour1} style={styles.banner}>
       <View style={styles.topRow}>
@@ -35,12 +41,12 @@ export default function DashboardHeader({
           >
             <Image
               source={
-                avatarUri
-                  ? { uri: avatarUri }
+                resolvedAvatarUri
+                  ? { uri: resolvedAvatarUri, headers: adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined }
                   : require("@/assets/images/Icons/face_icon.png")
               }
               style={styles.avatarImage}
-              resizeMode="cover"
+              contentFit="cover"
             />
             <View style={styles.avatarOnlineBadge} />
           </Pressable>

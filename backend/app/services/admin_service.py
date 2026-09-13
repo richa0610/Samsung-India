@@ -21,6 +21,7 @@ def login(common_db: Session, db: Session, payload: AdminLoginRequest, tenant_id
                 role=admin.role,
                 company=admin.company,
                 tenant_id=tenant_id,
+                profilePicture=admin.profilePhoto or None,
             ),
         )
 
@@ -42,6 +43,7 @@ def login(common_db: Session, db: Session, payload: AdminLoginRequest, tenant_id
                 offerId=agent.offerId,
                 company=agent.company,
                 tenant_id=tenant_id,
+                profilePicture=agent.profilePhoto or None,
             ),
         )
 

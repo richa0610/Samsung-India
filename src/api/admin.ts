@@ -9,6 +9,7 @@ export type AdminAccount = {
   offerId?: string | null;
   company?: string | null;
   tenant_id?: string | null;
+  profilePicture?: string | null;
 };
 
 export type AdminAuthSession = {

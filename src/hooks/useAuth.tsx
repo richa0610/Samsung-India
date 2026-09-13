@@ -29,6 +29,7 @@ type AuthContextValue = {
   adminToken: string | null;
   isAdminAuthenticated: boolean;
   setAdminSession: (session: AdminAuthSession) => void;
+  updateAdminPhoto: (profilePicture: string) => void;
   adminLogout: () => void;
 };
 
@@ -86,6 +87,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       adminToken,
       isAdminAuthenticated: !!adminSession,
       setAdminSession: setAdminSessionState,
+      // Lets a successful photo upload (useTrainerProfileForm) update the
+      // avatar shown everywhere else in the trainer flow (dashboard header,
+      // etc.) immediately, without a full re-login just to refresh one field.
+      updateAdminPhoto: (profilePicture: string) =>
+        setAdminSessionState((current) =>
+          current ? { ...current, admin: { ...current.admin, profilePicture } } : current,
+        ),
       adminLogout: () => setAdminSessionState(null),
     }),
     [session, adminSession, adminToken]

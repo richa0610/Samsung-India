@@ -15,6 +15,7 @@ import TrainingEfficiencyCard from "./TrainingEfficiencyCard";
 type TrainerDashboardScrollContentProps = {
   adminName: string;
   companyId: string;
+  avatarUri?: string | null;
   dateRange: DateRange;
   datePreset: DatePreset;
   onApplyDateRange: (range: DateRange, preset: DatePreset) => void;
@@ -30,6 +31,7 @@ type TrainerDashboardScrollContentProps = {
 export default function TrainerDashboardScrollContent({
   adminName,
   companyId,
+  avatarUri,
   dateRange,
   datePreset,
   onApplyDateRange,
@@ -51,7 +53,13 @@ export default function TrainerDashboardScrollContent({
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.mainColour1]} tintColor={Colors.mainColour1} />
       }
     >
-      <DashboardHeader name={adminName} companyId={companyId} onOpenProfile={onOpenProfile} onLogout={onLogout} />
+      <DashboardHeader
+        name={adminName}
+        companyId={companyId}
+        avatarUri={avatarUri}
+        onOpenProfile={onOpenProfile}
+        onLogout={onLogout}
+      />
 
       <Calendar range={dateRange} preset={datePreset} onApply={onApplyDateRange} />
 

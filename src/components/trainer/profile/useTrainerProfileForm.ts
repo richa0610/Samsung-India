@@ -21,7 +21,7 @@ const EMPTY_EDITING: Record<ProfileSectionKey, boolean> = {
 const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
 export function useTrainerProfileForm() {
-  const { adminToken } = useAuth();
+  const { adminToken, updateAdminPhoto } = useAuth();
   const [profile, setProfile] = useState<TrainerProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(EMPTY_EDITING);
@@ -143,11 +143,13 @@ export function useTrainerProfileForm() {
       // avatar would keep showing its cached copy of the old photo - see
       // the same fix on the trainee side (useProfile.ts). The media route
       // ignores unknown query params, so this only affects display.
-      setProfile(
-        updated.profilePicture
-          ? { ...updated, profilePicture: `${updated.profilePicture}?v=${Date.now()}` }
-          : updated,
-      );
+      const busted = updated.profilePicture
+        ? { ...updated, profilePicture: `${updated.profilePicture}?v=${Date.now()}` }
+        : updated;
+      setProfile(busted);
+      // Keeps the avatar shown elsewhere (dashboard header, etc.) in sync
+      // with this upload immediately, without needing a re-login.
+      if (busted.profilePicture) updateAdminPhoto(busted.profilePicture);
     } catch (err) {
       Alert.alert(
         "Upload failed",
