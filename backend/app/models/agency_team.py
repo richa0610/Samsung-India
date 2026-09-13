@@ -12,7 +12,10 @@ class AgencyTeam(Base):
     Unlike `admin`, this table has no Aadhar/documents/social-media/
     salary/etc. columns - the Trainer Profile screen (GET/PATCH
     /admin/profile) only reads/writes the subset that actually exists
-    here for an AgencyTeam-backed login."""
+    here for an AgencyTeam-backed login. `district`/`landmark` were added
+    by scripts/add_agencyteam_district_landmark.py - the Local Address
+    section requires both, but a real trainer's profile had nowhere to
+    persist them until that migration."""
 
     __tablename__ = "agencyteam"
 
@@ -38,6 +41,8 @@ class AgencyTeam(Base):
     jobCity = Column(String(100))
     jobState = Column(String(100))
     jobPincode = Column(String(50))
+    district = Column(String(80))
+    landmark = Column(String(200))
     profilePhoto = Column(String(250))
 
     username = Column(String(100), unique=True, nullable=True, index=True)

@@ -113,7 +113,8 @@ def _agency_to_profile(agent: AgencyTeam) -> TrainerProfileOut:
     """AgencyTeam-backed login (the real trainers seeded via
     seed_more_trainers.py etc.): that table has no Aadhar/documents/
     social-media/salary/official-docs columns at all, so those fields
-    come back blank rather than fabricated."""
+    come back blank rather than fabricated. district/landmark are real
+    columns (see scripts/add_agencyteam_district_landmark.py)."""
     return TrainerProfileOut(
         name=agent.name or "",
         email=agent.email or "",
@@ -122,10 +123,10 @@ def _agency_to_profile(agent: AgencyTeam) -> TrainerProfileOut:
         gender=agent.gender or "",
         dob=agent.dob or "",
         city=agent.jobCity or "",
-        district="",
+        district=agent.district or "",
         state=agent.jobState or "",
         pincode=agent.jobPincode or "",
-        landmark="",
+        landmark=agent.landmark or "",
         permanentSameAsLocal=True,
         aadharNumber="",
         aadharFile="",
@@ -201,6 +202,8 @@ _AGENCY_FIELD_MAP = {
     "city": "jobCity",
     "state": "jobState",
     "pincode": "jobPincode",
+    "district": "district",
+    "landmark": "landmark",
     "profilePicture": "profilePhoto",
     "designation": "designation",
     "companyEmail": "officialEmail",
