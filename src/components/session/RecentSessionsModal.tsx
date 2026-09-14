@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -21,22 +21,32 @@ export default function RecentSessionsModal({ visible, onClose, token }: Props) 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setItems(await getSessionHistory(token));
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Couldn't load your recent sessions.");
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
   useEffect(() => {
-    if (visible) load();
-  }, [visible, load]);
+    let ignore = false;
+    async function load() {
+      if (!token || !visible) return;
+      setLoading(true);
+      setError(null);
+      try {
+        const history = await getSessionHistory(token);
+        if (!ignore) {
+          setItems(history);
+        }
+      } catch (err) {
+        if (!ignore) {
+          setError(err instanceof ApiError ? err.message : "Couldn't load your recent sessions.");
+        }
+      } finally {
+        if (!ignore) {
+          setLoading(false);
+        }
+      }
+    }
+    load();
+    return () => {
+      ignore = true;
+    };
+  }, [token, visible]);
 
   return (
     <AppModal

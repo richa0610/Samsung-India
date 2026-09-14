@@ -1,0 +1,517 @@
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { Alert, Share } from "react-native";
+
+import { ApiError } from "@/api/client";
+import {
+  SessionDashboard,
+  UploadFile,
+  broadcastLiveQuestion,
+  checkTrainingSchedule,
+  endTraining,
+  fetchSessionDashboard,
+  markAttendance,
+  restartModule,
+  showLiveLeaderboard,
+  showLiveLobby,
+  startModule,
+  startTraining,
+  stopActiveModule,
+  stopLiveTimer,
+  unlockProctoring,
+} from "@/api/training";
+import { DashboardTab } from "@/components/trainer/dashboard/DashboardBottomNav";
+import { useAuth } from "@/hooks/useAuth";
+import { useLiveQuizChannel } from "@/hooks/useLiveQuizChannel";
+import { useLocationPermission } from "@/hooks/useLocationPermission";
+import { formatDisplayDate } from "@/utils/formatDisplayDate";
+import { formatGeneratedTimestamp } from "./formatting";
+import { TrainerCheckInPhoto } from "./TrainerCheckInModal";
+
+export type OutsideVenuePrompt = {
+  photo: TrainerCheckInPhoto;
+  distanceMeters: number;
+  radius: number;
+  trainerCoords: { latitude: number; longitude: number } | null;
+  // True once this venue's location has already been corrected once
+  // (OUTSIDE_VENUE_LOCKED) - the modal drops the "update the venue" option
+  // and shows a hard block instead, since the one-time correction is used up.
+  locked: boolean;
+};
+
+export type ScheduleOverridePrompt = {
+  scheduledFor: string | null;
+  // True when starting before the scheduled time, false when after - drives
+  // "early"/"late" wording in the prompt.
+  early: boolean;
+  // Only set for the rare post-photo fallback (the schedule window was
+  // crossed mid-flow, after the check-in photo was already taken) - absent
+  // for the normal case, where this prompt appears right after "Start
+  // Session" and the camera hasn't opened yet. See handleSubmitScheduleOverride.
+  photo?: TrainerCheckInPhoto;
+  trainerCoords?: { latitude: number; longitude: number } | null;
+  venueOverride?: { latitude: number; longitude: number };
+};
+
+export function useSessionDashboardScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ conferenceUid?: string }>();
+  const conferenceUid = params.conferenceUid || "CONF25456581";
+  const { adminToken } = useAuth();
+
+  const [data, setData] = useState<SessionDashboard | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showQR, setShowQR] = useState(false);
+  const [bottomTab, setBottomTab] = useState<DashboardTab>("plan");
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const [showCheckInModal, setShowCheckInModal] = useState(false);
+  const [startCoords, setStartCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [requestingStartLocation, setRequestingStartLocation] = useState(false);
+  const [outsideVenue, setOutsideVenue] = useState<OutsideVenuePrompt | null>(null);
+  const [scheduleOverride, setScheduleOverride] = useState<ScheduleOverridePrompt | null>(null);
+  // Reason collected from the pre-camera schedule-override prompt (see
+  // handleStartSession) - carried through every later start attempt (photo
+  // capture, and any venue-location retry) so it's only ever asked once.
+  const [pendingScheduleReason, setPendingScheduleReason] = useState<string | undefined>(undefined);
+  const [showCheckOutModal, setShowCheckOutModal] = useState(false);
+  const [endingSession, setEndingSession] = useState(false);
+  const [startedForUid, setStartedForUid] = useState(conferenceUid);
+  const { requestLocationWithRationale } = useLocationPermission();
+
+  if (startedForUid !== conferenceUid) {
+    setStartedForUid(conferenceUid);
+    setHasStarted(false);
+  }
+
+  const loadData = useCallback(
+    async (mode: "load" | "refresh" | "silent" = "load") => {
+      if (!adminToken) return;
+      if (mode === "refresh") setRefreshing(true);
+      else if (mode === "load") setLoading(true);
+
+      try {
+        const res = await fetchSessionDashboard(adminToken, conferenceUid);
+        setData(res);
+        setGeneratedAt(new Date());
+      } catch {
+        // Fallback / gracefully keep state
+      } finally {
+        if (mode === "refresh") setRefreshing(false);
+        else if (mode === "load") setLoading(false);
+      }
+    },
+    [adminToken, conferenceUid],
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+      const interval = setInterval(() => loadData("silent"), 5000);
+      return () => clearInterval(interval);
+    }, [loadData]),
+  );
+
+  // Live Quiz room: every broadcast/answer nudge triggers a silent refetch so
+  // the Live Studio card's questions / response counts / timer stay current
+  // without waiting for the 5s poll.
+  useLiveQuizChannel(conferenceUid, adminToken, () => loadData("silent"));
+
+  const runLiveQuizAction = useCallback(
+    async (action: (token: string, uid: string) => Promise<SessionDashboard>) => {
+      if (!adminToken) return;
+      try {
+        setData(await action(adminToken, conferenceUid));
+      } catch {
+        // Fallback / gracefully keep state.
+      }
+    },
+    [adminToken, conferenceUid],
+  );
+
+  const handleBroadcastQuestion = (questionId: number) =>
+    runLiveQuizAction((token, uid) => broadcastLiveQuestion(token, uid, questionId));
+  const handleStopLiveTimer = () => runLiveQuizAction(stopLiveTimer);
+  const handleShowLiveLeaderboard = () => runLiveQuizAction(showLiveLeaderboard);
+  const handleShowLiveLobby = () => runLiveQuizAction(showLiveLobby);
+
+  const handleCopyLink = async () => {
+    try {
+      // Same deep link the QR encodes - opens the app on the join screen
+      // (samsungindia:// scheme, see app.json). Tapping it in a chat app
+      // on an Android device with the app installed opens it directly.
+      await Share.share({ message: `Join the training session: samsungindia://join/${conferenceUid}` });
+    } catch {
+      // Ignored
+    }
+  };
+
+  // Location is required to start a session - regardless of whether this
+  // training has geofencing enforcement on. Fetched BEFORE the camera opens
+  // (not after the photo, like before) and the flow stops here entirely if
+  // it can't be obtained - no trainer photo capture, no session start,
+  // without a live GPS fix. `useLocationPermission` already alerts on
+  // blocked/unavailable; "denied"/cancelled need their own message since
+  // that hook only sets internal error state for those, no visible alert.
+  //
+  // Schedule is checked next, still before the camera opens: if this start
+  // is off-schedule, the trainer gives a reason right here, up front - the
+  // camera only opens once that's resolved (or wasn't needed). The venue
+  // geofence, by contrast, is only ever checked after the photo (see
+  // runStartSession) since confirming location is naturally part of
+  // submitting the actual start.
+  const handleStartSession = async () => {
+    setRequestingStartLocation(true);
+    const { coords, status } = await requestLocationWithRationale();
+
+    if (!coords) {
+      setRequestingStartLocation(false);
+      if (status === "denied") {
+        Alert.alert(
+          "Location required",
+          "We couldn't get your live location. Location is required to start this session - please try again.",
+        );
+      }
+      return;
+    }
+
+    setStartCoords(coords);
+
+    if (!adminToken) {
+      setRequestingStartLocation(false);
+      return;
+    }
+    try {
+      await checkTrainingSchedule(adminToken, conferenceUid);
+      setRequestingStartLocation(false);
+      setShowCheckInModal(true);
+    } catch (err) {
+      setRequestingStartLocation(false);
+      const body = err instanceof ApiError ? (err.body as { code?: string } | null) : null;
+      if (err instanceof ApiError && err.status === 409 && body?.code === "SCHEDULE_OVERRIDE") {
+        const info = err.body as { scheduledFor?: string | null; early?: boolean };
+        setScheduleOverride({ scheduledFor: info.scheduledFor ?? null, early: info.early ?? false });
+        return;
+      }
+      Alert.alert(
+        "Couldn't start the session",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+    }
+  };
+
+  const runStartSession = async (
+    photo: TrainerCheckInPhoto,
+    trainerCoords: { latitude: number; longitude: number } | null,
+    venueOverride?: { latitude: number; longitude: number },
+    overrideReason?: string,
+  ) => {
+    if (!adminToken) return;
+    try {
+      await startTraining(
+        adminToken,
+        conferenceUid,
+        photo,
+        {
+          latitude: trainerCoords?.latitude,
+          longitude: trainerCoords?.longitude,
+          venueLatitude: venueOverride?.latitude,
+          venueLongitude: venueOverride?.longitude,
+        },
+        overrideReason,
+      );
+      // Only flip to the "started" view once the backend actually confirms
+      // it - e.g. an unapproved session gets rejected with a 403, and the
+      // dashboard shouldn't show as live when nothing actually started.
+      setOutsideVenue(null);
+      setScheduleOverride(null);
+      setPendingScheduleReason(undefined);
+      setHasStarted(true);
+      loadData("silent");
+    } catch (err) {
+      const body = err instanceof ApiError ? (err.body as { code?: string } | null) : null;
+      // OUTSIDE_VENUE offers the one-time "update the venue location?"
+      // correction; OUTSIDE_VENUE_LOCKED is the same distance check but the
+      // venue's location was already corrected once, so the modal shows a
+      // hard block instead (see OutsideVenueModal). Both carry distance info
+      // when raised from the actual radius check - the defensive case where
+      // a locked venue rejects a resubmitted correction doesn't, and falls
+      // through to the generic alert below.
+      if (
+        err instanceof ApiError &&
+        err.status === 409 &&
+        (body?.code === "OUTSIDE_VENUE" || body?.code === "OUTSIDE_VENUE_LOCKED") &&
+        !venueOverride
+      ) {
+        const info = err.body as { distanceMeters?: number; radius?: number };
+        if (info.distanceMeters != null && info.radius != null) {
+          setOutsideVenue({
+            photo,
+            distanceMeters: info.distanceMeters,
+            radius: info.radius,
+            trainerCoords,
+            locked: body?.code === "OUTSIDE_VENUE_LOCKED",
+          });
+          return;
+        }
+      }
+      // Rare fallback: the schedule check already runs up front in
+      // handleStartSession, before the camera even opens, so this normally
+      // never fires - only if the off-schedule window was crossed mid-flow
+      // (e.g. the trainer sat on the camera screen past the grace period).
+      // Carries the photo/coords/venueOverride already in hand so
+      // handleSubmitScheduleOverride can resubmit immediately instead of
+      // re-opening the camera.
+      if (err instanceof ApiError && err.status === 409 && body?.code === "SCHEDULE_OVERRIDE" && !overrideReason) {
+        const info = err.body as { scheduledFor?: string | null; early?: boolean };
+        setScheduleOverride({
+          photo,
+          trainerCoords,
+          venueOverride,
+          scheduledFor: info.scheduledFor ?? null,
+          early: info.early ?? false,
+        });
+        return;
+      }
+      Alert.alert(
+        "Couldn't start the session",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+    }
+  };
+
+  const handleConfirmStartSession = async (photo: TrainerCheckInPhoto) => {
+    if (!adminToken) return;
+    setShowCheckInModal(false);
+    // Location was already required and captured before the camera opened
+    // (handleStartSession) - reuse it rather than asking again. Same for the
+    // schedule-override reason, if this start needed one.
+    await runStartSession(photo, startCoords, undefined, pendingScheduleReason);
+  };
+
+  // "Yes, update the venue location" from the OUTSIDE_VENUE prompt: re-runs
+  // start with the chosen coordinates, which the backend writes onto the
+  // venue + this conference and then starts. Carries the schedule reason
+  // through too - nothing was actually persisted on the request that hit
+  // the geofence block, so it has to be resent on every retry.
+  const handleUpdateVenueLocation = async (latitude: number, longitude: number) => {
+    if (!outsideVenue) return;
+    await runStartSession(
+      outsideVenue.photo,
+      outsideVenue.trainerCoords,
+      { latitude, longitude },
+      pendingScheduleReason,
+    );
+  };
+
+  // "No" - the session does not start (they must be at the venue to start).
+  const dismissOutsideVenue = () => setOutsideVenue(null);
+
+  // The trainer typed a reason for starting earlier or later than planned.
+  //  - Normal case (no photo attached to the prompt): this fired right after
+  //    "Start Session", before the camera opened - stash the reason and open
+  //    the camera now; it'll be sent along once the photo's taken.
+  //  - Fallback case (photo attached): the window was crossed mid-flow after
+  //    the photo was already captured - resubmit the real start immediately.
+  const handleSubmitScheduleOverride = async (reason: string) => {
+    if (!scheduleOverride) return;
+    if (scheduleOverride.photo) {
+      await runStartSession(
+        scheduleOverride.photo,
+        scheduleOverride.trainerCoords ?? null,
+        scheduleOverride.venueOverride,
+        reason,
+      );
+    } else {
+      setPendingScheduleReason(reason);
+      setScheduleOverride(null);
+      setShowCheckInModal(true);
+    }
+  };
+
+  const dismissScheduleOverride = () => setScheduleOverride(null);
+
+  const handleMarkAttendance = async (
+    traineeUid: string,
+    status: "Present" | "Absent",
+    reason: string,
+  ) => {
+    if (!adminToken) return;
+    try {
+      // The endpoint returns a fresh dashboard, so we can update in place
+      // without waiting for the next poll.
+      const fresh = await markAttendance(adminToken, conferenceUid, traineeUid, status, reason);
+      setData(fresh);
+    } catch (err) {
+      Alert.alert(
+        "Couldn't update attendance",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+    }
+  };
+
+  const handleUnlockExam = async (traineeUid: string, reason: string) => {
+    if (!adminToken) return;
+    try {
+      // Returns a fresh dashboard, so the row's LOCKED pill clears at once.
+      setData(await unlockProctoring(adminToken, conferenceUid, traineeUid, reason));
+    } catch (err) {
+      Alert.alert(
+        "Couldn't unlock the trainee",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+    }
+  };
+
+  const handleStartModule = async (moduleKey: string) => {
+    if (!adminToken) return;
+    try {
+      await startModule(adminToken, conferenceUid, moduleKey);
+      loadData("silent");
+    } catch (err) {
+      Alert.alert(
+        "Couldn't start the module",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+    }
+  };
+
+  const handleStopActiveModule = async () => {
+    if (!adminToken) return;
+    try {
+      await stopActiveModule(adminToken, conferenceUid);
+      loadData("silent");
+    } catch (err) {
+      Alert.alert(
+        "Couldn't end the module",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+    }
+  };
+
+  const handleRestartModule = async (moduleKey: string) => {
+    if (!adminToken) return;
+    try {
+      await restartModule(adminToken, conferenceUid, moduleKey);
+      loadData("silent");
+    } catch (err) {
+      Alert.alert(
+        "Couldn't restart the module",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+    }
+  };
+
+  // "End Session" opens the Security Check-Out flow (face photo + signed
+  // attendance sheet). Closing it without submitting leaves the session
+  // running - it only ends once the backend confirms the check-out.
+  const handleEndSession = () => setShowCheckOutModal(true);
+
+  const handleConfirmEndSession = async (photo: UploadFile, attendanceSheet: UploadFile) => {
+    if (!adminToken) return;
+    setEndingSession(true);
+    try {
+      await endTraining(adminToken, conferenceUid, photo, attendanceSheet);
+      setShowCheckOutModal(false);
+      router.replace("/trainer_dashboard");
+    } catch (err) {
+      Alert.alert(
+        "Couldn't end the session",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+    } finally {
+      setEndingSession(false);
+    }
+  };
+
+  const handleBottomNavSelect = (tab: DashboardTab) => {
+    setBottomTab(tab);
+    if (tab === "home") {
+      router.replace("/trainer_dashboard");
+    } else if (tab === "plan") {
+      router.push("/sessions");
+    } else if (tab === "profile") {
+      router.push("/trainer_profile");
+    } else if (tab === "more") {
+      setMoreOpen(true);
+    }
+  };
+
+  const isSessionClosed = data?.conferenceStatus === "Completed";
+  // The backend is the source of truth for whether the session is live -
+  // `hasStarted` is only an optimistic local flag so the UI flips the
+  // instant the trainer taps Start (before the next poll lands). Without
+  // this, navigating away and back showed "Start Session" / "Scheduled"
+  // again even though the session was already Ongoing.
+  const backendLive = data?.conferenceStatus === "Ongoing" || data?.conferenceStatus === "Live";
+  // The join QR is only meaningful for a session that's actually running -
+  // hide "Show QR" until Start Session, and again once it's closed.
+  const isLive = !isSessionClosed && (hasStarted || backendLive);
+  // A closed session already ran to completion, so its Audience Breakdown /
+  // Assessment / Execution Flow etc. should render the same populated view as
+  // an in-progress session instead of the "not started yet" empty state.
+  const showSessionData = hasStarted || backendLive || isSessionClosed;
+  // Gates the header's Start Session button - an unapproved session would
+  // just bounce off the backend's 403 (see start_training), so hide the
+  // action instead of letting the trainer hit a dead-end "not approved" alert.
+  const isApproved = data ? data.approvalStatus === "Approved" : true;
+
+  // A session can't be started before its scheduled date (backend enforces
+  // this too). Compare "YYYY-MM-DD" strings against today's LOCAL date.
+  const now = new Date();
+  const todayISO = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const notYetDue = !!data?.conferenceDate && data.conferenceDate > todayISO;
+  const startsOnLabel = data?.conferenceDate ? formatDisplayDate(data.conferenceDate) : undefined;
+
+  return {
+    router,
+    conferenceUid,
+    data,
+    generatedAt: generatedAt ? formatGeneratedTimestamp(generatedAt) : undefined,
+    loading,
+    refreshing,
+    showQR,
+    setShowQR,
+    showCheckInModal,
+    setShowCheckInModal,
+    bottomTab,
+    moreOpen,
+    setMoreOpen,
+    loadData,
+    handleCopyLink,
+    handleStartSession,
+    requestingStartLocation,
+    handleConfirmStartSession,
+    outsideVenue,
+    handleUpdateVenueLocation,
+    dismissOutsideVenue,
+    scheduleOverride,
+    handleSubmitScheduleOverride,
+    dismissScheduleOverride,
+    showCheckOutModal,
+    setShowCheckOutModal,
+    endingSession,
+    handleConfirmEndSession,
+    handleMarkAttendance,
+    handleUnlockExam,
+    handleStartModule,
+    handleStopActiveModule,
+    handleRestartModule,
+    handleEndSession,
+    liveQuizControls: {
+      onBroadcast: handleBroadcastQuestion,
+      onStopTimer: handleStopLiveTimer,
+      onLeaderboard: handleShowLiveLeaderboard,
+      onLobby: handleShowLiveLobby,
+    },
+    handleBottomNavSelect,
+    isSessionClosed,
+    showSessionData,
+    isLive,
+    isApproved,
+    notYetDue,
+    startsOnLabel,
+  };
+}

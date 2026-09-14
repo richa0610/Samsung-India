@@ -26,13 +26,13 @@ export function DonutChart({ segments, centerValue, centerLabel, size = 132 }: D
   const total = segments.reduce((sum, segment) => sum + segment.value, 0) || 1;
   const gap = 3;
 
-  let offset = 0;
-  const arcs = segments.map((segment) => {
+  const arcs: (DonutSegment & { length: number; offset: number })[] = [];
+  let currentOffset = 0;
+  for (const segment of segments) {
     const length = Math.max((segment.value / total) * circumference - gap, 0);
-    const arc = { ...segment, length, offset };
-    offset += (segment.value / total) * circumference;
-    return arc;
-  });
+    arcs.push({ ...segment, length, offset: currentOffset });
+    currentOffset += (segment.value / total) * circumference;
+  }
 
   return (
     <View style={styles.donutWrap}>
@@ -48,7 +48,7 @@ export function DonutChart({ segments, centerValue, centerLabel, size = 132 }: D
               stroke={arc.color}
               strokeWidth={strokeWidth}
               strokeLinecap="round"
-              strokeDasharray={`${arc.length} ${circumference - arc.length}`}
+              strokeDasharray={`${arc.length} ${circumference}`}
               strokeDashoffset={-arc.offset}
               fill="none"
             />
@@ -102,13 +102,13 @@ export function GaugeChart({ segments, centerValue, centerLabel, size = 160 }: G
   const total = segments.reduce((sum, segment) => sum + segment.value, 0) || 1;
   const gap = 2;
 
-  let angle = GAUGE_START;
-  const arcs = segments.map((segment) => {
+  const arcs: (GaugeSegment & { start: number; end: number })[] = [];
+  let currentAngle = GAUGE_START;
+  for (const segment of segments) {
     const span = Math.max((segment.value / total) * GAUGE_SPAN - gap, 0);
-    const arc = { ...segment, start: angle, end: angle + span };
-    angle += (segment.value / total) * GAUGE_SPAN;
-    return arc;
-  });
+    arcs.push({ ...segment, start: currentAngle, end: currentAngle + span });
+    currentAngle += (segment.value / total) * GAUGE_SPAN;
+  }
 
   return (
     <View style={[styles.donutWrap, { height }]}>
