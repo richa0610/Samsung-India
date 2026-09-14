@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 export function useJoinSession() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, restoring } = useAuth();
 
   const [info, setInfo] = useState<SessionJoinInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -53,5 +53,16 @@ export function useJoinSession() {
     }
   };
 
-  return { info, error, joining, isLoggedIn: !!token, handleJoin, onBack: () => router.replace("/") };
+  return {
+    info,
+    error,
+    joining,
+    // While the persisted session is still being read back (cold start from
+    // the QR deep link is the common case), treat login status as unknown
+    // rather than "logged out" - see useAuth's `restoring`.
+    isLoggedIn: !!token,
+    restoring,
+    handleJoin,
+    onBack: () => router.replace("/"),
+  };
 }

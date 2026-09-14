@@ -88,7 +88,8 @@
             "extraProguardRules": "-keep class com.margelo.nitro.** { *; }\n-keep class com.mrousavy.** { *; }"
           }
         }
-      ]
+      ],
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

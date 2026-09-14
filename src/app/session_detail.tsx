@@ -8,6 +8,7 @@ import {
   TraineeBottomNavigation,
   TrainingSessionHeader,
 } from "@/components/session";
+import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { useTraineeHome } from "@/hooks/useTraineeHome";
 import { Colors } from "@/theme/colors";
 import { formatDisplayDate } from "@/utils/formatDisplayDate";
@@ -35,7 +36,10 @@ export default function SessionDetailScreen() {
     handleEnterLiveQuiz,
     handleEnterPostTest,
     handleEnterSurvey,
-    handleLogout,
+    confirmLogoutOpen,
+    requestLogout,
+    cancelLogout,
+    confirmLogout,
     handleTabSelect,
   } = useTraineeHome();
 
@@ -46,7 +50,7 @@ export default function SessionDetailScreen() {
         <StatusBar style="dark" animated />
 
         <TrainingSessionHeader
-          onLogout={handleLogout}
+          onLogout={requestLogout}
           onHistoryPress={() => setHistoryVisible(true)}
           userName={trainee?.name ?? "Trainee"}
           gender={trainee?.gender}
@@ -83,6 +87,7 @@ export default function SessionDetailScreen() {
       </SafeAreaView>
 
       <RecentSessionsModal visible={historyVisible} onClose={() => setHistoryVisible(false)} token={token} />
+      <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </>
   );
 }

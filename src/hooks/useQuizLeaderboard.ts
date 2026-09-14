@@ -11,7 +11,7 @@ import { LeaderboardFilterValues } from "@/components/quiz/LeaderboardFilter";
 import { LeaderboardUser } from "@/components/quiz/LeaderboardRow";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useWindowDimensions } from "react-native";
+import { BackHandler, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { LiveQuizResults, getCurrentSession, getLiveQuizResults } from "@/api/session";
@@ -106,6 +106,22 @@ export function useQuizLeaderboard() {
 
   const handleApplyFilter = () => setFilterOpen(false);
   const handleContinue = () => router.replace("/session_detail");
+
+  // This screen is reached via router.push (see useTraineeHome's Rank tab),
+  // so Android's hardware back button pops the stack by default instead of
+  // going through handleContinue - landing on whatever's underneath, which
+  // has been observed rendering blank rather than a real screen. Route
+  // hardware back through the same replace() the in-app button uses, so
+  // both always land on the same real screen.
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        router.replace("/session_detail");
+        return true;
+      });
+      return () => subscription.remove();
+    }, [router]),
+  );
 
   return {
     insets,

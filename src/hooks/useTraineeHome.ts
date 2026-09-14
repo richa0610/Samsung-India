@@ -82,6 +82,10 @@ export function useTraineeHome() {
   );
   const [notAssigned, setNotAssigned] = useState(false);
   const [activeTab, setActiveTab] = useState<TraineeTab>("home");
+  // Same confirm-before-logout flow as the trainee profile / trainer
+  // dashboard power buttons - opening the popup is separate from actually
+  // logging out, which only happens on confirm.
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
   // Keyed by `${conferenceUid}:${moduleKey}` so a fresh training always
   // starts every non-attendance module back at "idle" - once per module per
   // session, per the attendance check-in's own behaviour.
@@ -505,7 +509,10 @@ export function useTraineeHome() {
     });
   };
 
-  const handleLogout = () => {
+  const requestLogout = () => setConfirmLogoutOpen(true);
+  const cancelLogout = () => setConfirmLogoutOpen(false);
+  const confirmLogout = () => {
+    setConfirmLogoutOpen(false);
     logout();
     router.replace("/");
   };
@@ -515,14 +522,14 @@ export function useTraineeHome() {
     if (tab === "rank") {
       // Pass the session so the Rank page resolves this conference's Live Quiz
       // board directly - it stays reachable here even after the session ends.
-      router.push({
+      router.replace({
         pathname: "/quiz_leaderboard",
         params: { conferenceUid: session?.conferenceUid ?? "" },
       });
     } else if (tab === "dashboard") {
-      router.push("/trainee_dashboard");
+      router.replace("/trainee_dashboard");
     } else if (tab === "profile") {
-      router.push("/profile");
+      router.replace("/profile");
     } else if (tab === "home") {
       // Already on the session timeline - just pull fresh state.
       loadSession("refresh");
@@ -546,13 +553,16 @@ export function useTraineeHome() {
     setHistoryVisible,
     violationLockedVisible,
     setViolationLockedVisible,
+    confirmLogoutOpen,
+    requestLogout,
+    cancelLogout,
+    confirmLogout,
     loadSession,
     handleMarkAttendance,
     handleCheckInToModule,
     handleEnterLiveQuiz,
     handleEnterPostTest,
     handleEnterSurvey,
-    handleLogout,
     handleTabSelect,
     router,
   };

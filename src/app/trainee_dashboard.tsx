@@ -14,6 +14,7 @@ import {
   TrainingDetailsTable,
   toTrainingRows,
 } from "@/components/trainee/dashboard";
+import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { TraineeTab } from "@/hooks/useTraineeHome";
 import { useTraineeDashboard } from "@/hooks/useTraineeDashboard";
 import { Colors } from "@/theme/colors";
@@ -31,7 +32,10 @@ export default function TraineeDashboardScreen() {
     dashboard,
     refreshing,
     handleRefresh,
-    handleLogout,
+    confirmLogoutOpen,
+    requestLogout,
+    cancelLogout,
+    confirmLogout,
   } = useTraineeDashboard();
 
   const handleTabSelect = (tab: TraineeTab) => {
@@ -39,9 +43,9 @@ export default function TraineeDashboardScreen() {
     if (tab === "home") {
       router.replace("/session_detail");
     } else if (tab === "rank") {
-      router.push("/quiz_leaderboard");
+      router.replace("/quiz_leaderboard");
     } else if (tab === "profile") {
-      router.push("/profile");
+      router.replace("/profile");
     }
   };
 
@@ -76,7 +80,7 @@ export default function TraineeDashboardScreen() {
           date={session?.date ?? undefined}
           location={session?.location ?? undefined}
           isOnline
-          onLogout={handleLogout}
+          onLogout={requestLogout}
         />
 
         <TraineeMetricsGrid
@@ -104,6 +108,7 @@ export default function TraineeDashboardScreen() {
       </ScrollView>
 
       <TraineeBottomNavigation activeTab={activeTab} onSelectTab={handleTabSelect} />
+      <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </SafeAreaView>
   );
 }

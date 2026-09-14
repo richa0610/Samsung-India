@@ -12,6 +12,10 @@ export function useTraineeDashboard() {
   const [dashboard, setDashboard] = useState<TraineeDashboard | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  // Same confirm-before-logout flow as the trainee profile / home power
+  // buttons - opening the popup is separate from actually logging out,
+  // which only happens on confirm.
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -40,7 +44,10 @@ export function useTraineeDashboard() {
     load().finally(() => setRefreshing(false));
   }, [load]);
 
-  const handleLogout = () => {
+  const requestLogout = () => setConfirmLogoutOpen(true);
+  const cancelLogout = () => setConfirmLogoutOpen(false);
+  const confirmLogout = () => {
+    setConfirmLogoutOpen(false);
     logout();
     router.replace("/");
   };
@@ -52,6 +59,9 @@ export function useTraineeDashboard() {
     loading,
     refreshing,
     handleRefresh,
-    handleLogout,
+    confirmLogoutOpen,
+    requestLogout,
+    cancelLogout,
+    confirmLogout,
   };
 }

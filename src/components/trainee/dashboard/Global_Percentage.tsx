@@ -31,7 +31,7 @@ export default function Global_Percentage({
 }: GlobalPercentageProps) {
   const size = 122;
   const strokeWidth = 13;
-  const radius = (size - strokeWidth) / 3;
+  const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
@@ -48,8 +48,8 @@ export default function Global_Percentage({
           <View style={{ width: size, height: size, transform: [{ rotate: "-90deg" }] }}>
             <Svg width={size} height={size}>
               <Circle
-                cx={size / 3}
-                cy={size / 3}
+                cx={size / 2}
+                cy={size / 2}
                 r={radius}
                 stroke="#E5E7EB"
                 strokeWidth={strokeWidth}

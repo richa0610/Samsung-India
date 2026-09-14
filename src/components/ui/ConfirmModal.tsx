@@ -43,7 +43,13 @@ export default function ConfirmModal({
   const colors = TONE_COLORS[tone];
 
   return (
-    <AppModal visible={visible} onClose={onCancel} position="center" showCloseButton={false}>
+    <AppModal
+      visible={visible}
+      onClose={onCancel}
+      position="center"
+      showCloseButton={false}
+      contentStyle={styles.sheet}
+    >
       {icon && (
         <View style={[styles.iconBadge, { backgroundColor: colors.badge }]}>
           <Ionicons name={icon} size={28} color={colors.icon} />
@@ -74,6 +80,10 @@ export default function ConfirmModal({
 }
 
 const styles = StyleSheet.create({
+  sheet: {
+    padding: Spacing.xxl,
+    width: "85%",
+  },
   iconBadge: {
     alignSelf: "center",
     width: 60,

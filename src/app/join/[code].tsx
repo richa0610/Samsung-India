@@ -12,7 +12,7 @@ import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 
 export default function JoinSessionScreen() {
-  const { info, error, joining, isLoggedIn, handleJoin, onBack } = useJoinSession();
+  const { info, error, joining, isLoggedIn, restoring, handleJoin, onBack } = useJoinSession();
 
   const rows: [string, string | null | undefined][] = [
     ["Trainer", info?.trainerName],
@@ -36,10 +36,12 @@ export default function JoinSessionScreen() {
               <AppText variant="h3" style={styles.title}>{"You're joining"}</AppText>
             </View>
 
-            {!info && !error && <ActivityIndicator color={Colors.mainColour1} style={styles.loader} />}
-            {error && <AppText style={styles.error}>{error}</AppText>}
+            {(restoring || (!info && !error)) && (
+              <ActivityIndicator color={Colors.mainColour1} style={styles.loader} />
+            )}
+            {!restoring && error && <AppText style={styles.error}>{error}</AppText>}
 
-            {info && (
+            {!restoring && info && (
               <>
                 <AppText variant="h3" style={styles.session}>{info.title}</AppText>
                 <AppText style={styles.status}>
