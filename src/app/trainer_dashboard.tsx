@@ -7,7 +7,7 @@ import TrainerMoreMenu from "@/components/trainer/dashboard/TrainerMoreMenu";
 import { useTrainerDashboardScreen } from "@/components/trainer/dashboard/useTrainerDashboardScreen";
 import DateDrop from "@/components/trainer/DateDrop";
 import AppModal from "@/components/ui/AppModal";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { Colors } from "@/theme/colors";
 
 export default function TrainerDashboardScreen() {
@@ -62,15 +62,7 @@ export default function TrainerDashboardScreen() {
         <DateDrop range={dateRange} preset={datePreset} onApply={applyDateRange} />
       </AppModal>
 
-      <ConfirmModal
-        visible={confirmLogoutOpen}
-        icon="log-out-outline"
-        tone="danger"
-        title="Log Out?"
-        message="Are you sure you want to go to the login page?"
-        onCancel={cancelLogout}
-        onConfirm={confirmLogout}
-      />
+      <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </>
   );
 }

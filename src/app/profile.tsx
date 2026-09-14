@@ -5,6 +5,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import EditProfileSheet from "@/components/common/EditProfileSheet";
 import TraineeBottomNavigation from "@/components/session/TraineeBottomNavigation";
 import { DetailsCard, ProfileHeader, SecurityBanner, useProfile } from "@/components/trainee/profile";
+import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -13,7 +14,10 @@ export default function ProfileScreen() {
     uploading,
     editVisible,
     setEditVisible,
-    handleLogout,
+    confirmLogoutOpen,
+    requestLogout,
+    cancelLogout,
+    confirmLogout,
     handlePickPhoto,
     handleTabSelect,
     personalDetails,
@@ -31,7 +35,7 @@ export default function ProfileScreen() {
         uploading={uploading}
         sessionPillLabel={sessionPillLabel}
         onPickPhoto={handlePickPhoto}
-        onLogout={handleLogout}
+        onLogout={requestLogout}
       />
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -43,6 +47,8 @@ export default function ProfileScreen() {
       <EditProfileSheet visible={editVisible} onClose={() => setEditVisible(false)} />
 
       <TraineeBottomNavigation activeTab="profile" onSelectTab={handleTabSelect} />
+
+      <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </SafeAreaView>
   );
 }

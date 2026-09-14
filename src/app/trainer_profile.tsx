@@ -6,7 +6,7 @@ import { useRouter } from "expo-router";
 import DashboardBottomNav, { DashboardTab } from "@/components/trainer/dashboard/DashboardBottomNav";
 import TrainerMoreMenu from "@/components/trainer/dashboard/TrainerMoreMenu";
 import AppText from "@/components/ui/AppText";
-import ConfirmModal from "@/components/ui/ConfirmModal";
+import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { useAuth } from "@/hooks/useAuth";
@@ -94,15 +94,7 @@ export default function TrainerProfileScreen() {
 
       <TrainerMoreMenu visible={moreOpen} onClose={() => setMoreOpen(false)} />
 
-      <ConfirmModal
-        visible={confirmLogoutOpen}
-        icon="log-out-outline"
-        tone="danger"
-        title="Log Out?"
-        message="Are you sure you want to go to the login page?"
-        onCancel={cancelLogout}
-        onConfirm={confirmLogout}
-      />
+      <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </SafeAreaView>
   );
 }

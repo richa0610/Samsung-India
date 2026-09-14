@@ -14,8 +14,15 @@ export function useProfile() {
   const { trainee, token, logout, setSession } = useAuth();
   const [editVisible, setEditVisible] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Same confirm-before-logout flow as the trainer's dashboard/profile
+  // power button - opening the popup is separate from actually logging
+  // out, which only happens on confirm.
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
 
-  const handleLogout = () => {
+  const requestLogout = () => setConfirmLogoutOpen(true);
+  const cancelLogout = () => setConfirmLogoutOpen(false);
+  const confirmLogout = () => {
+    setConfirmLogoutOpen(false);
     logout();
     router.replace("/");
   };
@@ -135,7 +142,10 @@ export function useProfile() {
     uploading,
     editVisible,
     setEditVisible,
-    handleLogout,
+    confirmLogoutOpen,
+    requestLogout,
+    cancelLogout,
+    confirmLogout,
     handlePickPhoto,
     handleTabSelect,
     personalDetails,
