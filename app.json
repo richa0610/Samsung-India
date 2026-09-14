@@ -85,7 +85,7 @@
             "buildArchs": [
               "arm64-v8a"
             ],
-            "extraProguardRules": "-keep class com.margelo.nitro.** { *; }\n-keep class com.mrousavy.** { *; }"
+            "extraProguardRules": "-keep class com.margelo.nitro.** { *; }\n-keep class com.mrousavy.** { *; }\n-keep class com.reactnative.ivpusic.imagepicker.** { *; }\n-keep class com.yalantis.ucrop.** { *; }\n-dontwarn com.yalantis.ucrop.**"
           }
         }
       ],
