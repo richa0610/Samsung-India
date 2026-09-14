@@ -1,7 +1,7 @@
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Alert } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { Alert, BackHandler } from "react-native";
 import ImageCropPicker from "react-native-image-crop-picker";
 
 import { ApiError, uploadTraineePhoto } from "@/api/auth";
@@ -26,6 +26,21 @@ export function useProfile() {
     logout();
     router.replace("/");
   };
+
+  // Tabs replace() each other in place rather than stacking, so there's no
+  // separate Home entry left underneath this one to pop back into -
+  // default hardware back would skip straight past Home to whatever came
+  // before the session flow. Force it through the same replace() the Home
+  // tab itself uses, matching the Rank/Dashboard pages' identical fix.
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        router.replace("/session_detail");
+        return true;
+      });
+      return () => subscription.remove();
+    }, [router]),
+  );
 
   const handlePickPhoto = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();

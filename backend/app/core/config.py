@@ -42,6 +42,15 @@ class Settings(BaseSettings):
 
     ALLOW_ATTENDANCE_RETEST: bool = False
 
+    # Absolute path to a persistent disk mount for uploaded files (profile
+    # photos, Aadhaar docs, attendance photos/sheets, etc). Left blank, media
+    # falls back to a folder inside the repo checkout - fine for local dev,
+    # but on a host with an ephemeral filesystem (e.g. Render's free plan)
+    # that folder is wiped on every deploy, silently 404ing every file
+    # uploaded before the last deploy. Set this to a mounted disk's path in
+    # production so uploads survive deploys/restarts.
+    MEDIA_ROOT_PATH: str = ""
+
     # Swagger/OpenAPI (`/docs`, `/openapi.json`) expose the full route map -
     # fine for local/LAN dev, worth turning off (set to "false" in .env)
     # before this ever sits behind a public URL.

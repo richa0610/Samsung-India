@@ -3,13 +3,27 @@ services:
     name: samsung-india-backend
     runtime: python
     rootDir: backend
-    plan: free
+    # Free plan can't attach a persistent disk at all - every deploy got a
+    # brand-new, empty filesystem, silently wiping every uploaded profile
+    # photo/Aadhaar doc/attendance photo from the previous deploy while the
+    # DB kept pointing at the now-gone file. Starter is the cheapest plan
+    # that supports a disk.
+    plan: starter
     buildCommand: pip install -r requirements.txt
     # Same command run_prod.py wraps (reload off, 1 worker - see its
     # docstring for why: the rate limiter + WS registry hold in-memory
     # state that isn't safe to share across multiple workers/instances).
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    # Backs MEDIA_ROOT_PATH below - survives deploys/restarts, unlike the
+    # container's own filesystem. 1GB is generous for photo/document
+    # uploads; resize from the Render dashboard if it's ever not enough.
+    disk:
+      name: media
+      mountPath: /var/data/media
+      sizeGB: 1
     envVars:
+      - key: MEDIA_ROOT_PATH
+        value: /var/data/media
       - key: DB_HOST
         sync: false
       - key: DB_PORT

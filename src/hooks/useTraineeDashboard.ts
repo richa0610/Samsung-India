@@ -1,5 +1,6 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
+import { BackHandler } from "react-native";
 
 import { CurrentSession, TraineeDashboard, getCurrentSession, getTraineeDashboard } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
@@ -37,6 +38,21 @@ export function useTraineeDashboard() {
       setLoading(true);
       load().finally(() => setLoading(false));
     }, [load]),
+  );
+
+  // Tabs replace() each other in place rather than stacking, so there's no
+  // separate Home entry left underneath this one to pop back into -
+  // default hardware back would skip straight past Home to whatever came
+  // before the session flow. Force it through the same replace() the Home
+  // tab itself uses, matching the Rank page's identical fix.
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        router.replace("/session_detail");
+        return true;
+      });
+      return () => subscription.remove();
+    }, [router]),
   );
 
   const handleRefresh = useCallback(() => {

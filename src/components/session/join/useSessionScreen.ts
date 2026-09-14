@@ -58,7 +58,15 @@ export function useSessionScreen() {
     // Admission is now trainer-controlled: the trainee just enters the
     // session screen, which shows the "waiting for the trainer" card until
     // the trainer marks them present, then reveals the module timeline.
-    router.push({ pathname: "/session_detail" });
+    // replace (not push): every other transition into and out of this
+    // screen already uses replace, so nothing stale sits underneath it in
+    // the stack - a push here was the one gap, leaving this "waiting for
+    // the trainer" screen sitting under Home. Every trainee tab
+    // (Home/Dashboard/Rank/Profile) already replaces the others in place,
+    // so hardware back from any of them was popping down into this now
+    // long-since-stale screen, which renders blank once a session's
+    // actually in progress.
+    router.replace({ pathname: "/session_detail" });
   };
 
   return { trainee, avatar, loading, notice, details, handleLogout, handleJoinSession };

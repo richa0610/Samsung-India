@@ -1,6 +1,6 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
-import { Alert } from "react-native";
+import { Alert, BackHandler } from "react-native";
 
 import { verifyLocation } from "@/api/attendance";
 import {
@@ -516,6 +516,20 @@ export function useTraineeHome() {
     logout();
     router.replace("/");
   };
+
+  // Hardware/gesture back on Home asks for confirmation instead of falling
+  // through to whatever's before the whole session flow (the login/role
+  // screen) - same popup and destination as the header's power button.
+  // Mirrors the trainer dashboard's identical back-press handling.
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        setConfirmLogoutOpen(true);
+        return true;
+      });
+      return () => subscription.remove();
+    }, []),
+  );
 
   const handleTabSelect = (tab: TraineeTab) => {
     setActiveTab(tab);
