@@ -119,7 +119,7 @@ export default function Global_Percentage({
               <Ionicons name="globe-outline" size={16} color="#2563EB" />
             </View>
             <View style={styles.rankMeta}>
-              <AppText variant="tiny" weight={FontWeight.bold} color="#1F2937">
+              <AppText variant="tiny" weight={FontWeight.bold} color="#1F2937" numberOfLines={1}>
                 Global Ranking
               </AppText>
             </View>
@@ -150,15 +150,14 @@ export default function Global_Percentage({
               <Ionicons name="location-outline" size={16} color="#475569" />
             </View>
             <View style={styles.rankMeta}>
-              <AppText variant="tiny" weight={FontWeight.bold} color="#1F2937">
+              <AppText variant="tiny" weight={FontWeight.bold} color="#1F2937" numberOfLines={1}>
                 State Ranking
               </AppText>
             </View>
             <View style={styles.rankBadge}>
-              <AppText variant="caption" weight={FontWeight.bold} color="#7E22CE">
+              <AppText variant="tiny" weight={FontWeight.bold} color="#7E22CE">
                 {stateRank}
               </AppText>
-              <Ionicons name="chevron-forward" size={13} color="#6B7280" />
             </View>
           </View>
 
