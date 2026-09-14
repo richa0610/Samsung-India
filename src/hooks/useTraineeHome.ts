@@ -18,6 +18,7 @@ import { isSessionLocked, resetSessionViolations, setProctoringSettings } from "
 import { useAuth } from "@/hooks/useAuth";
 import { useLiveQuizChannel } from "@/hooks/useLiveQuizChannel";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
+import { canNavigate } from "@/utils/navigationGuard";
 
 export type TraineeTab = "rank" | "dashboard" | "home" | "profile";
 
@@ -514,7 +515,7 @@ export function useTraineeHome() {
   const confirmLogout = () => {
     setConfirmLogoutOpen(false);
     logout();
-    router.replace("/");
+    if (canNavigate()) router.replace("/");
   };
 
   // Hardware/gesture back on Home asks for confirmation instead of falling
@@ -533,6 +534,10 @@ export function useTraineeHome() {
 
   const handleTabSelect = (tab: TraineeTab) => {
     setActiveTab(tab);
+    // Guards against a real Fabric crash ("child already has a parent")
+    // from firing a second replace() before the previous tab's screen
+    // transition has finished mounting - see utils/navigationGuard.ts.
+    if (tab !== "home" && !canNavigate()) return;
     if (tab === "rank") {
       // Pass the session so the Rank page resolves this conference's Live Quiz
       // board directly - it stays reachable here even after the session ends.

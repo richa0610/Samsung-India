@@ -4,6 +4,7 @@ import { BackHandler } from "react-native";
 
 import { CurrentSession, TraineeDashboard, getCurrentSession, getTraineeDashboard } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
+import { canNavigate } from "@/utils/navigationGuard";
 
 export function useTraineeDashboard() {
   const router = useRouter();
@@ -40,32 +41,31 @@ export function useTraineeDashboard() {
     }, [load]),
   );
 
-  // Tabs replace() each other in place rather than stacking, so there's no
-  // separate Home entry left underneath this one to pop back into -
-  // default hardware back would skip straight past Home to whatever came
-  // before the session flow. Force it through the same replace() the Home
-  // tab itself uses, matching the Rank page's identical fix.
-  useFocusEffect(
-    useCallback(() => {
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        router.replace("/session_detail");
-        return true;
-      });
-      return () => subscription.remove();
-    }, [router]),
-  );
-
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     load().finally(() => setRefreshing(false));
   }, [load]);
 
   const requestLogout = () => setConfirmLogoutOpen(true);
+
+  // Hardware/gesture back asks for confirmation instead of navigating
+  // anywhere - same popup and destination as the header's power button, on
+  // every trainee tab (Home/Dashboard/Rank/Profile) uniformly.
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+        requestLogout();
+        return true;
+      });
+      return () => subscription.remove();
+    }, []),
+  );
+
   const cancelLogout = () => setConfirmLogoutOpen(false);
   const confirmLogout = () => {
     setConfirmLogoutOpen(false);
     logout();
-    router.replace("/");
+    if (canNavigate()) router.replace("/");
   };
 
   return {

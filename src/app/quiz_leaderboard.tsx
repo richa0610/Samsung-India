@@ -6,6 +6,7 @@ import { AccuracyScoreCard, GlobalLeaderboardCard, ResultsHero } from "@/compone
 import PerformanceSummary from "@/components/quiz/PerformanceSummary";
 import QuizLiveHeader from "@/components/quiz/QuizLiveHeader";
 import AppText from "@/components/ui/AppText";
+import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { Colors } from "@/theme/colors";
 import { FontWeight } from "@/theme/fontWeight";
 import { useQuizLeaderboard } from "@/hooks/useQuizLeaderboard";
@@ -29,6 +30,9 @@ export default function QuizLeaderboardScreen() {
     leaderboardUsers,
     handleApplyFilter,
     handleContinue,
+    confirmLogoutOpen,
+    cancelLogout,
+    confirmLogout,
   } = useQuizLeaderboard();
 
   const emptyCopy =
@@ -107,6 +111,8 @@ export default function QuizLeaderboardScreen() {
         </Pressable>
       </ScrollView>
       )}
+
+      <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </SafeAreaView>
   );
 }

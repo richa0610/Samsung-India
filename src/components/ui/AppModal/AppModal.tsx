@@ -164,6 +164,15 @@ export default function AppModal({
           pointerEvents="box-none"
         >
           <Animated.View
+            // Fabric can "view-flatten" this away as a layout optimization
+            // since it has no siblings - but Animated drives it via a
+            // direct native handle, and if that view gets flattened while
+            // this modal is mounted/unmounted repeatedly (exactly what
+            // happens toggling it across the trainee tab screens), the
+            // handle goes stale and the next mount throws "child already
+            // has a parent" in Fabric's mounting layer. collapsable={false}
+            // opts this view out of flattening entirely.
+            collapsable={false}
             style={[
               styles.content,
               styles[position],

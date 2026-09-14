@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LiveQuizResults, getCurrentSession, getLiveQuizResults } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
 import { useLiveQuizChannel } from "@/hooks/useLiveQuizChannel";
+import { canNavigate } from "@/utils/navigationGuard";
 
 function formatMs(ms: number): string {
   const s = Math.round(ms / 1000);
@@ -35,10 +36,21 @@ export function useQuizLeaderboard() {
   const { width: screenWidth } = useWindowDimensions();
   const router = useRouter();
   const params = useLocalSearchParams<{ conferenceUid?: string }>();
-  const { token } = useAuth();
+  const { token, logout } = useAuth();
 
   const [conferenceUid, setConferenceUid] = useState<string | null>(params.conferenceUid ?? null);
   const [results, setResults] = useState<LiveQuizResults | null>(null);
+  // Same confirm-before-logout flow as Home/Dashboard/Profile's power
+  // button - opening the popup is separate from actually logging out,
+  // which only happens on confirm.
+  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
+  const requestLogout = () => setConfirmLogoutOpen(true);
+  const cancelLogout = () => setConfirmLogoutOpen(false);
+  const confirmLogout = () => {
+    setConfirmLogoutOpen(false);
+    logout();
+    if (canNavigate()) router.replace("/");
+  };
 
   const load = useCallback(async () => {
     if (!token) return;
@@ -105,22 +117,21 @@ export function useQuizLeaderboard() {
   }, [showResults, results]);
 
   const handleApplyFilter = () => setFilterOpen(false);
-  const handleContinue = () => router.replace("/session_detail");
+  const handleContinue = () => {
+    if (canNavigate()) router.replace("/session_detail");
+  };
 
-  // This screen is reached via router.push (see useTraineeHome's Rank tab),
-  // so Android's hardware back button pops the stack by default instead of
-  // going through handleContinue - landing on whatever's underneath, which
-  // has been observed rendering blank rather than a real screen. Route
-  // hardware back through the same replace() the in-app button uses, so
-  // both always land on the same real screen.
+  // Hardware/gesture back asks for confirmation instead of navigating
+  // anywhere - same popup and destination as the other three tabs' power
+  // button, uniformly across Home/Dashboard/Rank/Profile.
   useFocusEffect(
     useCallback(() => {
       const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        router.replace("/session_detail");
+        requestLogout();
         return true;
       });
       return () => subscription.remove();
-    }, [router]),
+    }, []),
   );
 
   return {
@@ -143,5 +154,9 @@ export function useQuizLeaderboard() {
     leaderboardUsers,
     handleApplyFilter,
     handleContinue,
+    confirmLogoutOpen,
+    requestLogout,
+    cancelLogout,
+    confirmLogout,
   };
 }

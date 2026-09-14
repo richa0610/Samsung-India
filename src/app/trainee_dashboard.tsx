@@ -18,6 +18,7 @@ import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { TraineeTab } from "@/hooks/useTraineeHome";
 import { useTraineeDashboard } from "@/hooks/useTraineeDashboard";
 import { Colors } from "@/theme/colors";
+import { canNavigate } from "@/utils/navigationGuard";
 
 const rankLabel = (rank: number | null) => (rank != null ? `# ${rank.toLocaleString()}` : "Unranked");
 
@@ -40,6 +41,10 @@ export default function TraineeDashboardScreen() {
 
   const handleTabSelect = (tab: TraineeTab) => {
     setActiveTab(tab);
+    // Guards against a real Fabric crash ("child already has a parent")
+    // from firing a second replace() before the previous tab's screen
+    // transition has finished mounting - see utils/navigationGuard.ts.
+    if (!canNavigate()) return;
     if (tab === "home") {
       router.replace("/session_detail");
     } else if (tab === "rank") {

@@ -7,6 +7,7 @@ import ImageCropPicker from "react-native-image-crop-picker";
 import { ApiError, uploadTraineePhoto } from "@/api/auth";
 import { useAuth } from "@/hooks/useAuth";
 import { TraineeTab } from "@/hooks/useTraineeHome";
+import { canNavigate } from "@/utils/navigationGuard";
 import { DetailItem, MAX_PHOTO_BYTES, locationLabel } from "./constants";
 
 export function useProfile() {
@@ -24,22 +25,20 @@ export function useProfile() {
   const confirmLogout = () => {
     setConfirmLogoutOpen(false);
     logout();
-    router.replace("/");
+    if (canNavigate()) router.replace("/");
   };
 
-  // Tabs replace() each other in place rather than stacking, so there's no
-  // separate Home entry left underneath this one to pop back into -
-  // default hardware back would skip straight past Home to whatever came
-  // before the session flow. Force it through the same replace() the Home
-  // tab itself uses, matching the Rank/Dashboard pages' identical fix.
+  // Hardware/gesture back asks for confirmation instead of navigating
+  // anywhere - same popup and destination as the header's power button, on
+  // every trainee tab (Home/Dashboard/Rank/Profile) uniformly.
   useFocusEffect(
     useCallback(() => {
       const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        router.replace("/session_detail");
+        requestLogout();
         return true;
       });
       return () => subscription.remove();
-    }, [router]),
+    }, []),
   );
 
   const handlePickPhoto = async () => {
@@ -120,6 +119,10 @@ export function useProfile() {
   };
 
   const handleTabSelect = (tab: TraineeTab) => {
+    // Guards against a real Fabric crash ("child already has a parent")
+    // from firing a second replace() before the previous tab's screen
+    // transition has finished mounting - see utils/navigationGuard.ts.
+    if (!canNavigate()) return;
     if (tab === "home") {
       router.replace("/session_detail");
     } else if (tab === "dashboard") {
