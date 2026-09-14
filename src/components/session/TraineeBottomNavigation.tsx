@@ -43,7 +43,7 @@ const TABS: {
   {
     key: "home",
     label: "Home",
-    icon: (active) => <HomeIcon width={20} height={20} stroke={active ? Colors.white : Colors.bottomNavInactive} />,
+    icon: (active) => <HomeIcon width={20} height={20} color={active ? Colors.white : Colors.bottomNavInactive} />,
   },
   {
     key: "profile",
