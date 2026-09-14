@@ -7,10 +7,12 @@ from app.core.config import settings
 from app.core.exceptions import not_found
 from app.core.media import media_subdir
 from app.models.attendance import Attendance
+from app.models.conference import Conference
 from app.models.trainee import Trainee
 from app.repositories import attendance_repository, conference_repository
 from app.routers.ws import manager as ws_manager
 from app.schemas.attendance import AttendanceOut, CheckInRequest, VerifyLocationOut, VerifyLocationRequest
+from app.services.module_flow import mark_checkout_if_last_module
 from app.utils.helpers import distance_meters
 from app.utils.validators import validate_image_upload
 
@@ -23,23 +25,25 @@ def _clear_existing_if_retest_allowed(db: Session, conference_uid: str, trainee_
     return existing
 
 
-def _promote_if_pending(db: Session, existing: Attendance) -> AttendanceOut:
+def _promote_if_pending(db: Session, existing: Attendance, conference: Conference | None) -> AttendanceOut:
     """A trainee who joined via QR/link already has a "Pending" attendance
     row (see session_service.join_session) - check-in flips it to Present
     rather than being a no-op."""
     if existing.status != "Present":
         existing.status = "Present"
         existing.markedOn = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        attendance_repository.save(db)
+    if conference:
+        mark_checkout_if_last_module(db, conference, existing.traineeUid, "ATTENDANCE")
+    attendance_repository.save(db)
     return AttendanceOut(status=existing.status, markedOn=existing.markedOn)
 
 
 def check_in(db: Session, trainee: Trainee, payload: CheckInRequest, background_tasks: BackgroundTasks) -> AttendanceOut:
+    conference = conference_repository.get_by_uid(db, payload.conferenceUid)
+
     existing = _clear_existing_if_retest_allowed(db, payload.conferenceUid, trainee.traineeUid)
     if existing:
-        return _promote_if_pending(db, existing)
-
-    conference = conference_repository.get_by_uid(db, payload.conferenceUid)
+        return _promote_if_pending(db, existing, conference)
 
     attendance = attendance_repository.create(
         db,
@@ -52,6 +56,12 @@ def check_in(db: Session, trainee: Trainee, payload: CheckInRequest, background_
             status="Present",
         ),
     )
+    # If Attendance is this session's only/last module, checking in *is*
+    # completing the last thing expected of the trainee - checkout happens
+    # right away rather than never, since nothing else will trigger it.
+    if conference:
+        mark_checkout_if_last_module(db, conference, trainee.traineeUid, "ATTENDANCE")
+        attendance_repository.save(db)
 
     background_tasks.add_task(
         ws_manager.send_to,
@@ -132,6 +142,8 @@ async def check_in_secure(
         if existing.status != "Present":
             existing.status = "Present"
             existing.markedOn = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if conference:
+            mark_checkout_if_last_module(db, conference, existing.traineeUid, "ATTENDANCE")
         attendance_repository.save(db)
         return AttendanceOut(status=existing.status, markedOn=existing.markedOn, distanceMeters=distance)
 
@@ -148,6 +160,11 @@ async def check_in_secure(
             checkInPhoto=check_in_photo,
         ),
     )
+    # If Attendance is this session's only/last module, checking in *is*
+    # completing the last thing expected of the trainee.
+    if conference:
+        mark_checkout_if_last_module(db, conference, trainee.traineeUid, "ATTENDANCE")
+        attendance_repository.save(db)
 
     background_tasks.add_task(
         ws_manager.send_to,

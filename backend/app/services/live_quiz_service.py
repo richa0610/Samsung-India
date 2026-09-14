@@ -50,7 +50,7 @@ from app.schemas.session import (
 )
 from app.schemas.training import LiveStudioOut, LiveStudioQuestionOut
 from app.services.assessment_service import score_answers
-from app.services.module_flow import live_quiz_suite_uid
+from app.services.module_flow import live_quiz_suite_uid, mark_checkout_if_last_module
 
 _LOBBY_STATES = (LIVE_QUIZ_STATE_IDLE, "WAITING", "")
 
@@ -559,6 +559,7 @@ def submit_live_quiz(db: Session, trainee: Trainee, conference_uid: str) -> Live
     my_rows = [r for r in all_rows if r.traineeUid == trainee.traineeUid]
 
     _write_trainee_result(db, conference_uid, suite_uid, trainee.traineeUid, questions, my_rows)
+    mark_checkout_if_last_module(db, conference, trainee.traineeUid, "LIVE_QUIZ")
     db.commit()
 
     result = assessment_repository.get_latest_result(db, conference_uid, trainee.traineeUid, suite_uid)

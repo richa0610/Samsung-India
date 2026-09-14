@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.exceptions import not_found
 from app.models.quiz import Assessment, AssessmentResult
 from app.models.trainee import Trainee
-from app.repositories import assessment_repository
+from app.repositories import assessment_repository, conference_repository
 from app.schemas.assessment import AssessmentQuestionsOut, QuestionOut, SubmitRequest, SubmitResult
+from app.services.module_flow import mark_checkout_if_last_module
 
 
 def score_answers(questions: list, answers_by_qid: dict[int, str | None]) -> tuple[int, int, float, int]:
@@ -88,6 +89,17 @@ def submit_assessment(db: Session, trainee: Trainee, suite_uid: str, payload: Su
             status="Submitted",
         ),
     )
+
+    # This suite is either the conference's Standard Test or its Survey -
+    # whichever one matches decides which module just got completed, for
+    # the "did the trainee just finish the last module" check below.
+    conference = conference_repository.get_by_uid(db, payload.conferenceUid)
+    if conference:
+        if suite_uid == conference.postAssessmentUid:
+            mark_checkout_if_last_module(db, conference, trainee.traineeUid, "STANDARD_TEST")
+        elif suite_uid == conference.surveyUid:
+            mark_checkout_if_last_module(db, conference, trainee.traineeUid, "SURVEY")
+
     assessment_repository.commit(db)
 
     return SubmitResult(

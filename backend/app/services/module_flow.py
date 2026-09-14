@@ -1,5 +1,6 @@
 import json
 from collections import defaultdict
+from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -12,7 +13,7 @@ from app.core.constants import (
 )
 from app.models.conference import Conference
 from app.models.conference_activity_log import ConferenceActivityLog
-from app.repositories import activity_log_repository, conference_repository
+from app.repositories import activity_log_repository, attendance_repository, conference_repository
 from app.utils.date_utils import ist_now, parse_module_start, time_to_minutes
 
 # sessionConfig key + planned-start-time field for each module, used to order
@@ -40,6 +41,7 @@ __all__ = [
     "log_module_action",
     "auto_advance_if_due",
     "live_quiz_suite_uid",
+    "mark_checkout_if_last_module",
 ]
 
 
@@ -209,3 +211,30 @@ def auto_advance_if_due(db: Session, conference: Conference) -> bool:
     log_module_action(db, conference.conferenceUid, next_module, "STARTED", AUTO_ADVANCE_PERFORMER)
     conference_repository.save(db, conference)
     return True
+
+
+def mark_checkout_if_last_module(db: Session, conference: Conference, trainee_uid: str, module_key: str) -> None:
+    """Records the trainee's check-out moment the instant they finish the
+    LAST module in this session's configured flow - whichever module type
+    that happens to be (Attendance-only sessions check out on check-in,
+    others on their final Standard Test/Live Quiz/Survey submission).
+
+    Called from each module's own completion point (attendance_service's
+    check_in/check_in_secure, assessment_service's submit_assessment,
+    live_quiz_service's submit_live_quiz) rather than from one central
+    place, since "completing a module" means something different for each
+    one and there's no single shared completion event to hook.
+
+    Idempotent: only ever sets checkOutTime once per attendance row, so a
+    trainee re-submitting (a retest, a second Live Quiz "Final Submit"
+    call, etc.) never overwrites their original check-out moment.
+    """
+    modules = configured_modules(conference)
+    if not modules or modules[-1] != module_key:
+        return
+
+    attendance = attendance_repository.get_for_conference_and_trainee(db, conference.conferenceUid, trainee_uid)
+    if not attendance or attendance.checkOutTime:
+        return
+
+    attendance.checkOutTime = datetime.now()
