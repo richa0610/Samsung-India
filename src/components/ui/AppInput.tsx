@@ -114,6 +114,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
     paddingHorizontal: Spacing.lg,
     fontSize: Fonts.body,
+    color: Colors.black,
     backgroundColor: Colors.white,
     fontFamily: APP_FONT_FAMILY,
     includeFontPadding: false,
