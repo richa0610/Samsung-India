@@ -533,10 +533,16 @@ export function useTraineeHome() {
   );
 
   const handleTabSelect = (tab: TraineeTab) => {
-    setActiveTab(tab);
-    // Guards against a real Fabric crash ("child already has a parent")
-    // from firing a second replace() before the previous tab's screen
-    // transition has finished mounting - see utils/navigationGuard.ts.
+    // setActiveTab only for the "home" branch below, which doesn't
+    // navigate away - the other three unmount this screen immediately, so
+    // updating this screen's own state right before that is dead work that
+    // never paints, and queues a Fabric view mutation for this screen in
+    // the exact same tick router.replace() queues the transition's own
+    // mutations - a plausible contributor to the "child already has a
+    // parent" crash on tab navigation.
+    // Guards against that crash from firing a second replace() before the
+    // previous tab's screen transition has finished mounting - see
+    // utils/navigationGuard.ts.
     if (tab !== "home" && !canNavigate()) return;
     if (tab === "rank") {
       // Pass the session so the Rank page resolves this conference's Live Quiz
@@ -551,6 +557,7 @@ export function useTraineeHome() {
       router.replace("/profile");
     } else if (tab === "home") {
       // Already on the session timeline - just pull fresh state.
+      setActiveTab(tab);
       loadSession("refresh");
     }
   };

@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import unauthorized
+from app.core.media import resolve_trainer_avatar
 from app.core.security import create_access_token, verify_password
 from app.repositories import admin_repository
 from app.schemas.admin import AdminAuthSession, AdminLoginRequest, AdminOut
@@ -21,7 +22,7 @@ def login(common_db: Session, db: Session, payload: AdminLoginRequest, tenant_id
                 role=admin.role,
                 company=admin.company,
                 tenant_id=tenant_id,
-                profilePicture=admin.profilePhoto or None,
+                profilePicture=resolve_trainer_avatar(admin.profilePhoto, admin.gender),
             ),
         )
 
@@ -43,7 +44,7 @@ def login(common_db: Session, db: Session, payload: AdminLoginRequest, tenant_id
                 offerId=agent.offerId,
                 company=agent.company,
                 tenant_id=tenant_id,
-                profilePicture=agent.profilePhoto or None,
+                profilePicture=resolve_trainer_avatar(agent.profilePhoto, agent.gender),
             ),
         )
 

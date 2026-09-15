@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import not_found
-from app.core.media import media_subdir
+from app.core.media import media_subdir, resolve_trainer_avatar
 from app.core.security import hash_password
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
@@ -86,7 +86,7 @@ def _admin_to_profile(admin: Admin) -> TrainerProfileOut:
         permanentLandmark=admin.permanentLandmark or "",
         aadharNumber=admin.aadharNo or "",
         aadharFile=admin.aadharImage or "",
-        profilePicture=admin.profilePhoto or "",
+        profilePicture=resolve_trainer_avatar(admin.profilePhoto, admin.gender),
         about=admin.about or "",
         resume=admin.resume or "",
         otherDocument=admin.otherDocument or "",
@@ -142,7 +142,7 @@ def _agency_to_profile(agent: AgencyTeam) -> TrainerProfileOut:
         permanentLandmark=agent.permanentLandmark or "",
         aadharNumber="",
         aadharFile=agent.aadharImage or "",
-        profilePicture=agent.profilePhoto or "",
+        profilePicture=resolve_trainer_avatar(agent.profilePhoto, agent.gender),
         about="",
         resume="",
         otherDocument="",

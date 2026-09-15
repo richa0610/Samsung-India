@@ -149,5 +149,6 @@ const styles = StyleSheet.create({
   },
   continueButtonText: {
     fontSize: 16,
+    paddingHorizontal: 8,
   },
 });

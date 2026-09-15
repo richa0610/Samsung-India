@@ -1,6 +1,5 @@
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import {
   SafeAreaView,
@@ -22,10 +21,14 @@ import { canNavigate } from "@/utils/navigationGuard";
 
 const rankLabel = (rank: number | null) => (rank != null ? `# ${rank.toLocaleString()}` : "Unranked");
 
+// This screen only ever renders while its own tab is active - selecting a
+// different tab navigates away (see handleTabSelect) rather than updating
+// state in place, so there's no need for this to be React state.
+const ACTIVE_TAB: TraineeTab = "dashboard";
+
 export default function TraineeDashboardScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [activeTab, setActiveTab] = useState<TraineeTab>("dashboard");
 
   const {
     trainee,
@@ -40,10 +43,15 @@ export default function TraineeDashboardScreen() {
   } = useTraineeDashboard();
 
   const handleTabSelect = (tab: TraineeTab) => {
-    setActiveTab(tab);
-    // Guards against a real Fabric crash ("child already has a parent")
-    // from firing a second replace() before the previous tab's screen
-    // transition has finished mounting - see utils/navigationGuard.ts.
+    // No setActiveTab(tab) here - every branch below navigates away
+    // immediately, so updating this screen's own state right before it
+    // unmounts was dead work that never painted. Worse: it queued a Fabric
+    // view mutation for this screen in the exact same tick router.replace()
+    // queues the transition's own mutations - a plausible contributor to
+    // the "child already has a parent" crash on tab navigation.
+    // Guards against that crash from firing a second replace() before the
+    // previous tab's screen transition has finished mounting - see
+    // utils/navigationGuard.ts.
     if (!canNavigate()) return;
     if (tab === "home") {
       router.replace("/session_detail");
@@ -112,7 +120,7 @@ export default function TraineeDashboardScreen() {
         />
       </ScrollView>
 
-      <TraineeBottomNavigation activeTab={activeTab} onSelectTab={handleTabSelect} />
+      <TraineeBottomNavigation activeTab={ACTIVE_TAB} onSelectTab={handleTabSelect} />
       <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </SafeAreaView>
   );
