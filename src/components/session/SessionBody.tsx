@@ -45,6 +45,8 @@ export default function SessionBody({
   onEnterSurvey,
   onCheckInLocation,
 }: SessionBodyProps) {
+  const isBusy = refreshing || loading;
+
   if (loading && !session) {
     return (
       <View style={styles.centered}>
@@ -69,14 +71,19 @@ export default function SessionBody({
           subtitle="The trainer has marked you absent for this session. You can't take part unless they mark you present again."
         />
         <Pressable
-          style={styles.retryButton}
+          style={[styles.retryButton, isBusy && styles.retryButtonDisabled]}
           onPress={() => loadSession("refresh")}
           accessibilityRole="button"
           accessibilityLabel="Refresh attendance status"
+          disabled={isBusy}
         >
-          <AppText variant="label" color={Colors.white}>
-            Refresh Status
-          </AppText>
+          {isBusy ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <AppText variant="label" color={Colors.white}>
+              Refresh Status
+            </AppText>
+          )}
         </Pressable>
       </View>
     );
@@ -91,14 +98,19 @@ export default function SessionBody({
           icon="checkmark-done-circle"
         />
         <Pressable
-          style={styles.retryButton}
+          style={[styles.retryButton, isBusy && styles.retryButtonDisabled]}
           onPress={() => loadSession("refresh")}
           accessibilityRole="button"
           accessibilityLabel="Refresh session status"
+          disabled={isBusy}
         >
-          <AppText variant="label" color={Colors.white}>
-            Refresh
-          </AppText>
+          {isBusy ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <AppText variant="label" color={Colors.white}>
+              Refresh
+            </AppText>
+          )}
         </Pressable>
       </View>
     );
@@ -111,14 +123,19 @@ export default function SessionBody({
           {error}
         </AppText>
         <Pressable
-          style={styles.retryButton}
+          style={[styles.retryButton, isBusy && styles.retryButtonDisabled]}
           onPress={() => loadSession()}
           accessibilityRole="button"
           accessibilityLabel="Retry loading session"
+          disabled={isBusy}
         >
-          <AppText variant="label" color={Colors.white}>
-            Retry
-          </AppText>
+          {isBusy ? (
+            <ActivityIndicator size="small" color={Colors.white} />
+          ) : (
+            <AppText variant="label" color={Colors.white}>
+              Retry
+            </AppText>
+          )}
         </Pressable>
       </View>
     );
@@ -176,9 +193,16 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     backgroundColor: Colors.headerBlue,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingHorizontal: 22,
+    paddingVertical: 10,
     borderRadius: 8,
+    minWidth: 105,
+    minHeight: 40,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  retryButtonDisabled: {
+    opacity: 0.8,
   },
   notStartedBanner: {
     flexDirection: "row",
