@@ -53,8 +53,7 @@ export default function QuizLeaderboardScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <View style={[styles.statusBarBackground, { height: insets.top }]} />
-      <StatusBar style="light" animated />
+      <StatusBar style="dark" animated />
 
       <QuizLiveHeader onSync={() => {}} onRefresh={() => {}} isConnected={true} />
 
@@ -121,13 +120,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
-  },
-  statusBarBackground: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: Colors.headerBlue,
   },
   scrollContent: {
     flexGrow: 1,

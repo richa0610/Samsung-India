@@ -93,7 +93,7 @@ export default function LiveQuizScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <QuizLiveHeader onRefresh={refetch} isConnected={connected} showConnectionLabel={phase !== "question"} />
 
       <View style={styles.body}>

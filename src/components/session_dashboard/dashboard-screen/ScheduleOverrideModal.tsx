@@ -60,10 +60,12 @@ export default function ScheduleOverrideModal({ prompt, onCancel, onSubmit }: Sc
       <AppInput
         compact
         label={`Reason for starting ${earlyOrLate}`}
+        labelColor="#F3F4F6"
         value={reason}
         onChangeText={setReason}
         placeholder="e.g. Venue access delayed, waiting on trainees"
         multiline
+        style={styles.inputReason}
       />
 
       <View style={styles.actionsRow}>
@@ -89,4 +91,10 @@ const styles = StyleSheet.create({
   secondaryText: { fontSize: 13, color: "#9CA3AF", fontWeight: "600" },
   primaryText: { fontSize: 13, color: "#60A5FA", fontWeight: "800" },
   disabled: { opacity: 0.4 },
+  inputReason: {
+    minHeight: 44,
+    textAlignVertical: "top",
+    paddingTop: 8,
+    paddingBottom: 8,
+  },
 });

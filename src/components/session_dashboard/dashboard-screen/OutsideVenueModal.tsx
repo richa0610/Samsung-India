@@ -85,8 +85,8 @@ export default function OutsideVenueModal({ prompt, onCancel, onSave }: OutsideV
         </View>
       ) : (
         <>
-          <AppInput compact label="Latitude" value={lat} onChangeText={setLat} keyboardType="numbers-and-punctuation" placeholder="e.g. 28.5721" />
-          <AppInput compact label="Longitude" value={lng} onChangeText={setLng} keyboardType="numbers-and-punctuation" placeholder="e.g. 77.3210" />
+          <AppInput compact label="Latitude" labelColor="#F3F4F6" value={lat} onChangeText={setLat} keyboardType="numbers-and-punctuation" placeholder="e.g. 28.5721" />
+          <AppInput compact label="Longitude" labelColor="#F3F4F6" value={lng} onChangeText={setLng} keyboardType="numbers-and-punctuation" placeholder="e.g. 77.3210" />
           {prompt?.trainerCoords && (
             <Pressable style={styles.useLocation} onPress={useMyLocation} hitSlop={6}>
               <Ionicons name="navigate" size={13} color="#2563EB" />

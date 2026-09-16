@@ -1,9 +1,12 @@
 import React, { useState } from "react";
 import {
   Pressable,
+  StyleProp,
   StyleSheet,
   TextInput,
+  TextStyle,
   View,
+  ViewStyle,
   TextInputProps,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +25,9 @@ interface AppInputProps extends TextInputProps {
   icon?: keyof typeof Ionicons.glyphMap;
   // Smaller height/padding for tight layouts like dense multi-field forms.
   compact?: boolean;
+  labelColor?: string;
+  labelStyle?: StyleProp<TextStyle>;
+  containerStyle?: StyleProp<ViewStyle>;
 }
 
 export default function AppInput({
@@ -29,6 +35,9 @@ export default function AppInput({
   caption,
   icon,
   compact = false,
+  labelColor,
+  labelStyle,
+  containerStyle,
   style,
   secureTextEntry,
   ...props
@@ -38,9 +47,14 @@ export default function AppInput({
   const [hidden, setHidden] = useState(true);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       {label && (
-        <AppText size={Fonts.body} weight={FontWeight.medium} color={Colors.black} style={styles.label}>
+        <AppText
+          size={compact ? Fonts.bodySm : Fonts.body}
+          weight={FontWeight.medium}
+          color={labelColor ?? Colors.black}
+          style={[styles.label, labelStyle]}
+        >
           {label}
         </AppText>
       )}
