@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LiveQuizResults, getCurrentSession, getLiveQuizResults } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
 import { useLiveQuizChannel } from "@/hooks/useLiveQuizChannel";
+import { TraineeTab } from "@/hooks/useTraineeHome";
 import { canNavigate } from "@/utils/navigationGuard";
 
 function formatMs(ms: number): string {
@@ -134,6 +135,19 @@ export function useQuizLeaderboard() {
     }, []),
   );
 
+  const handleTabSelect = (tab: TraineeTab) => {
+    if (!canNavigate()) return;
+    if (tab === "home") {
+      router.replace("/session_detail");
+    } else if (tab === "dashboard") {
+      router.replace("/trainee_dashboard");
+    } else if (tab === "profile") {
+      router.replace("/profile");
+    } else if (tab === "rank") {
+      load();
+    }
+  };
+
   return {
     insets,
     screenWidth,
@@ -154,6 +168,7 @@ export function useQuizLeaderboard() {
     leaderboardUsers,
     handleApplyFilter,
     handleContinue,
+    handleTabSelect,
     confirmLogoutOpen,
     requestLogout,
     cancelLogout,

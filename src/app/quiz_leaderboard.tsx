@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AccuracyScoreCard, GlobalLeaderboardCard, ResultsHero } from "@/components/quiz/leaderboard";
 import PerformanceSummary from "@/components/quiz/PerformanceSummary";
 import QuizLiveHeader from "@/components/quiz/QuizLiveHeader";
+import TraineeBottomNavigation from "@/components/session/TraineeBottomNavigation";
 import AppText from "@/components/ui/AppText";
 import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { Colors } from "@/theme/colors";
@@ -30,6 +31,7 @@ export default function QuizLeaderboardScreen() {
     leaderboardUsers,
     handleApplyFilter,
     handleContinue,
+    handleTabSelect,
     confirmLogoutOpen,
     cancelLogout,
     confirmLogout,
@@ -52,7 +54,7 @@ export default function QuizLeaderboardScreen() {
           };
 
   return (
-    <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
+    <SafeAreaView style={styles.container} edges={["top"]}>
       <StatusBar style="dark" animated />
 
       <QuizLiveHeader onSync={() => {}} onRefresh={() => {}} isConnected={true} />
@@ -111,6 +113,8 @@ export default function QuizLeaderboardScreen() {
       </ScrollView>
       )}
 
+      <TraineeBottomNavigation activeTab="rank" onSelectTab={handleTabSelect} />
+
       <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </SafeAreaView>
   );
@@ -125,7 +129,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 36,
+    paddingBottom: 24,
     gap: 12,
   },
   pendingWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 28 },
