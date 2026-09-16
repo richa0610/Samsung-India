@@ -1,13 +1,18 @@
+import { useCallback, useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
-import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
+import { useFocusEffect } from "expo-router";
+import { ActivityIndicator, Alert, BackHandler, Pressable, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import { isModuleLeft, markModuleLeft, submitLiveQuiz } from "@/api/session";
 import { QuizLiveHeader, QuizWaiting } from "@/components/quiz";
 import { AssessmentMap, QuestionRecapSheet } from "@/components/quiz/assessment-map";
 import LiveQuizQuestionView from "@/components/quiz/LiveQuizQuestionView";
 import QuizResult from "@/components/quiz/QuizResult";
 import { QuizQuestionData } from "@/components/quiz/QuizQuestionCard";
 import AppText from "@/components/ui/AppText";
+import ConfirmModal from "@/components/ui/ConfirmModal";
+import { useAuth } from "@/hooks/useAuth";
 import { LiveQuizFeedback, useLiveQuiz } from "@/hooks/useLiveQuiz";
 import { useLiveQuizSummary } from "@/hooks/useLiveQuizSummary";
 import { Colors } from "@/theme/colors";
@@ -25,6 +30,10 @@ function toQuestionData(f: LiveQuizFeedback): QuizQuestionData {
 }
 
 export default function LiveQuizScreen() {
+  const { trainee } = useAuth();
+  const [confirmLeaveOpen, setConfirmLeaveOpen] = useState(false);
+  const [leaving, setLeaving] = useState(false);
+
   const {
     view,
     phase,
@@ -44,6 +53,43 @@ export default function LiveQuizScreen() {
 
   const { summary, recapIndex, openRecap, openReview, closeRecap, stepRecap } =
     useLiveQuizSummary(conferenceUid, token, phase === "map");
+
+  useEffect(() => {
+    if (conferenceUid && isModuleLeft(conferenceUid, "LIVE_QUIZ", trainee?.traineeUid)) {
+      Alert.alert("Module Left", "You have left this module and cannot rejoin.");
+      router.replace("/session_detail");
+    }
+  }, [conferenceUid, trainee?.traineeUid, router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+        if (phase !== "finished" && phase !== "map") {
+          setConfirmLeaveOpen(true);
+          return true;
+        }
+        return false;
+      });
+      return () => sub.remove();
+    }, [phase]),
+  );
+
+  const handleConfirmLeave = async () => {
+    setConfirmLeaveOpen(false);
+    if (leaving) return;
+    setLeaving(true);
+    if (conferenceUid) {
+      markModuleLeft(conferenceUid, "LIVE_QUIZ", trainee?.traineeUid);
+      if (token) {
+        try {
+          await submitLiveQuiz(token, conferenceUid);
+        } catch {
+          // Best effort server submit
+        }
+      }
+    }
+    router.replace("/session_detail");
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -118,10 +164,22 @@ export default function LiveQuizScreen() {
       </View>
 
       {phase !== "finished" && phase !== "map" && (
-        <Pressable style={styles.exit} onPress={() => router.replace("/session_detail")}>
+        <Pressable style={styles.exit} onPress={() => setConfirmLeaveOpen(true)}>
           <AppText color={Colors.gray600}>Leave</AppText>
         </Pressable>
       )}
+
+      <ConfirmModal
+        visible={confirmLeaveOpen}
+        title="Leave Live Quiz?"
+        message="If you leave now, you won't be able to rejoin this module."
+        icon="warning-outline"
+        tone="danger"
+        cancelText="Cancel"
+        confirmText={leaving ? "Leaving..." : "Leave"}
+        onCancel={() => setConfirmLeaveOpen(false)}
+        onConfirm={handleConfirmLeave}
+      />
     </SafeAreaView>
   );
 }

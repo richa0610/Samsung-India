@@ -44,12 +44,13 @@ export type DashboardStats = {
 
 export type SessionStatusType = "completed" | "in_progress" | "upcoming";
 
-export function getSessionStatusInfo(status: string): { label: string; type: SessionStatusType; bg: string; color: string } {
-  if (status === "Completed") {
+export function getSessionStatusInfo(status?: string | null): { label: string; type: SessionStatusType; bg: string; color: string } {
+  const norm = (status || "").toLowerCase();
+  if (norm === "completed") {
     return { label: "Completed", type: "completed", bg: "#DCFCE7", color: "#16A34A" };
   }
-  if (status === "Ongoing") {
-    return { label: "In Progress", type: "in_progress", bg: "#E0F2FE", color: "#0284C7" };
+  if (norm === "ongoing" || norm === "live") {
+    return { label: "Live", type: "in_progress", bg: "#FEE2E2", color: "#EF4444" };
   }
   return { label: "Upcoming", type: "upcoming", bg: "#FEF3C7", color: "#D97706" };
 }

@@ -46,7 +46,12 @@ export default function LiveStudioCard({
       </View>
 
       <View style={styles.summaryRow}>
-        <Summary label="STATE" value={isPaused ? "PAUSED" : (STATE_LABELS[state] ?? state)} color="#2563EB" />
+        <Summary
+          label="STATE"
+          value={isPaused ? "PAUSED" : (STATE_LABELS[state] ?? state)}
+          color="#2563EB"
+          fontSize={9.5}
+        />
         <Summary label="ACTIVE Q" value={activeOrder ? `Q${activeOrder}` : "—"} />
         <Summary
           label="TIME LEFT"
@@ -76,6 +81,8 @@ export default function LiveStudioCard({
             }}
             secondsLeft={q.isActive ? secondsLeft : undefined}
             onBroadcast={controls.onBroadcast}
+            isBroadcasting={controls.broadcastingQuestionId === q.id}
+            anyBroadcasting={controls.broadcastingQuestionId != null}
           />
         ))}
         {questions.length === 0 && (
@@ -99,16 +106,20 @@ function Summary({
   value,
   color,
   highlighted,
+  fontSize,
 }: {
   label: string;
   value: string;
   color?: string;
   highlighted?: boolean;
+  fontSize?: number;
 }) {
   return (
     <View style={[styles.summaryBox, highlighted && styles.summaryBoxHighlighted]}>
       <AppText style={styles.summaryLabel}>{label}</AppText>
-      <AppText style={[styles.summaryValue, color ? { color } : null]}>{value}</AppText>
+      <AppText style={[styles.summaryValue, color ? { color } : null, fontSize != null ? { fontSize } : null]}>
+        {value}
+      </AppText>
     </View>
   );
 }

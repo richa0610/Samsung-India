@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_trainee
 from app.dependencies.database import get_db
+import json
 import math
 import uuid
 from datetime import datetime
@@ -87,10 +88,21 @@ def check_in(
         .first()
     )
     if not existing:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You're not on this session's roster yet.",
+        existing = Attendance(
+            conferenceUid=payload.conferenceUid,
+            trainerUid=conference.trainerEmployeeId if conference else None,
+            traineeUid=trainee.traineeUid,
+            phone=trainee.phone,
+            status="Joined",
         )
+        audience = (
+            "ASSIGNED"
+            if conference and trainee.trainerEmployeeId == conference.trainerEmployeeId
+            else "UNASSIGNED"
+        )
+        existing.sessionMeta = json.dumps({"audience": audience})
+        db.add(existing)
+        db.flush()
     if existing.status == "Absent":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -252,10 +264,21 @@ async def check_in_secure(
         .first()
     )
     if not existing:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You're not on this session's roster yet.",
+        existing = Attendance(
+            conferenceUid=conferenceUid,
+            trainerUid=conference.trainerEmployeeId if conference else None,
+            traineeUid=trainee.traineeUid,
+            phone=trainee.phone,
+            status="Joined",
         )
+        audience = (
+            "ASSIGNED"
+            if conference and trainee.trainerEmployeeId == conference.trainerEmployeeId
+            else "UNASSIGNED"
+        )
+        existing.sessionMeta = json.dumps({"audience": audience})
+        db.add(existing)
+        db.flush()
     if existing.status == "Absent":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -1,9 +1,10 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { TrainingAgendaItem, fetchTrainerAgenda } from "@/api/training";
 import { DashboardTab } from "@/components/trainer/dashboard/DashboardBottomNav";
 import { useAuth } from "@/hooks/useAuth";
+import { formatMonthToToday } from "@/utils";
 import {
   DEFAULT_SESSION_FILTERS,
   SessionFilters,
@@ -28,6 +29,12 @@ export function useSessionsScreen() {
   const [bottomTab, setBottomTab] = useState<DashboardTab>("plan");
   const [moreOpen, setMoreOpen] = useState(false);
 
+  useEffect(() => {
+    if (params.tab === "today" || params.tab === "completed" || params.tab === "all") {
+      setActiveTab(params.tab);
+    }
+  }, [params.tab]);
+
   const dateRangeSubtitle = useMemo(() => {
     if (params.start && params.end) {
       try {
@@ -40,7 +47,7 @@ export function useSessionsScreen() {
         // Fallback
       }
     }
-    return "01 Jul - 31 Jul";
+    return formatMonthToToday();
   }, [params.start, params.end]);
 
   const loadSessions = useCallback(
@@ -102,12 +109,19 @@ export function useSessionsScreen() {
     setBottomTab(tab);
     if (tab === "home") {
       router.replace("/trainer_dashboard");
+    } else if (tab === "plan") {
+      setActiveTab("all");
+    } else if (tab === "today") {
+      setActiveTab("today");
     } else if (tab === "profile") {
       router.push("/trainer_profile");
     } else if (tab === "more") {
       setMoreOpen(true);
     }
   };
+
+  const currentBottomTab: DashboardTab =
+    bottomTab === "more" ? "more" : activeTab === "today" ? "today" : "plan";
 
   return {
     activeTab,
@@ -124,7 +138,7 @@ export function useSessionsScreen() {
     filteredSessions,
     handleLaunchSession,
     handleReportSession,
-    bottomTab,
+    bottomTab: currentBottomTab,
     moreOpen,
     setMoreOpen,
     handleBottomNavSelect,

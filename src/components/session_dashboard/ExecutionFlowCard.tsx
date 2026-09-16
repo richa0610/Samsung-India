@@ -13,8 +13,10 @@ type ExecutionFlowCardProps = {
   executionFlow?: ExecutionFlowItem[];
   auditLog?: AuditLogEntry[];
   onRestartModule?: (moduleKey: string) => void;
+  restartingModuleKey?: string | null;
   onViewTopPerformers?: (moduleKey: string) => void;
   onStartModule?: (moduleKey: string) => void;
+  startingModuleKey?: string | null;
   hasStarted?: boolean;
 };
 
@@ -22,8 +24,10 @@ export default function ExecutionFlowCard({
   executionFlow = [],
   auditLog = [],
   onRestartModule,
+  restartingModuleKey,
   onViewTopPerformers,
   onStartModule,
+  startingModuleKey,
   hasStarted = true,
 }: ExecutionFlowCardProps) {
   const [activeTab, setActiveTab] = useState<"flow" | "logs">("flow");
@@ -65,8 +69,10 @@ export default function ExecutionFlowCard({
         <ExecutionFlowModuleList
           modules={executionFlow}
           onRestart={onRestartModule}
+          restartingModuleKey={restartingModuleKey}
           onViewTopPerformers={onViewTopPerformers}
           onStart={onStartModule}
+          startingModuleKey={startingModuleKey}
           hasStarted={hasStarted}
         />
       ) : (

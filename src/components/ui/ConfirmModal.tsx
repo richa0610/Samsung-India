@@ -8,7 +8,7 @@ import { FontWeight } from "@/theme/fontWeight";
 import { Radius } from "@/theme/radius";
 import { Spacing } from "@/theme/spacing";
 
-type ConfirmTone = "primary" | "danger";
+type ConfirmTone = "primary" | "danger" | "warning";
 
 type ConfirmModalProps = {
   visible: boolean;
@@ -20,6 +20,9 @@ type ConfirmModalProps = {
   tone?: ConfirmTone;
   cancelText?: string;
   confirmText?: string;
+  /** For a purely informational popup with nothing to actually confirm -
+   *  hides the cancel button, leaving one full-width dismiss action. */
+  singleAction?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
 };
@@ -27,6 +30,7 @@ type ConfirmModalProps = {
 const TONE_COLORS: Record<ConfirmTone, { badge: string; icon: string; button: string }> = {
   primary: { badge: "#E4ECFF", icon: Colors.mainColour1, button: Colors.mainColour1 },
   danger: { badge: "#FDE8E8", icon: Colors.danger, button: Colors.danger },
+  warning: { badge: "#FEF3C7", icon: "#D97706", button: "#D97706" },
 };
 
 export default function ConfirmModal({
@@ -37,6 +41,7 @@ export default function ConfirmModal({
   tone = "primary",
   cancelText = "No",
   confirmText = "Yes",
+  singleAction = false,
   onCancel,
   onConfirm,
 }: ConfirmModalProps) {
@@ -64,11 +69,13 @@ export default function ConfirmModal({
         {message}
       </AppText>
       <View style={styles.actionRow}>
-        <Pressable style={[styles.button, styles.cancelButton]} onPress={onCancel}>
-          <AppText color={Colors.gray600} weight={FontWeight.semiBold}>
-            {cancelText}
-          </AppText>
-        </Pressable>
+        {!singleAction && (
+          <Pressable style={[styles.button, styles.cancelButton]} onPress={onCancel}>
+            <AppText color={Colors.gray600} weight={FontWeight.semiBold}>
+              {cancelText}
+            </AppText>
+          </Pressable>
+        )}
         <Pressable style={[styles.button, { backgroundColor: colors.button }]} onPress={onConfirm}>
           <AppText color={Colors.white} weight={FontWeight.semiBold}>
             {confirmText}

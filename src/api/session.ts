@@ -366,6 +366,8 @@ export {
   setPendingCheckIn,
   getPendingCheckIn,
   clearPendingCheckIn,
+  markModuleLeft,
+  isModuleLeft,
 } from "@/api/mockService";
 export type { PendingCheckIn } from "@/api/mockService";
 export { ApiError } from "@/api/client";

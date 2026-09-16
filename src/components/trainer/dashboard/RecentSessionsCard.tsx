@@ -34,9 +34,10 @@ export default function RecentSessionsCard({
       ) : (
         <View style={styles.list}>
           {sessions.map((session, index) => {
-          const statusInfo = getSessionStatusInfo("Completed");
-          const iconColor = "#10B981";
-          const iconBg = "#ECFDF5";
+          const statusInfo = getSessionStatusInfo(session.conferenceStatus);
+          const isLive = statusInfo.label === "Live";
+          const iconColor = isLive ? "#EF4444" : "#10B981";
+          const iconBg = isLive ? "#FEE2E2" : "#ECFDF5";
 
           return (
             <View key={session.conferenceUid}>

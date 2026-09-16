@@ -12,6 +12,7 @@ import {
   getCurrentSession,
   getSessionFlowState,
   isAttendanceRecorded,
+  isModuleLeft,
   setSessionFlowState,
 } from "@/api/session";
 import { isSessionLocked, resetSessionViolations, setProctoringSettings } from "@/components/proctoring/violations";
@@ -63,6 +64,8 @@ export function useTraineeHome() {
   // more - the backend response is authoritative for those modules. These are
   // just the check-in wizard's client-only steps + the proctoring lock.
   const params = useLocalSearchParams<{
+    conferenceUid?: string;
+    traineeUid?: string;
     flow?: SessionFlowState;
     attendance?: string;
     checkIn?: string;
@@ -169,24 +172,37 @@ export function useTraineeHome() {
         // (SECURE_CHECKIN -> CAMERA_VERIFIED -> ATTENDANCE_RECORDED) before a
         // backend attendance row exists. Keep that sub-state in sync; once the
         // row is there, module.isCompleted from the backend is authoritative.
-        const attendanceDone =
-          isAttendanceRecorded() ||
-          params.flow === "ATTENDANCE_RECORDED" ||
-          params.attendance === "completed" ||
-          data.modules.some((m) => m.key === "ATTENDANCE" && m.isCompleted);
+        const confUid = data.conferenceUid;
+        const currentTraineeUid = trainee?.traineeUid;
+        const backendAttendanceDone = data.modules.some(
+          (m) => m.key === "ATTENDANCE" && m.isCompleted,
+        );
+        const paramsMatchThisConfAndTrainee =
+          Boolean(confUid) &&
+          (!params.conferenceUid || params.conferenceUid === confUid) &&
+          (!params.traineeUid || params.traineeUid === currentTraineeUid);
+        const justCheckedIn =
+          paramsMatchThisConfAndTrainee &&
+          (params.flow === "ATTENDANCE_RECORDED" ||
+            params.attendance === "completed");
+
+        const attendanceDone = backendAttendanceDone || justCheckedIn;
 
         if (attendanceDone) {
-          setSessionFlowState("ATTENDANCE_RECORDED");
+          setSessionFlowState("ATTENDANCE_RECORDED", confUid, currentTraineeUid);
           data.flowState = "ATTENDANCE_RECORDED";
         } else if (
-          params.flow === "CAMERA_VERIFIED" ||
-          params.checkIn === "verified"
+          paramsMatchThisConfAndTrainee &&
+          (params.flow === "CAMERA_VERIFIED" || params.checkIn === "verified")
         ) {
-          setSessionFlowState("CAMERA_VERIFIED");
+          setSessionFlowState("CAMERA_VERIFIED", confUid, currentTraineeUid);
           data.flowState = "CAMERA_VERIFIED";
-        } else if (params.flow === "SECURE_CHECKIN") {
-          setSessionFlowState("SECURE_CHECKIN");
+        } else if (paramsMatchThisConfAndTrainee && params.flow === "SECURE_CHECKIN") {
+          setSessionFlowState("SECURE_CHECKIN", confUid, currentTraineeUid);
           data.flowState = "SECURE_CHECKIN";
+        } else {
+          setSessionFlowState("JOINED", confUid, currentTraineeUid);
+          data.flowState = "JOINED";
         }
 
         setSession(data);
@@ -207,7 +223,7 @@ export function useTraineeHome() {
         else if (mode === "load") setLoading(false);
       }
     },
-    [token, params.attendance, params.checkIn, params.flow, params.postTest, params.score],
+    [token, trainee?.traineeUid, params.conferenceUid, params.traineeUid, params.attendance, params.checkIn, params.flow, params.postTest, params.score],
   );
 
   useFocusEffect(
@@ -266,15 +282,22 @@ export function useTraineeHome() {
   }, [shouldPoll, loadSession, liveConnected]);
 
   // Attendance is "recorded" once the backend has the row (module.isCompleted)
-  // or the local check-in wizard just finished. Reaching the Post Test / Live
-  // Quiz at all means the trainee is already admitted + checked in.
-  const attendanceRecorded =
-    isAttendanceRecorded() ||
-    session?.flowState === "ATTENDANCE_RECORDED" ||
-    getSessionFlowState() === "ATTENDANCE_RECORDED" ||
-    params.flow === "ATTENDANCE_RECORDED" ||
-    params.attendance === "completed" ||
-    (session?.modules.some((m) => m.key === "ATTENDANCE" && m.isCompleted) ?? false);
+  // or the local check-in wizard just finished for THIS specific trainee.
+  const confUid = session?.conferenceUid;
+  const currentTraineeUid = trainee?.traineeUid;
+  const backendAttendanceDone =
+    session?.modules.some((m) => m.key === "ATTENDANCE" && m.isCompleted) ??
+    false;
+  const paramsMatchThisConfAndTrainee =
+    Boolean(confUid) &&
+    (!params.conferenceUid || params.conferenceUid === confUid) &&
+    (!params.traineeUid || params.traineeUid === currentTraineeUid);
+  const justCheckedIn =
+    paramsMatchThisConfAndTrainee &&
+    (params.flow === "ATTENDANCE_RECORDED" ||
+      params.attendance === "completed");
+
+  const attendanceRecorded = backendAttendanceDone || justCheckedIn;
 
   // Auto-enter the Live Quiz room the moment the trainer makes it the live
   // module, so the trainee is on the "waiting" screen BEFORE the first
@@ -285,40 +308,44 @@ export function useTraineeHome() {
   useEffect(() => {
     const uid = session?.conferenceUid;
     if (!uid || sessionClosed || notStarted || !attendanceRecorded) return;
-    if (autoEnteredLiveQuiz === uid) return;
+    if (autoEnteredLiveQuiz === uid || isModuleLeft(uid, "LIVE_QUIZ", currentTraineeUid)) return;
     const liveQuiz = session?.modules.find(
       (m) => m.key === "LIVE_QUIZ" && m.isLive && !m.isCompleted,
     );
     if (!liveQuiz) return;
     autoEnteredLiveQuiz = uid;
     router.push({ pathname: "/live_quiz", params: { conferenceUid: uid } });
-  }, [session, sessionClosed, notStarted, attendanceRecorded, router]);
+  }, [session, sessionClosed, notStarted, attendanceRecorded, router, currentTraineeUid]);
 
   const currentFlow: SessionFlowState = attendanceRecorded
     ? "ATTENDANCE_RECORDED"
-    : params.flow === "CAMERA_VERIFIED" ||
-        params.checkIn === "verified" ||
-        session?.flowState === "CAMERA_VERIFIED"
+    : paramsMatchThisConfAndTrainee &&
+        (params.flow === "CAMERA_VERIFIED" ||
+          params.checkIn === "verified" ||
+          session?.flowState === "CAMERA_VERIFIED")
       ? "CAMERA_VERIFIED"
-      : session?.flowState || getSessionFlowState() || "SECURE_CHECKIN";
+      : session?.flowState ||
+        (confUid ? getSessionFlowState(confUid, currentTraineeUid) : undefined) ||
+        "SECURE_CHECKIN";
 
   const activities: SessionActivityData[] = (session?.modules ?? []).map(
     (module) => {
       const isAttendance = module.key === "ATTENDANCE";
-      // Recorded either locally (self-check-in flow) or by the backend - the
-      // trainer marking this trainee Present also completes Attendance.
+      // Recorded either locally (self-check-in flow) or by the backend
       const isAttendanceCompleted =
-        isAttendance && (currentFlow === "ATTENDANCE_RECORDED" || module.isCompleted);
+        isAttendance && (backendAttendanceDone || justCheckedIn);
+
+      const isLeft = isModuleLeft(confUid ?? "", module.key, currentTraineeUid);
 
       // `module.isLive` from the backend is the ONLY source of truth for
       // whether a module is live - it's true only once the trainer has
       // started that module (conference.activeModuleId === module.key).
-      // No module auto-goes-live off the trainee's own progress any more.
-      // (Attendance also drops the instant it's recorded locally, before
-      // the next poll catches up.)
-      const isLiveModule = isAttendance
-        ? module.isLive && !isAttendanceCompleted
-        : module.isLive;
+      // If the trainee left this module, it is no longer live for them.
+      const isLiveModule = isLeft
+        ? false
+        : isAttendance
+          ? module.isLive && !isAttendanceCompleted
+          : module.isLive;
 
       return {
         id: module.key,
@@ -335,8 +362,8 @@ export function useTraineeHome() {
         // builds its own activities array). The admission gate is carried
         // by `lockReason` instead, so the module keeps its LIVE badge while
         // its action is blocked.
-        isLocked: false,
-        lockReason: module.lockReason ?? null,
+        isLocked: isLeft ? true : false,
+        lockReason: isLeft ? "You left this module and cannot rejoin." : (module.lockReason ?? null),
         completedAt: module.completedAt,
         score: module.score,
         // Actual "Ran : 45m 3s" badge from the trainer's Start/End - the
@@ -380,11 +407,12 @@ export function useTraineeHome() {
 
     if (currentFlow === "CAMERA_VERIFIED") {
       // Step 5: Mark Attendance button opens Attendance verification
-      setSessionFlowState("MARK_ATTENDANCE");
+      setSessionFlowState("MARK_ATTENDANCE", session.conferenceUid, trainee?.traineeUid);
       router.push({
         pathname: "/attendance",
         params: {
           conferenceUid: session.conferenceUid,
+          traineeUid: trainee?.traineeUid,
           title: session.title,
           location: session.location ?? "",
           date: session.date ?? "",
@@ -394,11 +422,12 @@ export function useTraineeHome() {
       });
     } else {
       // Step 2 -> Step 3: Secure Check-In button opens Location Verification
-      setSessionFlowState("LOCATION_VERIFIED");
+      setSessionFlowState("LOCATION_VERIFIED", session.conferenceUid, trainee?.traineeUid);
       router.push({
         pathname: "/secure_checkin",
         params: {
           conferenceUid: session.conferenceUid,
+          traineeUid: trainee?.traineeUid,
           title: session.title,
           location: session.location ?? "",
           date: session.date ?? "",
@@ -458,6 +487,10 @@ export function useTraineeHome() {
 
   const handleEnterLiveQuiz = () => {
     blurActiveElement();
+    if (session?.conferenceUid && isModuleLeft(session.conferenceUid, "LIVE_QUIZ", currentTraineeUid)) {
+      Alert.alert("Module Left", "You have left this module and cannot rejoin.");
+      return;
+    }
     // Mark it entered so leaving the quiz doesn't get auto-routed straight back.
     if (session?.conferenceUid) autoEnteredLiveQuiz = session.conferenceUid;
     router.push({

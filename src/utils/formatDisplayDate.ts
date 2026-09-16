@@ -17,3 +17,13 @@ export function getTodayFormattedDate(): string {
   return `${day} ${month} ${year}`;
 }
 
+export function formatMonthToToday(): string {
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+  const sDay = String(firstDay.getDate()).padStart(2, "0");
+  const sMonth = firstDay.toLocaleDateString("en-GB", { month: "short" });
+  const eDay = String(now.getDate()).padStart(2, "0");
+  const eMonth = now.toLocaleDateString("en-GB", { month: "short" });
+  return `${sDay} ${sMonth} - ${eDay} ${eMonth}`;
+}
+

@@ -50,6 +50,7 @@ const styles = StyleSheet.create({
     lineHeight: 13,
   },
   infoHighlight: {
+    fontSize: 9.5,
     color: Colors.mainColour1,
     fontWeight: "700",
   },

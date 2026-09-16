@@ -1,4 +1,5 @@
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -26,6 +27,22 @@ export default function TrainerLoginScreen() {
     loading,
     handleLogin,
   } = useTrainerLogin(reason);
+
+  // Hides the security footer while a field is focused instead of letting
+  // KeyboardAvoidingView push it up onto the keyboard - it's fixed at the
+  // bottom only when the keyboard is closed, freeing that space for the
+  // form the moment it opens.
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  useEffect(() => {
+    const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent = Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   return (
     <>
@@ -84,9 +101,11 @@ export default function TrainerLoginScreen() {
             </AppCard>
           </ScrollView>
 
-          <View style={styles.securityFooter}>
-            <SecurityFooter />
-          </View>
+          {!keyboardOpen && (
+            <View style={styles.securityFooter}>
+              <SecurityFooter />
+            </View>
+          )}
         </KeyboardAvoidingView>
       </SafeAreaView>
     </>

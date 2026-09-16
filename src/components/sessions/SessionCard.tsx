@@ -32,7 +32,7 @@ export default function SessionCard({
   );
 
   const handleAction = () => {
-    if (config.buttonType === "launch") {
+    if (config.buttonType === "launch" || config.buttonType === "live") {
       onLaunch(item.conferenceUid);
     } else {
       onReport(item.conferenceUid);
@@ -95,6 +95,9 @@ export default function SessionCard({
           accessibilityRole="button"
           accessibilityLabel={config.buttonText}
         >
+          {config.buttonType === "live" && (
+            <Ionicons name="radio" size={11} color={Colors.white} />
+          )}
           <AppText style={styles.actionBtnText}>{config.buttonText}</AppText>
         </Pressable>
 
@@ -200,6 +203,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionBtn: {
+    flexDirection: "row",
+    gap: 4,
     paddingHorizontal: 16,
     paddingVertical: 7,
     borderRadius: 14,

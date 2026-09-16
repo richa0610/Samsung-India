@@ -26,12 +26,7 @@ export function filterSessions(
 
   return sessions.filter((session) => {
     if (activeTab === "today") {
-      const isToday =
-        session.conferenceDate === todayStr ||
-        session.conferenceStatus === "Ongoing" ||
-        session.conferenceTime === "09:00" ||
-        session.conferenceTime === "12:00";
-      if (!isToday) return false;
+      if (session.conferenceDate !== todayStr) return false;
     } else if (activeTab === "completed") {
       if (session.conferenceStatus !== "Completed") return false;
     }
@@ -136,7 +131,7 @@ export type SessionStatusConfig = {
   badgeBg: string;
   badgeTextColor: string;
   borderColor: string;
-  buttonType: "launch" | "report";
+  buttonType: "launch" | "report" | "live";
   buttonBg: string;
   buttonText: string;
 };
@@ -154,9 +149,9 @@ export function getSessionStatusConfig(
       badgeBg: "#FEE2E2",
       badgeTextColor: "#EF4444",
       borderColor: "#FCA5A5",
-      buttonType: "launch",
+      buttonType: "live",
       buttonBg: "#0066FF",
-      buttonText: "LAUNCH",
+      buttonText: "LIVE",
     };
   }
 

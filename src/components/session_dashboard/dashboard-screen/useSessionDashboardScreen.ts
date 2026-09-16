@@ -78,6 +78,13 @@ export function useSessionDashboardScreen() {
   const [pendingScheduleReason, setPendingScheduleReason] = useState<string | undefined>(undefined);
   const [showCheckOutModal, setShowCheckOutModal] = useState(false);
   const [endingSession, setEndingSession] = useState(false);
+  // Confirm-before-end for the active module's own End button - opening the
+  // popup is separate from actually stopping it, which only happens on
+  // confirm.
+  const [confirmEndModuleOpen, setConfirmEndModuleOpen] = useState(false);
+  // Which module (if any) is blocking "End Session" from opening the
+  // check-out flow - non-null shows the "modules still pending" popup.
+  const [pendingModuleLabel, setPendingModuleLabel] = useState<string | null>(null);
   const [startedForUid, setStartedForUid] = useState(conferenceUid);
   const { requestLocationWithRationale } = useLocationPermission();
 
@@ -119,23 +126,59 @@ export function useSessionDashboardScreen() {
   // without waiting for the 5s poll.
   useLiveQuizChannel(conferenceUid, adminToken, () => loadData("silent"));
 
-  const runLiveQuizAction = useCallback(
-    async (action: (token: string, uid: string) => Promise<SessionDashboard>) => {
-      if (!adminToken) return;
-      try {
-        setData(await action(adminToken, conferenceUid));
-      } catch {
-        // Fallback / gracefully keep state.
-      }
-    },
-    [adminToken, conferenceUid],
-  );
+  const [broadcastingQuestionId, setBroadcastingQuestionId] = useState<number | null>(null);
+  const [stoppingTimer, setStoppingTimer] = useState(false);
+  const [showingLeaderboard, setShowingLeaderboard] = useState(false);
+  const [showingLobby, setShowingLobby] = useState(false);
 
-  const handleBroadcastQuestion = (questionId: number) =>
-    runLiveQuizAction((token, uid) => broadcastLiveQuestion(token, uid, questionId));
-  const handleStopLiveTimer = () => runLiveQuizAction(stopLiveTimer);
-  const handleShowLiveLeaderboard = () => runLiveQuizAction(showLiveLeaderboard);
-  const handleShowLiveLobby = () => runLiveQuizAction(showLiveLobby);
+  const handleBroadcastQuestion = async (questionId: number) => {
+    if (broadcastingQuestionId != null || !adminToken) return;
+    setBroadcastingQuestionId(questionId);
+    try {
+      const updated = await broadcastLiveQuestion(adminToken, conferenceUid, questionId);
+      setData(updated);
+    } catch (err) {
+      Alert.alert(
+        "Broadcast Failed",
+        err instanceof ApiError ? err.message : "Couldn't broadcast the question. Please try again.",
+      );
+    } finally {
+      setBroadcastingQuestionId(null);
+    }
+  };
+  const handleStopLiveTimer = async () => {
+    if (stoppingTimer || !adminToken) return;
+    setStoppingTimer(true);
+    try {
+      setData(await stopLiveTimer(adminToken, conferenceUid));
+    } catch {
+      // Fallback / gracefully keep state.
+    } finally {
+      setStoppingTimer(false);
+    }
+  };
+  const handleShowLiveLeaderboard = async () => {
+    if (showingLeaderboard || !adminToken) return;
+    setShowingLeaderboard(true);
+    try {
+      setData(await showLiveLeaderboard(adminToken, conferenceUid));
+    } catch {
+      // Fallback / gracefully keep state.
+    } finally {
+      setShowingLeaderboard(false);
+    }
+  };
+  const handleShowLiveLobby = async () => {
+    if (showingLobby || !adminToken) return;
+    setShowingLobby(true);
+    try {
+      setData(await showLiveLobby(adminToken, conferenceUid));
+    } catch {
+      // Fallback / gracefully keep state.
+    } finally {
+      setShowingLobby(false);
+    }
+  };
 
   const handleCopyLink = async () => {
     try {
@@ -365,20 +408,30 @@ export function useSessionDashboardScreen() {
     }
   };
 
+  const [startingModuleKey, setStartingModuleKey] = useState<string | null>(null);
+  const [restartingModuleKey, setRestartingModuleKey] = useState<string | null>(null);
+
   const handleStartModule = async (moduleKey: string) => {
-    if (!adminToken) return;
+    if (startingModuleKey != null || !adminToken) return;
+    setStartingModuleKey(moduleKey);
     try {
       await startModule(adminToken, conferenceUid, moduleKey);
-      loadData("silent");
+      await loadData("silent");
     } catch (err) {
       Alert.alert(
         "Couldn't start the module",
         err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
       );
+    } finally {
+      setStartingModuleKey(null);
     }
   };
 
-  const handleStopActiveModule = async () => {
+  const handleStopActiveModule = () => setConfirmEndModuleOpen(true);
+  const cancelStopActiveModule = () => setConfirmEndModuleOpen(false);
+
+  const confirmStopActiveModule = async () => {
+    setConfirmEndModuleOpen(false);
     if (!adminToken) return;
     try {
       await stopActiveModule(adminToken, conferenceUid);
@@ -392,22 +445,35 @@ export function useSessionDashboardScreen() {
   };
 
   const handleRestartModule = async (moduleKey: string) => {
-    if (!adminToken) return;
+    if (restartingModuleKey != null || !adminToken) return;
+    setRestartingModuleKey(moduleKey);
     try {
       await restartModule(adminToken, conferenceUid, moduleKey);
-      loadData("silent");
+      await loadData("silent");
     } catch (err) {
       Alert.alert(
         "Couldn't restart the module",
         err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
       );
+    } finally {
+      setRestartingModuleKey(null);
     }
   };
 
   // "End Session" opens the Security Check-Out flow (face photo + signed
   // attendance sheet). Closing it without submitting leaves the session
   // running - it only ends once the backend confirms the check-out.
-  const handleEndSession = () => setShowCheckOutModal(true);
+  // Blocked while any configured module hasn't reached "Completed" yet -
+  // covers both one still Running and any still Pending (never started).
+  const handleEndSession = () => {
+    const unfinished = data?.executionFlow?.find((m) => m.status !== "Completed");
+    if (unfinished) {
+      setPendingModuleLabel(unfinished.label);
+      return;
+    }
+    setShowCheckOutModal(true);
+  };
+  const dismissPendingModuleNotice = () => setPendingModuleLabel(null);
 
   const handleConfirmEndSession = async (photo: UploadFile, attendanceSheet: UploadFile) => {
     if (!adminToken) return;
@@ -432,6 +498,8 @@ export function useSessionDashboardScreen() {
       router.replace("/trainer_dashboard");
     } else if (tab === "plan") {
       router.push("/sessions");
+    } else if (tab === "today") {
+      router.push({ pathname: "/sessions", params: { tab: "today" } });
     } else if (tab === "profile") {
       router.push("/trainer_profile");
     } else if (tab === "more") {
@@ -497,14 +565,25 @@ export function useSessionDashboardScreen() {
     handleMarkAttendance,
     handleUnlockExam,
     handleStartModule,
+    startingModuleKey,
     handleStopActiveModule,
+    confirmEndModuleOpen,
+    cancelStopActiveModule,
+    confirmStopActiveModule,
     handleRestartModule,
+    restartingModuleKey,
     handleEndSession,
+    pendingModuleLabel,
+    dismissPendingModuleNotice,
     liveQuizControls: {
       onBroadcast: handleBroadcastQuestion,
       onStopTimer: handleStopLiveTimer,
       onLeaderboard: handleShowLiveLeaderboard,
       onLobby: handleShowLiveLobby,
+      broadcastingQuestionId,
+      stoppingTimer,
+      showingLeaderboard,
+      showingLobby,
     },
     handleBottomNavSelect,
     isSessionClosed,

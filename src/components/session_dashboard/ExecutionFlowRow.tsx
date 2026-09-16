@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -12,6 +12,9 @@ type ExecutionFlowRowProps = {
   onRestart?: (moduleKey: string) => void;
   onViewTopPerformers?: (moduleKey: string) => void;
   onStart?: (moduleKey: string) => void;
+  isStarting?: boolean;
+  anyStarting?: boolean;
+  isRestarting?: boolean;
 };
 
 export default function ExecutionFlowRow({
@@ -20,6 +23,9 @@ export default function ExecutionFlowRow({
   onRestart,
   onViewTopPerformers,
   onStart,
+  isStarting = false,
+  anyStarting = false,
+  isRestarting = false,
 }: ExecutionFlowRowProps) {
   // Ticks every second while the module is Running; frozen once it ends.
   const seconds = useLiveRuntime(item.startedAt, item.endedAt);
@@ -51,28 +57,54 @@ export default function ExecutionFlowRow({
         </View>
         {showStart && (
           <Pressable
-            style={[styles.startBtn, !startEnabled && styles.startBtnDisabled]}
-            onPress={() => startEnabled && onStart?.(item.moduleKey)}
-            disabled={!startEnabled}
+            style={[
+              styles.startBtn,
+              !startEnabled && styles.startBtnDisabled,
+              isStarting && styles.startBtnLoading,
+              !isStarting && anyStarting && styles.startBtnDisabled,
+            ]}
+            onPress={() => startEnabled && !isStarting && !anyStarting && onStart?.(item.moduleKey)}
+            disabled={!startEnabled || isStarting || anyStarting}
             accessibilityRole="button"
             accessibilityLabel={`Start ${item.label}`}
           >
-            <Ionicons name="play" size={11} color="#FFFFFF" />
-            <AppText style={styles.startBtnText}>Start</AppText>
+            {isStarting ? (
+              <>
+                <ActivityIndicator size="small" color="#FFFFFF" style={styles.spinner} />
+                <AppText style={styles.startBtnText}>Starting...</AppText>
+              </>
+            ) : (
+              <>
+                <Ionicons name="play" size={11} color="#FFFFFF" />
+                <AppText style={styles.startBtnText}>Start</AppText>
+              </>
+            )}
           </Pressable>
         )}
       </View>
 
       {hasStarted && effectiveStatus === "Completed" && (
         <Pressable
-          style={[styles.actionBtn, !item.canRestart && styles.actionBtnDisabled]}
-          onPress={() => item.canRestart && onRestart?.(item.moduleKey)}
-          disabled={!item.canRestart}
+          style={[
+            styles.actionBtn,
+            (!item.canRestart || isRestarting || anyStarting) && styles.actionBtnDisabled,
+          ]}
+          onPress={() => item.canRestart && !isRestarting && !anyStarting && onRestart?.(item.moduleKey)}
+          disabled={!item.canRestart || isRestarting || anyStarting}
           accessibilityRole="button"
           accessibilityLabel={`Restart ${item.label}`}
         >
-          <Ionicons name="refresh" size={12} color={item.canRestart ? "#4B5563" : "#9CA3AF"} />
-          <AppText style={[styles.actionText, !item.canRestart && styles.actionTextDisabled]}>Restart</AppText>
+          {isRestarting ? (
+            <>
+              <ActivityIndicator size="small" color="#4B5563" style={styles.spinner} />
+              <AppText style={styles.actionText}>Restarting...</AppText>
+            </>
+          ) : (
+            <>
+              <Ionicons name="refresh" size={12} color={item.canRestart ? "#4B5563" : "#9CA3AF"} />
+              <AppText style={[styles.actionText, !item.canRestart && styles.actionTextDisabled]}>Restart</AppText>
+            </>
+          )}
         </Pressable>
       )}
 
@@ -119,7 +151,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   startBtnDisabled: { backgroundColor: "#D1D5DB" },
+  startBtnLoading: { backgroundColor: "#15803D", paddingHorizontal: 8 },
   startBtnText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
+  spinner: { transform: [{ scale: 0.7 }], marginHorizontal: -2 },
   actionBtn: {
     flexDirection: "row",
     alignSelf: "flex-start",

@@ -23,7 +23,7 @@ type SecureCheckInParams = {
 
 export function useSecureCheckIn(params: SecureCheckInParams) {
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, trainee } = useAuth();
   const isEntryMode = params.mode !== "attendance";
 
   const {
@@ -124,8 +124,15 @@ export function useSecureCheckIn(params: SecureCheckInParams) {
           photoUri,
         });
       }
-      setSessionFlowState("CAMERA_VERIFIED");
-      router.replace({ pathname: "/session_detail", params: { flow: "CAMERA_VERIFIED" } });
+      setSessionFlowState("CAMERA_VERIFIED", params.conferenceUid, trainee?.traineeUid);
+      router.replace({
+        pathname: "/session_detail",
+        params: {
+          flow: "CAMERA_VERIFIED",
+          conferenceUid: params.conferenceUid,
+          traineeUid: trainee?.traineeUid,
+        },
+      });
       return;
     }
 
@@ -139,7 +146,7 @@ export function useSecureCheckIn(params: SecureCheckInParams) {
         longitude: currentCoords.longitude,
         photo: { uri: photoUri, name: "checkin.jpg", type: "image/jpeg" },
       });
-      setAttendanceState("ATTENDANCE_RECORDED");
+      setAttendanceState("ATTENDANCE_RECORDED", params.conferenceUid, trainee?.traineeUid);
       setStep("granted");
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "Couldn't submit your check-in.";

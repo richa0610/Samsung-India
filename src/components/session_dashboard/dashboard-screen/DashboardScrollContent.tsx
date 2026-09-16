@@ -25,8 +25,10 @@ type DashboardScrollContentProps = {
   refreshing: boolean;
   onRefresh: () => void;
   onStartModule: (moduleKey: string) => void;
+  startingModuleKey?: string | null;
   onStopActiveModule: () => void;
   onRestartModule: (moduleKey: string) => void;
+  restartingModuleKey?: string | null;
   onMarkAttendance: (traineeUid: string, status: "Present" | "Absent", reason: string) => void;
   onUnlockExam: (traineeUid: string, reason: string) => void;
   liveQuizControls: LiveQuizControls;
@@ -39,8 +41,10 @@ export default function DashboardScrollContent({
   refreshing,
   onRefresh,
   onStartModule,
+  startingModuleKey,
   onStopActiveModule,
   onRestartModule,
+  restartingModuleKey,
   onMarkAttendance,
   onUnlockExam,
   liveQuizControls,
@@ -165,7 +169,9 @@ export default function DashboardScrollContent({
         auditLog={data?.auditLog ?? []}
         hasStarted={showSessionData}
         onStartModule={onStartModule}
+        startingModuleKey={startingModuleKey}
         onRestartModule={onRestartModule}
+        restartingModuleKey={restartingModuleKey}
       />
 
       {showSessionData && (

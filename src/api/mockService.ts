@@ -156,26 +156,57 @@ export type AttendanceState = SessionFlowState;
 
 let _flowState: SessionFlowState = "JOINED";
 let _attendanceRecorded = false;
+const _flowStateByKey: Record<string, SessionFlowState> = {};
+const _attendanceRecordedByKey: Record<string, boolean> = {};
+
+const _scopedKey = (conferenceUid?: string, traineeUid?: string): string | null => {
+  if (!conferenceUid) return null;
+  return traineeUid ? `${conferenceUid}:${traineeUid}` : conferenceUid;
+};
+
 let _currentSession = {
   ...DEMO_CURRENT_SESSION,
   modules: DEMO_CURRENT_SESSION.modules.map((m) => ({ ...m })),
 };
 
-export function isAttendanceRecorded(): boolean {
+export function isAttendanceRecorded(conferenceUid?: string, traineeUid?: string): boolean {
+  const key = _scopedKey(conferenceUid, traineeUid);
+  if (key) {
+    return (
+      _attendanceRecordedByKey[key] === true ||
+      _flowStateByKey[key] === "ATTENDANCE_RECORDED"
+    );
+  }
   return _attendanceRecorded || _flowState === "ATTENDANCE_RECORDED";
 }
 
-export function getSessionFlowState(): SessionFlowState {
+export function getSessionFlowState(conferenceUid?: string, traineeUid?: string): SessionFlowState {
+  const key = _scopedKey(conferenceUid, traineeUid);
+  if (key) {
+    if (_attendanceRecordedByKey[key]) {
+      return "ATTENDANCE_RECORDED";
+    }
+    return _flowStateByKey[key] ?? "JOINED";
+  }
   if (_attendanceRecorded) {
     return "ATTENDANCE_RECORDED";
   }
   return _flowState;
 }
 
-export function setSessionFlowState(state: SessionFlowState) {
-  if (_attendanceRecorded && state !== "ATTENDANCE_RECORDED") {
-    // Attendance was already recorded — keep it recorded for all tests!
-    _flowState = "ATTENDANCE_RECORDED";
+export function setSessionFlowState(
+  state: SessionFlowState,
+  conferenceUid?: string,
+  traineeUid?: string,
+) {
+  const key = _scopedKey(conferenceUid, traineeUid);
+  if (key) {
+    _flowStateByKey[key] = state;
+    if (state === "ATTENDANCE_RECORDED") {
+      _attendanceRecordedByKey[key] = true;
+    } else if (state === "JOINED" || state === "SECURE_CHECKIN") {
+      _attendanceRecordedByKey[key] = false;
+    }
     return;
   }
 
@@ -205,12 +236,22 @@ export function setSessionFlowState(state: SessionFlowState) {
       survey.isLive = false;
       survey.isCompleted = false;
     }
+  } else if (state === "JOINED" || state === "SECURE_CHECKIN") {
+    _attendanceRecorded = false;
   }
 }
 
-export function resetSessionFlowState() {
+export function resetSessionFlowState(conferenceUid?: string, traineeUid?: string) {
+  const key = _scopedKey(conferenceUid, traineeUid);
+  if (key) {
+    delete _flowStateByKey[key];
+    delete _attendanceRecordedByKey[key];
+    return;
+  }
   _flowState = "JOINED";
   _attendanceRecorded = false;
+  for (const k of Object.keys(_flowStateByKey)) delete _flowStateByKey[k];
+  for (const k of Object.keys(_attendanceRecordedByKey)) delete _attendanceRecordedByKey[k];
   const att = _currentSession.modules.find((m) => m.key === "ATTENDANCE");
   if (att) {
     att.isCompleted = false;
@@ -225,12 +266,28 @@ export function resetSessionFlowState() {
   }
 }
 
-export function getAttendanceState(): AttendanceState {
-  return getSessionFlowState();
+export function getAttendanceState(conferenceUid?: string, traineeUid?: string): AttendanceState {
+  return getSessionFlowState(conferenceUid, traineeUid);
 }
 
-export function setAttendanceState(state: AttendanceState) {
-  setSessionFlowState(state);
+export function setAttendanceState(
+  state: AttendanceState,
+  conferenceUid?: string,
+  traineeUid?: string,
+) {
+  setSessionFlowState(state, conferenceUid, traineeUid);
+}
+
+const _leftModulesByKey: Record<string, boolean> = {};
+
+export function markModuleLeft(conferenceUid: string, moduleKey: string, traineeUid?: string) {
+  const key = `${conferenceUid}:${traineeUid || "default"}:${moduleKey}`;
+  _leftModulesByKey[key] = true;
+}
+
+export function isModuleLeft(conferenceUid: string, moduleKey: string, traineeUid?: string): boolean {
+  const key = `${conferenceUid}:${traineeUid || "default"}:${moduleKey}`;
+  return Boolean(_leftModulesByKey[key]);
 }
 
 // Location + face photo captured on the Secure Check-In screen, held here

@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { SelectOption } from "@/components/ui/SearchableSelect";
 import { Colors } from "@/theme/colors";
+import { formatMonthToToday } from "@/utils";
 import SessionsFilterPanel from "./SessionsFilterPanel";
 import { SessionFilters, SessionTab } from "./sessionsUtils";
 
@@ -20,7 +21,7 @@ type SessionsHeaderProps = {
 };
 
 export default function SessionsHeader({
-  dateRangeText = "01 Jul - 31 Jul",
+  dateRangeText = formatMonthToToday(),
   activeTab,
   onSelectTab,
   onSearchChange,

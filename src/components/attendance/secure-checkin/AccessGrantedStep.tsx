@@ -3,9 +3,11 @@ import { useRouter } from "expo-router";
 import { VerifyLocationResult } from "@/api/attendance";
 import { setAttendanceState, setSessionFlowState } from "@/api/session";
 import AccessGrantedView from "@/components/attendance/AccessGrantedView";
+import { useAuth } from "@/hooks/useAuth";
 import { formatDisplayDate } from "@/utils/formatDisplayDate";
 
 type AccessGrantedStepParams = {
+  conferenceUid?: string;
   title?: string;
   time?: string;
   endTime?: string;
@@ -20,6 +22,8 @@ type AccessGrantedStepProps = {
 };
 
 export default function AccessGrantedStep({ params, locationResult, router }: AccessGrantedStepProps) {
+  const { trainee } = useAuth();
+
   return (
     <AccessGrantedView
       details={[
@@ -37,12 +41,28 @@ export default function AccessGrantedStep({ params, locationResult, router }: Ac
         },
       ]}
       onContinue={() => {
-        setAttendanceState("ATTENDANCE_RECORDED");
-        router.replace({ pathname: "/session_detail", params: { attendance: "completed", checkIn: "verified" } });
+        setAttendanceState("ATTENDANCE_RECORDED", params.conferenceUid, trainee?.traineeUid);
+        router.replace({
+          pathname: "/session_detail",
+          params: {
+            attendance: "completed",
+            checkIn: "verified",
+            conferenceUid: params.conferenceUid,
+            traineeUid: trainee?.traineeUid,
+          },
+        });
       }}
       onHome={() => {
-        setSessionFlowState("CAMERA_VERIFIED");
-        router.replace({ pathname: "/session_detail", params: { flow: "CAMERA_VERIFIED", checkIn: "verified" } });
+        setSessionFlowState("CAMERA_VERIFIED", params.conferenceUid, trainee?.traineeUid);
+        router.replace({
+          pathname: "/session_detail",
+          params: {
+            flow: "CAMERA_VERIFIED",
+            checkIn: "verified",
+            conferenceUid: params.conferenceUid,
+            traineeUid: trainee?.traineeUid,
+          },
+        });
       }}
     />
   );

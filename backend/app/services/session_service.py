@@ -327,21 +327,6 @@ def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> Curren
             modules=[],
         )
 
-    if not started:
-        return CurrentSession(
-            conferenceUid=conference.conferenceUid,
-            title=conference.suiteTitle or "Training Session",
-            sessionType=conference.sessionType,
-            date=conference.conferenceDate,
-            location=location,
-            trainerName=conference.trainerName,
-            confirmationStatus="Not Confirmed",
-            started=False,
-            startsAt=start_at.strftime("%d %b %Y, %I:%M %p") if start_at else None,
-            liveProctoringEnabled=live_proctoring_enabled,
-            proctoringMaxWarnings=proctoring_max_warnings,
-            modules=[],
-        )
 
     config = _parse_session_config(conference.sessionConfig)
     # Built keyed, then emitted in `configured_modules` order (which is sorted
@@ -417,6 +402,18 @@ def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> Curren
     attendance = attendance_repository.get_for_conference_and_trainee(
         db, conference.conferenceUid, trainee.traineeUid
     )
+    if attendance is None:
+        attendance = Attendance(
+            conferenceUid=conference.conferenceUid,
+            trainerUid=conference.trainerEmployeeId,
+            traineeUid=trainee.traineeUid,
+            phone=trainee.phone,
+            status="Joined",
+        )
+        audience = "ASSIGNED" if trainee.trainerEmployeeId == conference.trainerEmployeeId else "UNASSIGNED"
+        _set_attendance_audience(attendance, audience)
+        attendance_repository.create(db, attendance)
+
     attendance_status = attendance.status if attendance else None
     # Admission is trainer-gated. The trainer marking this trainee "Present"
     # on the Participant Master List is what unlocks the Attendance card -
@@ -524,7 +521,8 @@ def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> Curren
         location=location,
         trainerName=conference.trainerName,
         confirmationStatus="Confirmed" if attendance_completed else "Not Confirmed",
-        started=True,
+        started=started,
+        startsAt=start_at.strftime("%d %b %Y, %I:%M %p") if start_at and not started else None,
         admitted=checked_in,
         attendanceStatus=attendance_status,
         # On-device proctoring lockout (post-test). The trainer clears it from

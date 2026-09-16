@@ -21,6 +21,10 @@ export type LiveQuizControls = {
   onStopTimer: () => void;
   onLeaderboard: () => void;
   onLobby: () => void;
+  broadcastingQuestionId?: number | null;
+  stoppingTimer?: boolean;
+  showingLeaderboard?: boolean;
+  showingLobby?: boolean;
 };
 
 export type ProctoringStatus = {

@@ -6,6 +6,7 @@ import {
   DashboardScrollContent,
   OutsideVenueModal,
   ScheduleOverrideModal,
+  
   SessionQRModal,
   TrainerCheckInModal,
   TrainerCheckOutModal,
@@ -13,6 +14,7 @@ import {
 } from "@/components/session_dashboard/dashboard-screen";
 import DashboardBottomNav from "@/components/trainer/dashboard/DashboardBottomNav";
 import TrainerMoreMenu from "@/components/trainer/dashboard/TrainerMoreMenu";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 export default function SessionDashboardScreen() {
   const {
@@ -47,9 +49,16 @@ export default function SessionDashboardScreen() {
     handleMarkAttendance,
     handleUnlockExam,
     handleStartModule,
+    startingModuleKey,
     handleStopActiveModule,
+    confirmEndModuleOpen,
+    cancelStopActiveModule,
+    confirmStopActiveModule,
     handleRestartModule,
+    restartingModuleKey,
     handleEndSession,
+    pendingModuleLabel,
+    dismissPendingModuleNotice,
     liveQuizControls,
     handleBottomNavSelect,
     isSessionClosed,
@@ -90,8 +99,10 @@ export default function SessionDashboardScreen() {
         refreshing={refreshing}
         onRefresh={() => loadData("refresh")}
         onStartModule={handleStartModule}
+        startingModuleKey={startingModuleKey}
         onStopActiveModule={handleStopActiveModule}
         onRestartModule={handleRestartModule}
+        restartingModuleKey={restartingModuleKey}
         onMarkAttendance={handleMarkAttendance}
         onUnlockExam={handleUnlockExam}
         liveQuizControls={liveQuizControls}
@@ -126,6 +137,28 @@ export default function SessionDashboardScreen() {
         submitting={endingSession}
         onClose={() => setShowCheckOutModal(false)}
         onConfirm={handleConfirmEndSession}
+      />
+
+      <ConfirmModal
+        visible={confirmEndModuleOpen}
+        icon="stop-circle-outline"
+        tone="danger"
+        title="End Module?"
+        message="Do you want to end this module?"
+        onCancel={cancelStopActiveModule}
+        onConfirm={confirmStopActiveModule}
+      />
+
+      <ConfirmModal
+        visible={pendingModuleLabel != null}
+        icon="alert-circle-outline"
+        tone="warning"
+        title="Modules Still Pending"
+        message={`"${pendingModuleLabel}" hasn't finished yet. Please end/complete every module before ending the session.`}
+        singleAction
+        confirmText="Got it"
+        onCancel={dismissPendingModuleNotice}
+        onConfirm={dismissPendingModuleNotice}
       />
     </SafeAreaView>
   );

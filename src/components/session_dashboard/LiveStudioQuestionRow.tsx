@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -10,11 +10,21 @@ type Props = {
   /** Seconds left on this question's timer - only passed for the active one. */
   secondsLeft?: number;
   onBroadcast: (questionId: number) => void;
+  isBroadcasting?: boolean;
+  anyBroadcasting?: boolean;
 };
 
-export default function LiveStudioQuestionRow({ question: q, secondsLeft, onBroadcast }: Props) {
+export default function LiveStudioQuestionRow({
+  question: q,
+  secondsLeft,
+  onBroadcast,
+  isBroadcasting = false,
+  anyBroadcasting = false,
+}: Props) {
+  const isButtonDisabled = q.isActive || isBroadcasting || anyBroadcasting;
+
   return (
-    <View style={[styles.row, q.isActive && styles.rowActive]}>
+    <View style={[styles.row, q.isActive && styles.rowActive, isBroadcasting && styles.rowBroadcasting]}>
       <View style={styles.badgesCol}>
         <View style={styles.numPill}>
           <AppText style={styles.numText}>{q.qNumber}</AppText>
@@ -33,11 +43,26 @@ export default function LiveStudioQuestionRow({ question: q, secondsLeft, onBroa
       </View>
 
       <Pressable
-        style={[styles.broadcastBtn, q.isActive && styles.broadcastBtnActive]}
+        style={[
+          styles.broadcastBtn,
+          q.isActive && styles.broadcastBtnActive,
+          isBroadcasting && styles.broadcastBtnLoading,
+          !q.isActive && !isBroadcasting && anyBroadcasting && styles.broadcastBtnDisabled,
+        ]}
+        disabled={isButtonDisabled}
         onPress={() => onBroadcast(q.id)}
       >
-        <Ionicons name={q.isActive ? "radio" : "play"} size={10} color={Colors.white} />
-        <AppText style={styles.broadcastBtnText}>{q.isActive ? "Live" : "Broadcast"}</AppText>
+        {isBroadcasting ? (
+          <>
+            <ActivityIndicator size="small" color={Colors.white} style={styles.spinner} />
+            <AppText style={styles.broadcastBtnText}>Broadcasting...</AppText>
+          </>
+        ) : (
+          <>
+            <Ionicons name={q.isActive ? "radio" : "play"} size={10} color={Colors.white} />
+            <AppText style={styles.broadcastBtnText}>{q.isActive ? "Live" : "Broadcast"}</AppText>
+          </>
+        )}
       </Pressable>
     </View>
   );
@@ -55,6 +80,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   rowActive: { borderColor: "#10B981", backgroundColor: "#F0FDF4" },
+  rowBroadcasting: { borderColor: "#60A5FA", backgroundColor: "#EFF6FF" },
   badgesCol: { gap: 2, alignItems: "flex-start" },
   numPill: { backgroundColor: "#1F2937", paddingHorizontal: 4, paddingVertical: 1.5, borderRadius: 4 },
   numText: { fontSize: 8, fontWeight: "800", color: Colors.white },
@@ -83,5 +109,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   broadcastBtnActive: { backgroundColor: "#10B981" },
+  broadcastBtnLoading: { backgroundColor: "#2563EB", paddingHorizontal: 7 },
+  broadcastBtnDisabled: { opacity: 0.45 },
   broadcastBtnText: { fontSize: 8.5, fontWeight: "700", color: Colors.white },
+  spinner: { transform: [{ scale: 0.7 }], marginHorizontal: -2 },
 });

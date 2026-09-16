@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker, { DateTimePickerAndroid } from "@react-native-community/datetimepicker";
 
 import AppText from "@/components/ui/AppText";
+import LightTimePickerModal from "@/components/ui/LightTimePickerModal";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { FontWeight } from "@/theme/fontWeight";
@@ -40,9 +41,14 @@ export function DateTimeField({
   maximumDate?: Date;
 }) {
   const [showPicker, setShowPicker] = useState(false);
+  const [showLightTimePicker, setShowLightTimePicker] = useState(false);
 
   const open = () => {
     if (disabled) return;
+    if (mode === "time") {
+      setShowLightTimePicker(true);
+      return;
+    }
     if (Platform.OS === "android") {
       DateTimePickerAndroid.open({
         value: new Date(),
@@ -51,7 +57,7 @@ export function DateTimeField({
         minimumDate,
         maximumDate,
         onChange: (_event, selected) => {
-          if (selected) onChange(mode === "date" ? formatDate(selected) : formatTime(selected));
+          if (selected) onChange(formatDate(selected));
         },
       });
     } else {
@@ -93,16 +99,27 @@ export function DateTimeField({
         )}
       </Pressable>
 
-      {Platform.OS === "ios" && showPicker && (
+      {mode === "time" && (
+        <LightTimePickerModal
+          visible={showLightTimePicker}
+          title={label || "Select Time"}
+          value={value}
+          onConfirm={onChange}
+          onClose={() => setShowLightTimePicker(false)}
+        />
+      )}
+
+      {Platform.OS === "ios" && showPicker && mode === "date" && (
         <View style={styles.inlinePicker}>
           <DateTimePicker
             value={new Date()}
-            mode={mode}
+            mode="date"
             display="spinner"
+            themeVariant="light"
             minimumDate={minimumDate}
             maximumDate={maximumDate}
             onChange={(_event, selected) => {
-              if (selected) onChange(mode === "date" ? formatDate(selected) : formatTime(selected));
+              if (selected) onChange(formatDate(selected));
             }}
           />
           <Pressable style={styles.doneButton} onPress={() => setShowPicker(false)}>

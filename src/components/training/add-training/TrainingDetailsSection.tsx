@@ -29,7 +29,13 @@ export function TrainingDetailsSection({ form }: { form: AddTrainingForm }) {
       <SectionTitle index={3} title="Training Details" icon="people-outline" />
       <Pressable style={styles.toggleRow} onPress={() => form.toggleResidential(!form.isResidential)}>
         <AppText style={styles.toggleLabel}>Is this an Residential Program ?</AppText>
-        <Switch value={form.isResidential} onValueChange={form.toggleResidential} trackColor={{ true: Colors.mainColour1 }} />
+        <Switch
+          value={form.isResidential}
+          onValueChange={form.toggleResidential}
+          trackColor={{ false: "#D1D5DB", true: Colors.mainColour1 }}
+          thumbColor={form.isResidential ? Colors.white : "#9CA3AF"}
+          ios_backgroundColor="#D1D5DB"
+        />
       </Pressable>
 
       <DateTimeField

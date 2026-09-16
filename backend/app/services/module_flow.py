@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -33,6 +33,10 @@ _MODULE_TIME_RANGE = {
     "SURVEY": ("survey", "startTime", "endTime"),
 }
 _CANONICAL_INDEX = {key: i for i, key in enumerate(MODULE_SEQUENCE)}
+
+# How late auto_advance_if_due() is allowed to fire past a module's
+# scheduled start before giving up and leaving it to a manual Start instead.
+AUTO_ADVANCE_WINDOW = timedelta(minutes=5)
 
 __all__ = [
     "MODULE_LABELS",
@@ -184,7 +188,16 @@ def auto_advance_if_due(db: Session, conference: Conference) -> bool:
     # venue clock, not the host's naive wall clock. On the UTC-hosted Render
     # server, using datetime.now() here left an auto-advance-due module stuck
     # for up to ~5h30m after it was actually due.
-    if start_at is None or ist_now() < start_at:
+    if start_at is None:
+        return False
+    now = ist_now()
+    if now < start_at:
+        return False
+    # Auto-start only fires within a tight window of the scheduled time - if
+    # the previous module ran long and this module's slot has already
+    # passed by more than that, it falls back to a manual Start instead of
+    # silently kicking off late (e.g. after a multi-hour delay).
+    if now - start_at > AUTO_ADVANCE_WINDOW:
         return False
 
     # Atomic claim: two concurrent pollers (a trainee's get_current_session

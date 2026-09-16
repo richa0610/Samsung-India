@@ -46,6 +46,8 @@ export default function TrainerProfileScreen() {
       router.replace("/trainer_dashboard");
     } else if (tab === "plan") {
       router.push("/sessions");
+    } else if (tab === "today") {
+      router.push({ pathname: "/sessions", params: { tab: "today" } });
     } else if (tab === "more") {
       setMoreOpen(true);
     }

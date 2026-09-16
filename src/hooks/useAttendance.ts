@@ -34,7 +34,7 @@ async function submitCheckIn(token: string, conferenceUid: string): Promise<Atte
 }
 
 export function useAttendance(conferenceUid?: string) {
-  const { token } = useAuth();
+  const { token, trainee } = useAuth();
   const [status, setStatus] = useState<AttendanceStatus>("checking-in");
   const [markedOn, setMarkedOn] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -87,8 +87,8 @@ export function useAttendance(conferenceUid?: string) {
   }, [token, conferenceUid]);
 
   const confirmAttendanceRecorded = useCallback(() => {
-    setSessionFlowState("ATTENDANCE_RECORDED");
-  }, []);
+    setSessionFlowState("ATTENDANCE_RECORDED", conferenceUid, trainee?.traineeUid);
+  }, [conferenceUid, trainee?.traineeUid]);
 
   return {
     status,

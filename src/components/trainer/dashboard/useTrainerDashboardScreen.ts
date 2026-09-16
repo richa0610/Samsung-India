@@ -23,7 +23,9 @@ const EMPTY_STATS: DashboardStats = {
   pendingPercentage: 0,
 };
 
-export type TrainerDashboardTab = "home" | "plan" | "profile" | "more";
+import { DashboardTab } from "./DashboardBottomNav";
+
+export type TrainerDashboardTab = DashboardTab;
 
 export function useTrainerDashboardScreen() {
   const router = useRouter();
@@ -164,6 +166,8 @@ export function useTrainerDashboardScreen() {
             }
           : "/sessions",
       );
+    } else if (tab === "today") {
+      router.push({ pathname: "/sessions", params: { tab: "today" } });
     } else if (tab === "profile") {
       router.push("/trainer_profile");
     } else if (tab === "more") {

@@ -7,16 +7,20 @@ import ExecutionFlowRow from "./ExecutionFlowRow";
 type ExecutionFlowModuleListProps = {
   modules: ExecutionFlowItem[];
   onRestart?: (moduleKey: string) => void;
+  restartingModuleKey?: string | null;
   onViewTopPerformers?: (moduleKey: string) => void;
   onStart?: (moduleKey: string) => void;
+  startingModuleKey?: string | null;
   hasStarted?: boolean;
 };
 
 export default function ExecutionFlowModuleList({
   modules,
   onRestart,
+  restartingModuleKey,
   onViewTopPerformers,
   onStart,
+  startingModuleKey,
   hasStarted = true,
 }: ExecutionFlowModuleListProps) {
   if (modules.length === 0) {
@@ -33,6 +37,9 @@ export default function ExecutionFlowModuleList({
           onRestart={onRestart}
           onViewTopPerformers={onViewTopPerformers}
           onStart={onStart}
+          isStarting={startingModuleKey === item.moduleKey}
+          anyStarting={startingModuleKey != null}
+          isRestarting={restartingModuleKey === item.moduleKey}
         />
       ))}
     </View>

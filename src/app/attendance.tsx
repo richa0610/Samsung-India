@@ -5,9 +5,11 @@ import AttendanceCheckingInView from "@/components/attendance/AttendanceChecking
 import AttendanceErrorView from "@/components/attendance/AttendanceErrorView";
 import { setSessionFlowState } from "@/api/session";
 import { useAttendance } from "@/hooks/useAttendance";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function AttendanceScreen() {
   const router = useRouter();
+  const { trainee } = useAuth();
   const params = useLocalSearchParams<{
     conferenceUid: string;
     title?: string;
@@ -22,7 +24,12 @@ export default function AttendanceScreen() {
     confirmAttendanceRecorded();
     router.replace({
       pathname: "/session_detail",
-      params: { flow: "ATTENDANCE_RECORDED", attendance: "completed" },
+      params: {
+        flow: "ATTENDANCE_RECORDED",
+        attendance: "completed",
+        conferenceUid: params.conferenceUid,
+        traineeUid: trainee?.traineeUid,
+      },
     });
   };
 
@@ -60,10 +67,15 @@ export default function AttendanceScreen() {
       ]}
       onContinue={handleNavigateToSession}
       onHome={() => {
-        setSessionFlowState("CAMERA_VERIFIED");
+        setSessionFlowState("CAMERA_VERIFIED", params.conferenceUid, trainee?.traineeUid);
         router.replace({
           pathname: "/session_detail",
-          params: { flow: "CAMERA_VERIFIED", checkIn: "verified" },
+          params: {
+            flow: "CAMERA_VERIFIED",
+            checkIn: "verified",
+            conferenceUid: params.conferenceUid,
+            traineeUid: trainee?.traineeUid,
+          },
         });
       }}
     />
