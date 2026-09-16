@@ -1,117 +1,25 @@
-import { useCallback, useState } from "react";
-import { ActivityIndicator, Image, ImageSourcePropType, Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
-import CheckCircle from "@/assets/images/svg/check_circle.svg";
 
-import AppButton from "@/components/ui/AppButton";
-import AppText from "@/components/ui/AppText";
 import SecurityFooter from "@/components/common/SecurityFooter";
+import { JoinSessionCard, SessionHero, useSessionScreen } from "@/components/session/join";
 import { Colors } from "@/theme/colors";
-import { Fonts } from "@/theme/fonts";
-import { useAuth } from "@/hooks/useAuth";
-import { CurrentSession, getCurrentSession } from "@/api/session";
-
-const AVATAR_BY_GENDER: Record<string, ImageSourcePropType> = {
-  male: require("@/assets/images/user_img/default_male.png"),
-  female: require("@/assets/images/user_img/default_female.png"),
-};
-const DEFAULT_AVATAR: ImageSourcePropType = require("@/assets/images/user_img/default.png");
 
 export default function SessionScreen() {
-  const router = useRouter();
-  const { trainee, token, logout } = useAuth();
-  const avatar = AVATAR_BY_GENDER[trainee?.gender?.toLowerCase() ?? ""] ?? DEFAULT_AVATAR;
-
-  const [session, setSession] = useState<CurrentSession | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const details = [
-    ["SUPERVISOR", trainee?.supervisorName || "N/A"],
-    ["DESIGNATION", trainee?.designation || "N/A"],
-    ["CITY", trainee?.district || "N/A"],
-    ["COMPANY ID", trainee?.employee_id || "N/A"],
-  ];
-
-  const loadSession = useCallback(async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const data = await getCurrentSession(token);
-      setSession(data);
-    } catch {
-      // No trainer session assigned yet (e.g. 404) - fall back to the
-      // "not assigned" notice below instead of surfacing an error.
-      setSession(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  // Re-check every time this screen regains focus so a session that just
-  // got approved/started shows up without needing to log out and back in.
-  useFocusEffect(
-    useCallback(() => {
-      loadSession();
-    }, [loadSession])
-  );
-
-  const notice = !session
-    ? "You are registered but not assigned to this session"
-    : !session.started
-    ? `Session with ${session.trainerName || "your trainer"} starts ${session.startsAt || "soon"}`
-    : `Session with ${session.trainerName || "your trainer"} is live now`;
-
-  const handleLogout = () => {
-    logout();
-    router.back();
-  };
+  const { trainee, avatar, loading, notice, details, handleLogout, handleJoinSession } = useSessionScreen();
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.hero}>
-        <Image
-          source={avatar}
-          style={styles.avatar}
-        />
-        <AppText style={styles.name} color={Colors.white} weight="500">
-          {trainee?.name || "Trainee"}
-        </AppText>
-        <AppText style={styles.phone} color={Colors.white}>{trainee?.phone || ""}</AppText>
-      </View>
+      <SessionHero avatar={avatar} name={trainee?.name || "Trainee"} phone={String(trainee?.phone || "")} />
 
       <View style={styles.content}>
-        <View style={styles.card}>
-          <View style={styles.details}>
-            {details.map(([label, value]) => (
-              <View key={label} style={styles.detail}>
-                <AppText style={styles.label}>{label}</AppText>
-                <AppText style={styles.value} weight="700">{value}</AppText>
-              </View>
-            ))}
-          </View>
-
-          <View style={styles.notice}>
-            {loading ? (
-              <ActivityIndicator size="small" color={Colors.mainColour1} />
-            ) : (
-              <Ionicons name="information-circle-outline" size={14} color="#3D3D3D" />
-            )}
-            <AppText style={styles.noticeText}>{loading ? "Checking for your session…" : notice}</AppText>
-          </View>
-
-          <AppButton
-            title="Join Session"
-            onPress={() => router.push("/session_detail")}
-            leftIcon={<CheckCircle width={Fonts.bodyLg} height={Fonts.bodyLg} />}
-            buttonStyle={styles.joinButton}
-          />
-
-          <Pressable onPress={handleLogout} hitSlop={8}>
-            <AppText style={styles.logout}>Not you ? Logout</AppText>
-          </Pressable>
-        </View>
+        <JoinSessionCard
+          details={details}
+          loading={loading}
+          notice={notice}
+          onJoin={handleJoinSession}
+          onLogout={handleLogout}
+        />
 
         <View style={styles.footer}>
           <SecurityFooter />
@@ -123,50 +31,11 @@ export default function SessionScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  hero: {
-    height: "45%",
-    backgroundColor: Colors.mainColour1,
-    alignItems: "center",
-    paddingTop: "20%",
-    borderTopLeftRadius: Fonts.br,
-    borderTopRightRadius: Fonts.br,
-  },
-  avatar: { width: Fonts.profileIconSize, height: Fonts.profileIconSize, marginBottom: 12 },
-  name: { fontSize: Fonts.h2 },
-  phone: {
-    fontSize: Fonts.body,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 2,
-    marginTop: 3,
-  },
   content: {
     flex: 1,
     alignItems: "center",
     paddingHorizontal: 16,
     width: "100%",
   },
-  card: {
-    width: "100%",
-    maxWidth: 440,
-    backgroundColor: Colors.white,
-    borderRadius: 27,
-    padding: 24,
-    marginTop: "-10%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  details: { flexDirection: "row", flexWrap: "wrap", rowGap: 20 },
-  detail: { width: "50%" },
-  label: { fontSize: Fonts.bodySm, color: "#505050", marginBottom: 6 },
-  value: { fontSize: Fonts.body, color: "#303030" },
-  notice: { flexDirection: "row", alignItems: "center", marginTop: 26, marginBottom: 13 },
-  noticeText: { flex: 1, fontSize: Fonts.caption, color: "#3D3D3D", marginLeft: 4 },
-  joinButton: { height: 40, borderRadius: 8 },
-  logout: { marginTop: 14, textAlign: "center", textDecorationLine: "underline", fontSize: Fonts.bodySm, color: "#4D4D4D" },
   footer: { marginTop: 36 },
 });

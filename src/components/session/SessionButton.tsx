@@ -1,40 +1,56 @@
 import React from "react";
-import { Pressable, StyleSheet } from "react-native";
+import { Platform, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
-import { Fonts } from "@/theme/fonts";
-import { FontWeight } from "@/theme/fontWeight";
+import { FontWeight } from "@/theme/typography";
 
 type SessionButtonProps = {
   title: string;
   onPress: () => void;
-  backgroundColor: string;
+  backgroundColor?: string;
   icon?: keyof typeof Ionicons.glyphMap;
 };
 
 export default function SessionButton({
   title,
   onPress,
-  backgroundColor,
+  backgroundColor = Colors.headerBlue,
   icon,
 }: SessionButtonProps) {
+  const handlePress = () => {
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      (document.activeElement as HTMLElement)?.blur?.();
+      setTimeout(onPress, 10);
+    } else {
+      onPress();
+    }
+  };
+
   return (
     <Pressable
-      onPress={onPress}
-      style={[
+      onPress={handlePress}
+      style={({ pressed }) => [
         styles.button,
-        {
-          backgroundColor,
-        },
+        { backgroundColor },
+        pressed && styles.buttonPressed,
       ]}
+      accessibilityRole="button"
+      accessibilityLabel={title}
     >
-      {icon && <Ionicons name={icon} size={16} color={Colors.white} style={styles.icon} />}
+      {icon && (
+        <Ionicons
+          name={icon}
+          size={18}
+          color={Colors.white}
+          style={styles.icon}
+        />
+      )}
       <AppText
-        style={styles.text}
+        variant="bodySmall"
         color={Colors.white}
-        weight={FontWeight.medium}
+        weight={FontWeight.bold}
       >
         {title}
       </AppText>
@@ -44,18 +60,19 @@ export default function SessionButton({
 
 const styles = StyleSheet.create({
   button: {
-    borderRadius: 4,
+    borderRadius: 8,
+    height: 42,
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 7,
-    paddingVertical:2,
+    marginTop: 12,
+    paddingHorizontal: 16,
+  },
+  buttonPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.99 }],
   },
   icon: {
     marginRight: 6,
-  },
-
-  text: {
-    fontSize: Fonts.body,
   },
 });

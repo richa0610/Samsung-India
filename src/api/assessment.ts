@@ -1,4 +1,6 @@
+import { USE_MOCK_DATA } from "@/config/dataSource";
 import { apiRequest } from "./client";
+import * as mock from "./mockService";
 
 export type AssessmentQuestion = {
   id: number;
@@ -6,7 +8,10 @@ export type AssessmentQuestion = {
   question_type: string;
   sort_order: number;
   options: { id: string; text: string }[];
+  correctAnswer?: string | null;
+  explanation?: string | null;
 };
+
 
 export type AssessmentAnswer = {
   questionId: number;
@@ -28,6 +33,7 @@ export type AssessmentQuestionsResponse = {
 };
 
 export function getAssessmentQuestions(token: string, suiteUid: string) {
+  if (USE_MOCK_DATA) return mock.getAssessmentQuestions(token, suiteUid);
   return apiRequest<AssessmentQuestionsResponse>(`/assessments/${suiteUid}/questions`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -39,6 +45,7 @@ export function submitAssessment(
   conferenceUid: string,
   answers: AssessmentAnswer[]
 ) {
+  if (USE_MOCK_DATA) return mock.submitAssessment(token, suiteUid, conferenceUid, answers);
   return apiRequest<AssessmentResult>(`/assessments/${suiteUid}/submit`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
@@ -46,4 +53,9 @@ export function submitAssessment(
   });
 }
 
-export { ApiError } from "./client";
+// No real backend endpoint yet - callers already treat failures as
+// non-fatal (see usePostTest.ts's handleViolationTermination).
+export { terminateAssessmentWithViolation } from "@/api/mockService";
+export { ApiError } from "@/api/client";
+
+

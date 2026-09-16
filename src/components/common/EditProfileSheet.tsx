@@ -16,9 +16,8 @@ type EditProfileSheetProps = {
 };
 
 export default function EditProfileSheet({ visible, onClose }: EditProfileSheetProps) {
-  const { control, errors, setValue, onSubmit, loading, error } = useEditProfileForm({
-    onSuccess: onClose,
-  });
+  const { control, errors, setValue, onSubmit, loading, error, lockedFields } =
+    useEditProfileForm({ onSuccess: onClose });
 
   return (
     <AppModal
@@ -33,8 +32,13 @@ export default function EditProfileSheet({ visible, onClose }: EditProfileSheetP
       <View style={styles.divider} />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.formContent}>
-        <PersonalDetails control={control} errors={errors} />
-        <ProfessionalDetails control={control} setValue={setValue} errors={errors} />
+        <PersonalDetails control={control} errors={errors} lockedFields={lockedFields} />
+        <ProfessionalDetails
+          control={control}
+          setValue={setValue}
+          errors={errors}
+          lockedFields={lockedFields}
+        />
 
         {error && <AppText style={styles.error}>{error}</AppText>}
 

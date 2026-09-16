@@ -7,5 +7,8 @@ export const Radius = {
   xl: 10,
   xxl: 12,
   xxxl: 16,
+  card: 14,
+  nav: 24,
+  header: 28,
   pill: 9999,
 } as const;

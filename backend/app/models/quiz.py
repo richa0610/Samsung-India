@@ -1,33 +1,48 @@
-import uuid
-
 from sqlalchemy import Column, DateTime, Integer, Numeric, String, Text, text
 from sqlalchemy.sql import func
 
-from app.database.database import Base
+from app.database.connection import Base
 
 
 class AssessmentSuite(Base):
-    """Mirrors the `assessmentsuite` table - a quiz/test/survey container."""
+    """Mirrors the `assessmentsuite` table from mmtbtwob_tops — a quiz/test/survey
+    container. Now includes courseUid linkage and theme JSON blob."""
 
     __tablename__ = "assessmentsuite"
 
     id = Column(Integer, primary_key=True, index=True)
     assessmentSuiteUid = Column(String(100), unique=True)
+    courseUid = Column(String(100))
     courseName = Column(String(100))
     examTitle = Column(Text)
     description = Column(Text)
     assessment_type = Column(String(50), server_default=text("'Quiz'"))
-    # JSON blob, e.g. {"type": "Quiz" | "Test" | "Survey"} - the format
-    # dropdown in the builder, distinct from assessment_type (which is the
-    # topic/category dropdown, e.g. "POST TEST").
+    # JSON blob: Global Quiz Settings (Shuffle, Progress Bar, etc.)
     settings = Column(Text)
+    # JSON blob: Theme Colors, Fonts, Backgrounds
+    theme = Column(Text)
     noOfQuestion = Column(Integer, server_default=text("0"))
     testTime = Column(String(50))
     status = Column(String(50), nullable=False, server_default=text("'Pending'"))
 
+    # Upload tracking
+    filePath = Column(String(100))
+    logPath = Column(String(100))
+    excelUploadedOn = Column(String(100))
+
+    # Audit
+    updatedBy = Column(String(100))
+    updationOn = Column(DateTime, onupdate=func.now())
+    isRead = Column(String(100))
+    token = Column(String(100))
+    timestamp = Column(DateTime, server_default=func.now(), nullable=False)
+    remarks = Column(Text)
+    securityDetails = Column(Text)
+    masterRemarks = Column(Text)
+
 
 class Question(Base):
-    """Mirrors the `questions` table - the question bank, linked to a suite
+    """Mirrors the `questions` table — the question bank, linked to a suite
     via `assessmentSuiteUid`."""
 
     __tablename__ = "questions"
@@ -47,32 +62,60 @@ class Question(Base):
     settings = Column(Text)
     status = Column(String(50), nullable=False, server_default=text("'Approved'"))
 
+    # Upload tracking
+    filePath = Column(String(100))
+    logPath = Column(String(100))
+    excelUploadedOn = Column(String(100))
+
+    # Audit
+    updatedBy = Column(String(100))
+    updationOn = Column(DateTime, onupdate=func.now())
+    token = Column(String(100))
+    timestamp = Column(DateTime, server_default=func.now(), nullable=False)
+    remarks = Column(Text)
+    masterRemarks = Column(Text)
+
 
 class Assessment(Base):
-    """Mirrors the `assessment` table - a trainee's single answer submission
+    """Mirrors the `assessment` table — a trainee's single answer submission
     for one question."""
 
     __tablename__ = "assessment"
 
     id = Column(Integer, primary_key=True, index=True)
-    assessmentUid = Column(String(100), default=lambda: uuid.uuid4().hex)
+    assessmentUid = Column(String(100))
     assessmentSuiteUid = Column(String(100), index=True)
     conferenceUid = Column(String(100), index=True)
     traineeUid = Column(String(100), index=True)
     questionId = Column(String(100))
     selectedOption = Column(Text)
     status = Column(String(50), nullable=False, server_default=text("'Approved'"))
+
+    # Upload tracking
+    filePath = Column(String(100))
+    logPath = Column(String(100))
+    excelUploadedOn = Column(String(100))
+
+    # Audit
+    updatedBy = Column(String(100))
+    updationOn = Column(DateTime, onupdate=func.now())
+    isRead = Column(String(100))
+    token = Column(String(100))
     timestamp = Column(DateTime, server_default=func.now(), nullable=False)
+    remarks = Column(Text)
+    securityDetails = Column(Text)
+    masterRemarks = Column(Text)
 
 
 class AssessmentResult(Base):
-    """Mirrors the `assessment_results` table - per-attempt scoring summary,
-    the source table for leaderboards."""
+    """Mirrors the `assessment_results` table — per-attempt scoring summary,
+    the source table for leaderboards. Now includes answersSnapshot JSON
+    and device/IP audit columns."""
 
     __tablename__ = "assessment_results"
 
     id = Column(Integer, primary_key=True, index=True)
-    resultUid = Column(String(50), default=lambda: uuid.uuid4().hex)
+    resultUid = Column(String(50))
     conferenceUid = Column(String(50), index=True)
     traineeUid = Column(String(50), index=True)
     assessmentSuiteUid = Column(String(50), index=True)
@@ -84,4 +127,9 @@ class AssessmentResult(Base):
     submittedAt = Column(DateTime)
     durationSeconds = Column(Integer, server_default=text("0"))
     status = Column(String(20), server_default=text("'Started'"))
+    # JSON dump of all answers for quick viewing / replay
+    answersSnapshot = Column(Text)
+    # Network & device audit
+    ipAddress = Column(String(45))
+    deviceInfo = Column(String(255))
     timestamp = Column(DateTime, server_default=func.now(), nullable=False)

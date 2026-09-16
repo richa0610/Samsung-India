@@ -1,0 +1,175 @@
+from datetime import datetime
+
+from fastapi import BackgroundTasks, UploadFile
+from sqlalchemy.orm import Session
+
+from app.core.config import settings
+from app.core.exceptions import not_found
+from app.core.media import media_subdir
+from app.models.attendance import Attendance
+from app.models.conference import Conference
+from app.models.trainee import Trainee
+from app.repositories import attendance_repository, conference_repository
+from app.routers.ws import manager as ws_manager
+from app.schemas.attendance import AttendanceOut, CheckInRequest, VerifyLocationOut, VerifyLocationRequest
+from app.services.module_flow import mark_checkout_if_last_module
+from app.utils.helpers import distance_meters
+from app.utils.validators import validate_image_upload
+
+
+def _clear_existing_if_retest_allowed(db: Session, conference_uid: str, trainee_uid: str) -> Attendance | None:
+    existing = attendance_repository.get_for_conference_and_trainee(db, conference_uid, trainee_uid)
+    if existing and settings.ALLOW_ATTENDANCE_RETEST:
+        attendance_repository.delete(db, existing)
+        return None
+    return existing
+
+
+def _promote_if_pending(db: Session, existing: Attendance, conference: Conference | None) -> AttendanceOut:
+    """A trainee who joined via QR/link already has a "Pending" attendance
+    row (see session_service.join_session) - check-in flips it to Present
+    rather than being a no-op."""
+    if existing.status != "Present":
+        existing.status = "Present"
+        existing.markedOn = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if conference:
+        mark_checkout_if_last_module(db, conference, existing.traineeUid, "ATTENDANCE")
+    attendance_repository.save(db)
+    return AttendanceOut(status=existing.status, markedOn=existing.markedOn)
+
+
+def check_in(db: Session, trainee: Trainee, payload: CheckInRequest, background_tasks: BackgroundTasks) -> AttendanceOut:
+    conference = conference_repository.get_by_uid(db, payload.conferenceUid)
+
+    existing = _clear_existing_if_retest_allowed(db, payload.conferenceUid, trainee.traineeUid)
+    if existing:
+        return _promote_if_pending(db, existing, conference)
+
+    attendance = attendance_repository.create(
+        db,
+        Attendance(
+            conferenceUid=payload.conferenceUid,
+            trainerUid=conference.trainerEmployeeId if conference else None,
+            traineeUid=trainee.traineeUid,
+            phone=trainee.phone,
+            markedOn=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            status="Present",
+        ),
+    )
+    # If Attendance is this session's only/last module, checking in *is*
+    # completing the last thing expected of the trainee - checkout happens
+    # right away rather than never, since nothing else will trigger it.
+    if conference:
+        mark_checkout_if_last_module(db, conference, trainee.traineeUid, "ATTENDANCE")
+        attendance_repository.save(db)
+
+    background_tasks.add_task(
+        ws_manager.send_to,
+        conference.trainerEmployeeId if conference else None,
+        {"type": "attendance_marked", "conferenceUid": payload.conferenceUid, "traineeUid": trainee.traineeUid},
+    )
+
+    return AttendanceOut(status=attendance.status, markedOn=attendance.markedOn)
+
+
+def verify_location(db: Session, payload: VerifyLocationRequest) -> VerifyLocationOut:
+    """First step of the geofenced check-in flow (see check_in_secure) - lets
+    the "Location Verified" screen show the trainee's distance from the venue
+    and whether they're inside the radius. This is only a pre-check for the UI;
+    the hard block happens server-side in check_in_secure."""
+    conference = conference_repository.get_by_uid(db, payload.conferenceUid)
+    if not conference:
+        raise not_found("Session not found")
+
+    venue_lat = float(conference.geoLatitude) if conference.geoLatitude is not None else None
+    venue_lng = float(conference.geoLongitude) if conference.geoLongitude is not None else None
+    distance = distance_meters(payload.latitude, payload.longitude, venue_lat, venue_lng)
+    radius = conference.geoRadius or 100
+
+    return VerifyLocationOut(
+        distanceMeters=distance,
+        withinRadius=(distance <= radius) if distance is not None else None,
+        radiusMeters=radius,
+        venueLabel=", ".join(filter(None, [conference.district, conference.state])) or None,
+    )
+
+
+async def check_in_secure(
+    db: Session,
+    trainee: Trainee,
+    background_tasks: BackgroundTasks,
+    conference_uid: str,
+    latitude: float,
+    longitude: float,
+    photo: UploadFile,
+) -> AttendanceOut:
+    """Geofenced check-in: captures the trainee's location and a face photo
+    alongside the usual attendance row. Used instead of `check_in` when the
+    session's attendance module has `geoFencing` enabled.
+
+    The photo is stored at attendance_photos/{conferenceUid}/{traineeUid}.{ext}
+    - one folder per conference (everyone who checked in to a given session
+    lives together, easy to browse), and the trainee's own UID as the
+    filename makes it unique per (conference, trainee) and deterministic -
+    a retake overwrites the same file instead of a random uuid4 name
+    orphaning the old one on disk forever.
+
+    Trainee already has a row for this conference (e.g. "Pending" from
+    being pre-seeded onto the roster, or already "Present" from a previous
+    attempt) - update that row in place rather than creating a duplicate.
+    Previously this branch never touched checkInPhoto/checkInDistance at
+    all: the photo was read and validated but silently discarded, so a
+    pre-assigned trainee's Secure Check-In never actually saved a photo."""
+    contents = await photo.read()
+    extension = validate_image_upload(photo.content_type, contents, size_error_detail="Photo must be 5MB or smaller")
+
+    conference = conference_repository.get_by_uid(db, conference_uid)
+
+    venue_lat = float(conference.geoLatitude) if conference and conference.geoLatitude is not None else None
+    venue_lng = float(conference.geoLongitude) if conference and conference.geoLongitude is not None else None
+    distance = distance_meters(latitude, longitude, venue_lat, venue_lng)
+    check_in_distance = f"{distance:.0f}" if distance is not None else None
+
+    photo_dir = media_subdir(f"attendance_photos/{conference_uid}")
+    filename = f"{trainee.traineeUid}.{extension}"
+    (photo_dir / filename).write_bytes(contents)
+    check_in_photo = f"attendance_photos/{conference_uid}/{filename}"
+
+    existing = _clear_existing_if_retest_allowed(db, conference_uid, trainee.traineeUid)
+    if existing:
+        existing.checkInPhoto = check_in_photo
+        existing.checkInDistance = check_in_distance
+        if existing.status != "Present":
+            existing.status = "Present"
+            existing.markedOn = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if conference:
+            mark_checkout_if_last_module(db, conference, existing.traineeUid, "ATTENDANCE")
+        attendance_repository.save(db)
+        return AttendanceOut(status=existing.status, markedOn=existing.markedOn, distanceMeters=distance)
+
+    attendance = attendance_repository.create(
+        db,
+        Attendance(
+            conferenceUid=conference_uid,
+            trainerUid=conference.trainerEmployeeId if conference else None,
+            traineeUid=trainee.traineeUid,
+            phone=trainee.phone,
+            markedOn=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            status="Present",
+            checkInDistance=check_in_distance,
+            checkInPhoto=check_in_photo,
+        ),
+    )
+    # If Attendance is this session's only/last module, checking in *is*
+    # completing the last thing expected of the trainee.
+    if conference:
+        mark_checkout_if_last_module(db, conference, trainee.traineeUid, "ATTENDANCE")
+        attendance_repository.save(db)
+
+    background_tasks.add_task(
+        ws_manager.send_to,
+        conference.trainerEmployeeId if conference else None,
+        {"type": "attendance_marked", "conferenceUid": conference_uid, "traineeUid": trainee.traineeUid},
+    )
+
+    return AttendanceOut(status=attendance.status, markedOn=attendance.markedOn, distanceMeters=distance)

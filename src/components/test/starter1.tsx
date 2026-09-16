@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { StyleSheet, View, Pressable } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { Ionicons } from "@expo/vector-icons";
 import AppCard from "@/components/ui/AppCard";
 import AuthHeader from "@/components/common/AppHeader";
 import AppText from "@/components/ui/AppText";
@@ -11,15 +10,19 @@ import AppInput from "@/components/ui/AppInput";
 import AppButton from "@/components/ui/AppButton";
 import RegisterSheet from "@/components/common/RegisterSheet";
 import SecurityFooter from "@/components/common/SecurityFooter";
-import AppFooter from "@/components/ui/AppFooter";
 // import RegisterBottomSheet from "@/components/bottom-sheet/RegisterSheet";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { ApiError, loginTrainee } from "@/api/auth";
+import { joinSession } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
+import { digitsOnly } from "@/utils/validation";
 
 export default function Starter1() {
   const router = useRouter();
+  // Present when the user got here from a scanned session QR
+  // (samsungindia://join/<code> -> join screen -> "Continue to Login").
+  const { join } = useLocalSearchParams<{ join?: string }>();
   const { setSession } = useAuth();
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -40,7 +43,20 @@ export default function Starter1() {
     try {
       const session = await loginTrainee(trimmed);
       setSession(session);
-      router.push("/session");
+      if (join) {
+        // Came from a scanned session QR - bind this trainee to that session,
+        // then land on its details screen.
+        try {
+          await joinSession(join, session.access_token);
+        } catch {
+          // Non-fatal: they still reach /session, just without the bind.
+        }
+        router.replace("/session");
+      } else {
+        // Trainees land on the live session timeline; the stats/dashboard
+        // page is a tab in the bottom nav from there.
+        router.replace("/session_detail" as any);
+      }
     } catch (err) {
       setError(
         err instanceof ApiError
@@ -60,19 +76,18 @@ export default function Starter1() {
       <SafeAreaView style={styles.container}>
         <View style={styles.content}>
           <AppCard style={styles.headert}>
-            <View style={styles.header}>
-              <AuthHeader />
-            </View>
+            <AuthHeader />
             <View style={styles.body}>
               <AppInput
                 label="Company ID / Phone No"
                 placeholder="Enter Company ID or Phone No"
                 value={phone}
                 onChangeText={(value) => {
-                  setPhone(value);
+                  setPhone(digitsOnly(value).slice(0, 10));
                   if (error) setError(null);
                 }}
-                keyboardType="phone-pad"
+                keyboardType="number-pad"
+                maxLength={10}
               />
               {error && (
                 <AppText style={styles.error}>{error}</AppText>
@@ -101,28 +116,12 @@ export default function Starter1() {
           <RegisterSheet
             visible={isRegisterOpen}
             onClose={closeRegister}
+            joinCode={join}
           />
           {/* <RegisterBottomSheet
           ref={bottomSheetRef}
         /> */}
         </View>
-        <AppFooter
-          items={[
-            {
-              key: "trainer-login",
-              label: "Trainer Login",
-              center: true,
-              icon: ({ size, color }) => (
-                <Ionicons
-                  name="school-outline"
-                  size={size}
-                  color={color}
-                />
-              ),
-              onPress: () => router.push("/trainer_login"),
-            },
-          ]}
-        />
       </SafeAreaView>
     </>
   );
@@ -135,13 +134,6 @@ const styles = StyleSheet.create({
   },
   headert: {
     width: "95%",
-  },
-  header: {
-    backgroundColor: Colors.mainColour1,
-    paddingVertical: 35,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    alignItems: "center",
   },
   body: {
     padding: 20,

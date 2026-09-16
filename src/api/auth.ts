@@ -1,4 +1,6 @@
+import { USE_MOCK_DATA } from "@/config/dataSource";
 import { apiRequest, apiUpload } from "./client";
+import * as mock from "./mockService";
 
 // Field names mirror the `trainee` table from the legacy database dump.
 export type Trainee = {
@@ -15,6 +17,10 @@ export type Trainee = {
   district: string | null;
   profilePhoto: string | null;
   status: string;
+  workZone?: string | null;
+  departmentSupport?: string | null;
+  department?: string | null;
+  sessionCode?: string | null;
 };
 
 export type AuthSession = {
@@ -36,6 +42,7 @@ export type RegisterPayload = {
 };
 
 export function registerTrainee(payload: RegisterPayload) {
+  if (USE_MOCK_DATA) return mock.registerTrainee(payload);
   return apiRequest<Trainee>("/trainees/register", {
     method: "POST",
     body: JSON.stringify({ ...payload, phone: Number(payload.phone) }),
@@ -43,6 +50,7 @@ export function registerTrainee(payload: RegisterPayload) {
 }
 
 export function loginTrainee(phone: string) {
+  if (USE_MOCK_DATA) return mock.loginTrainee(phone);
   return apiRequest<AuthSession>("/trainees/login", {
     method: "POST",
     body: JSON.stringify({ phone: Number(phone) }),
@@ -62,6 +70,7 @@ export type UpdateProfilePayload = Partial<{
 }>;
 
 export function updateTrainee(token: string, payload: UpdateProfilePayload) {
+  if (USE_MOCK_DATA) return mock.updateTrainee(token, payload);
   return apiRequest<AuthSession>("/trainees/me", {
     method: "PATCH",
     headers: { Authorization: `Bearer ${token}` },
@@ -79,6 +88,7 @@ export type PickedImage = {
 };
 
 export function uploadTraineePhoto(token: string, image: PickedImage) {
+  if (USE_MOCK_DATA) return mock.uploadTraineePhoto(token, image);
   const formData = new FormData();
   formData.append("file", {
     uri: image.uri,
