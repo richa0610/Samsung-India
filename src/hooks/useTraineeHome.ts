@@ -106,7 +106,7 @@ export function useTraineeHome() {
       if (mode !== "silent") setError(null);
 
       try {
-        const data: CurrentSession = await getCurrentSession(token);
+        const data: CurrentSession = await getCurrentSession(token, params.conferenceUid);
         // Sync the company's proctoring on/off + max-warnings settings
         // before the trainee can reach post_test - see violations.ts.
         if (data.liveProctoringEnabled !== undefined && data.proctoringMaxWarnings !== undefined) {

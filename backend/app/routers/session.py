@@ -43,11 +43,12 @@ def join_session(
 @router.get("/current", response_model=CurrentSession)
 def get_current_session(
     request: Request,
+    conference_uid: str | None = None,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
     tenant_id = get_tenant_id_from_request(request)
-    return session_service.get_current_session(db, trainee, tenant_id)
+    return session_service.get_current_session(db, trainee, tenant_id, conference_uid=conference_uid)
 
 
 @router.post("/proctoring-lock", response_model=ProctoringLockOut)

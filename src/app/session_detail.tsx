@@ -61,6 +61,7 @@ export default function SessionDetailScreen() {
           title={session?.title ?? "Training Session"}
           date={session?.date ? formatDisplayDate(session.date) : "--"}
           location={session?.location ?? "--"}
+          sessionClosed={sessionClosed}
         />
 
         <View style={styles.body}>

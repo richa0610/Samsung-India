@@ -28,6 +28,7 @@ export type TrainingSessionHeaderProps = {
   title?: string;
   date?: string;
   location?: string;
+  sessionClosed?: boolean;
 };
 
 export default function TrainingSessionHeader({
@@ -41,13 +42,21 @@ export default function TrainingSessionHeader({
   title = "Training Session",
   date = "--",
   location = "--",
+  sessionClosed = false,
 }: TrainingSessionHeaderProps) {
   const { token } = useAuth();
   const avatar: ImageSourcePropType = traineeAvatar({ gender, profilePhoto }, token);
 
+  const isCompleted =
+    sessionClosed ||
+    confirmationStatus.toLowerCase().includes("completed");
+
   const isConfirmed =
+    !isCompleted &&
     confirmationStatus.toLowerCase().includes("confirmed") &&
     !confirmationStatus.toLowerCase().includes("not");
+
+  const displayStatus = isCompleted ? "Session Completed" : confirmationStatus;
 
   return (
     <View style={styles.header}>
@@ -89,7 +98,7 @@ export default function TrainingSessionHeader({
                 style={[
                   styles.statusIndicator,
                   {
-                    backgroundColor: isConfirmed
+                    backgroundColor: isCompleted || isConfirmed
                       ? Colors.statusGreen
                       : Colors.statusYellow,
                   },
@@ -100,7 +109,7 @@ export default function TrainingSessionHeader({
                 color={Colors.white}
                 style={styles.statusText}
               >
-                {confirmationStatus}
+                {displayStatus}
               </AppText>
             </View>
           </View>
@@ -121,15 +130,19 @@ export default function TrainingSessionHeader({
         </View>
       </View>
 
-      {/* Session Type Pill */}
-      <View style={styles.sessionPill}>
-        <CalendarIcon width={13} height={13} color={Colors.headerBlue} />
+      {/* Session Type / Status Pill */}
+      <View style={[styles.sessionPill, isCompleted && styles.completedPill]}>
+        {isCompleted ? (
+          <Ionicons name="checkmark-circle" size={13} color={Colors.recordedGreen} />
+        ) : (
+          <CalendarIcon width={13} height={13} color={Colors.headerBlue} />
+        )}
         <AppText
           variant="overline"
-          color={Colors.headerBlue}
+          color={isCompleted ? Colors.recordedGreen : Colors.headerBlue}
           weight={FontWeight.bold}
         >
-          {sessionType}
+          {isCompleted ? "SESSION COMPLETED" : sessionType}
         </AppText>
       </View>
 
@@ -250,6 +263,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: Radius.pill,
+  },
+  completedPill: {
+    backgroundColor: "#E8F5E9",
   },
   sessionTitle: {
     marginTop: 10,

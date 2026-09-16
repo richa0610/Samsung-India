@@ -60,48 +60,99 @@ def _session_is_over(conference: Conference) -> bool:
     Checked in order:
 
       1. The trainer explicitly ended it (`conferenceStatus == "Completed"`).
-      2. It's actively running right now (`Ongoing`/`Live`) - never "over"
-         while live, no matter how late it started relative to its
-         originally scheduled `conferenceDate`. Schedules slip; a trainer
-         starting a session a few days late doesn't make it any less live.
-      3. Otherwise (not live, never explicitly ended) - a staleness guard,
-         covering a trainer who started it and walked away without ever
-         running End Session (it would otherwise stay "live" to trainees
-         forever - a stale QR scanned days later, etc.), or a session that
-         was scheduled but never started at all. Based on when it *actually*
-         started (`actualStartedAt`) when that's known - falling back to the
-         originally scheduled day only for a session that never started."""
+      2. Staleness guard: If the session was dated before today, it's over even
+         if the trainer walked away without hitting End Session.
+      3. It's actively running right now (`Ongoing`/`Live`).
+      4. Otherwise, not live and not completed -> over if before today."""
     if title_status(conference.conferenceStatus) == "Completed":
         return True
-    if title_status(conference.conferenceStatus) in _LIVE_STATUSES:
-        return False
+    now_date_str = datetime.now().strftime("%Y-%m-%d")
     reference_day = (
         conference.conferenceEndsOn
         or (conference.actualStartedAt.strftime("%Y-%m-%d") if conference.actualStartedAt else None)
         or conference.conferenceDate
         or ""
     ).strip()
-    return bool(reference_day) and reference_day < datetime.now().strftime("%Y-%m-%d")
+    if reference_day and reference_day < now_date_str:
+        return True
+    if title_status(conference.conferenceStatus) in _LIVE_STATUSES:
+        return False
+    return False
 
 
 def _select_current_conference(
-    db: Session, trainee: Trainee | None = None
+    db: Session, trainee: Trainee | None = None, requested_conference_uid: str | None = None
 ) -> tuple[Conference | None, bool, datetime | None]:
     """Picks which conference is "current" for the trainee app.
 
     Priority:
-      1. A live (`Ongoing`/`Live`) conference - the trainee's own trainer
-         first (set when they join a session by QR), then the demo trainer,
-         then any live one.
-      2. Otherwise an Approved (or, failing that, any) scheduled conference -
-         the trainee's trainer first, then the soonest upcoming one (or the
-         most recently due if all are overdue).
-      3. Otherwise the newest conference on record (keeps seed data with no
-         dates working).
-
-    Returns (conference, started, start_at). `started` mirrors whether the
-    chosen conference is actually live.
+      0. An explicitly requested conference UID (if valid).
+      1. A session the trainee actively attended or joined today (if completed,
+         we show it as completed so they see their final results).
+      2. A live (`Ongoing`/`Live`) conference - the trainee's own trainer
+         first, then the demo trainer, then any live one.
+      3. Otherwise an Approved scheduled conference.
+      4. Otherwise the newest conference on record.
     """
+    if requested_conference_uid:
+        req_conf = db.query(Conference).filter(Conference.conferenceUid == requested_conference_uid).first()
+        if req_conf:
+            return req_conf, req_conf.conferenceStatus in _LIVE_STATUSES and not _session_is_over(req_conf), _conference_start(req_conf)
+
+    # 1. Did the trainee actively participate in a session today?
+    if trainee:
+        latest_attendance = (
+            db.query(Attendance)
+            .filter(
+                Attendance.traineeUid == trainee.traineeUid,
+                (Attendance.status == "Present") | Attendance.markedOn.isnot(None),
+            )
+            .order_by(Attendance.id.desc())
+            .first()
+        )
+        if not latest_attendance:
+            latest_attendance = (
+                db.query(Attendance)
+                .filter(Attendance.traineeUid == trainee.traineeUid)
+                .order_by(Attendance.id.desc())
+                .first()
+            )
+        if latest_attendance and latest_attendance.conferenceUid:
+            attended_conf = (
+                db.query(Conference)
+                .filter(Conference.conferenceUid == latest_attendance.conferenceUid)
+                .first()
+            )
+            if attended_conf:
+                # If this conference is still live right now, it is unconditionally their active session
+                if attended_conf.conferenceStatus in _LIVE_STATUSES and not _session_is_over(attended_conf):
+                    return attended_conf, True, _conference_start(attended_conf)
+                # If this conference was attended today, show it so the trainee sees its final state (Completed)
+                now_str = datetime.now().strftime("%Y-%m-%d")
+                attended_today = (
+                    attended_conf.conferenceDate == now_str
+                    or (attended_conf.actualEndedAt and attended_conf.actualEndedAt.strftime("%Y-%m-%d") == now_str)
+                    or (latest_attendance.markedOn and str(latest_attendance.markedOn).startswith(now_str))
+                )
+                if attended_today:
+                    # Only override if there is an active LIVE session for this trainee right now
+                    has_live_now = False
+                    if trainee.trainerEmployeeId:
+                        newer_live = (
+                            db.query(Conference)
+                            .filter(
+                                Conference.trainerEmployeeId == trainee.trainerEmployeeId,
+                                Conference.conferenceStatus.in_(_LIVE_STATUSES),
+                            )
+                            .all()
+                        )
+                        for live_c in newer_live:
+                            if not _session_is_over(live_c):
+                                has_live_now = True
+                                break
+                    if not has_live_now:
+                        return attended_conf, False, _conference_start(attended_conf)
+
     ongoing_query = db.query(Conference).filter(
         Conference.conferenceStatus.in_(_LIVE_STATUSES)
     )
@@ -295,8 +346,17 @@ def report_proctoring_lock(
     return ProctoringLockOut(locked=True)
 
 
-def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> CurrentSession:
-    conference, started, start_at = _select_current_conference(db, trainee=trainee)
+def get_current_session(
+    db: Session,
+    trainee: Trainee,
+    tenant_id: str,
+    conference_uid: str | None = None,
+) -> CurrentSession:
+    """The trainee home screen's data payload. Resolves which session is
+    active for this trainee, its modules in flow order, their live/completed
+    status, and the trainee's attendance/admission gate.
+    """
+    conference, started, start_at = _select_current_conference(db, trainee=trainee, requested_conference_uid=conference_uid)
     if not conference:
         raise not_found("No active training session found")
 
@@ -305,28 +365,7 @@ def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> Curren
     live_proctoring_enabled, proctoring_max_warnings = get_proctoring_settings(tenant_id)
 
     location = ", ".join(filter(None, [conference.district, conference.state])) or None
-
-    # Session over (trainer ended it, or its day has passed) -> the trainee
-    # screen drops to the "session ended" state, not the module timeline.
-    # `sessionClosed` tells the app to show that, with the session's details
-    # still in the header for context. Past results stay reachable from Rank /
-    # Dashboard / history.
-    if _session_is_over(conference):
-        return CurrentSession(
-            conferenceUid=conference.conferenceUid,
-            title=conference.suiteTitle or "Training Session",
-            sessionType=conference.sessionType,
-            date=conference.conferenceDate,
-            location=location,
-            trainerName=conference.trainerName,
-            confirmationStatus="Completed",
-            started=False,
-            sessionClosed=True,
-            liveProctoringEnabled=live_proctoring_enabled,
-            proctoringMaxWarnings=proctoring_max_warnings,
-            modules=[],
-        )
-
+    is_over = _session_is_over(conference)
 
     config = _parse_session_config(conference.sessionConfig)
     # Built keyed, then emitted in `configured_modules` order (which is sorted
@@ -371,7 +410,7 @@ def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> Curren
         if _ran_seconds(key) is not None:
             return True
         # 2. The session itself has ended.
-        if conference.conferenceStatus == "Completed":
+        if is_over or conference.conferenceStatus == "Completed":
             return True
         now_date_str = datetime.now().strftime("%Y-%m-%d")
         if conference.conferenceEndsOn and str(conference.conferenceEndsOn) < now_date_str:
@@ -489,7 +528,7 @@ def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> Curren
         end_time_str = module_cfg.get("endTime")
         result = assessment_repository.get_latest_result(db, conference.conferenceUid, trainee.traineeUid, suite_uid)
         completed = result is not None
-        live = not completed and conference.activeModuleId == key
+        live = not is_over and not completed and conference.activeModuleId == key
 
         module_by_key[key] = SessionModule(
             key=key,
@@ -520,9 +559,10 @@ def get_current_session(db: Session, trainee: Trainee, tenant_id: str) -> Curren
         date=conference.conferenceDate,
         location=location,
         trainerName=conference.trainerName,
-        confirmationStatus="Confirmed" if attendance_completed else "Not Confirmed",
-        started=started,
-        startsAt=start_at.strftime("%d %b %Y, %I:%M %p") if start_at and not started else None,
+        confirmationStatus="Completed" if is_over else ("Confirmed" if attendance_completed else "Not Confirmed"),
+        started=False if is_over else started,
+        sessionClosed=is_over,
+        startsAt=start_at.strftime("%d %b %Y, %I:%M %p") if start_at and not started and not is_over else None,
         admitted=checked_in,
         attendanceStatus=attendance_status,
         # On-device proctoring lockout (post-test). The trainer clears it from

@@ -72,9 +72,10 @@ export type CurrentSession = {
   modules: SessionModule[];
 };
 
-export function getCurrentSession(token: string) {
+export function getCurrentSession(token: string, conferenceUid?: string) {
   if (USE_MOCK_DATA) return mock.getCurrentSession(token);
-  return apiRequest<CurrentSession>("/sessions/current", {
+  const query = conferenceUid ? `?conference_uid=${encodeURIComponent(conferenceUid)}` : "";
+  return apiRequest<CurrentSession>(`/sessions/current${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
