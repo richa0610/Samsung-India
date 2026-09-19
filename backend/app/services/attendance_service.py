@@ -12,6 +12,7 @@ from app.models.trainee import Trainee
 from app.repositories import attendance_repository, conference_repository
 from app.routers.ws import manager as ws_manager
 from app.schemas.attendance import AttendanceOut, CheckInRequest, VerifyLocationOut, VerifyLocationRequest
+from app.services.activity_log_service import log_activity
 from app.services.module_flow import mark_checkout_if_last_module
 from app.utils.helpers import distance_meters
 from app.utils.validators import validate_image_upload
@@ -35,6 +36,9 @@ def _promote_if_pending(db: Session, existing: Attendance, conference: Conferenc
     if conference:
         mark_checkout_if_last_module(db, conference, existing.traineeUid, "ATTENDANCE")
     attendance_repository.save(db)
+    log_activity(
+        db, action="CHECK_IN", username=existing.traineeUid, role="trainee", remarks=f"Checked in to {existing.conferenceUid}"
+    )
     return AttendanceOut(status=existing.status, markedOn=existing.markedOn)
 
 
@@ -67,6 +71,10 @@ def check_in(db: Session, trainee: Trainee, payload: CheckInRequest, background_
         ws_manager.send_to,
         conference.trainerEmployeeId if conference else None,
         {"type": "attendance_marked", "conferenceUid": payload.conferenceUid, "traineeUid": trainee.traineeUid},
+    )
+
+    log_activity(
+        db, action="CHECK_IN", username=trainee.traineeUid, role="trainee", remarks=f"Checked in to {payload.conferenceUid}"
     )
 
     return AttendanceOut(status=attendance.status, markedOn=attendance.markedOn)
@@ -145,6 +153,13 @@ async def check_in_secure(
         if conference:
             mark_checkout_if_last_module(db, conference, existing.traineeUid, "ATTENDANCE")
         attendance_repository.save(db)
+        log_activity(
+            db,
+            action="CHECK_IN_SECURE",
+            username=existing.traineeUid,
+            role="trainee",
+            remarks=f"Secure checked in to {conference_uid}",
+        )
         return AttendanceOut(status=existing.status, markedOn=existing.markedOn, distanceMeters=distance)
 
     attendance = attendance_repository.create(
@@ -170,6 +185,14 @@ async def check_in_secure(
         ws_manager.send_to,
         conference.trainerEmployeeId if conference else None,
         {"type": "attendance_marked", "conferenceUid": conference_uid, "traineeUid": trainee.traineeUid},
+    )
+
+    log_activity(
+        db,
+        action="CHECK_IN_SECURE",
+        username=trainee.traineeUid,
+        role="trainee",
+        remarks=f"Secure checked in to {conference_uid}",
     )
 
     return AttendanceOut(status=attendance.status, markedOn=attendance.markedOn, distanceMeters=distance)

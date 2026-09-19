@@ -11,6 +11,7 @@ import {
   checkLocationPermission,
   getCurrentCoordinates,
   openAppSettings,
+  openLocationSettings,
   requestNativeLocationPermission,
   showBlockedPermissionAlert,
   showLocationRationaleAlert,
@@ -84,7 +85,7 @@ export function useLocationPermission() {
 
         if (currentStatus === "unavailable") {
           setPermissionState("unavailable");
-          showLocationServicesDisabledAlert(() => openAppSettings());
+          showLocationServicesDisabledAlert(() => openLocationSettings());
           setError(
             "Device location services are disabled. Please turn on GPS in Settings.",
           );
@@ -134,7 +135,7 @@ export function useLocationPermission() {
                 setError(
                   "Device location services are disabled. Please turn on GPS in Settings.",
                 );
-                showLocationServicesDisabledAlert(() => openAppSettings());
+                showLocationServicesDisabledAlert(() => openLocationSettings());
                 return resolve({
                   coords: null,
                   status: "unavailable",
@@ -183,8 +184,12 @@ export function useLocationPermission() {
    * Direct retry handler without re-running rationale if already prompted.
    */
   const retryLocationRequest = useCallback(async (): Promise<LocationPermissionResult> => {
-    if (permissionState === "blocked" || permissionState === "unavailable") {
+    if (permissionState === "blocked") {
       await openAppSettings();
+      return { coords: null, status: permissionState };
+    }
+    if (permissionState === "unavailable") {
+      await openLocationSettings();
       return { coords: null, status: permissionState };
     }
     return requestLocationWithRationale();
@@ -198,5 +203,6 @@ export function useLocationPermission() {
     requestLocationWithRationale,
     retryLocationRequest,
     openSettings: openAppSettings,
+    openLocationSettings,
   };
 }

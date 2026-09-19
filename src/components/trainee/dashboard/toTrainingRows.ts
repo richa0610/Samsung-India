@@ -6,6 +6,7 @@ import { TrainingRowData } from "./TrainingDetailsTable";
 export function toTrainingRows(rows: DashboardTrainingRow[]): TrainingRowData[] {
   return rows.map((row) => ({
     id: row.conferenceUid,
+    trainingName: row.title,
     status: row.status,
     date: row.date ?? "",
     day: row.day ?? "",

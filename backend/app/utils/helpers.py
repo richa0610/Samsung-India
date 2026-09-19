@@ -2,6 +2,19 @@ import json
 import math
 from typing import Optional
 
+from fastapi import Request
+
+
+def client_ip(request: Request) -> Optional[str]:
+    """Best-effort caller IP for activity logging - `X-Forwarded-For`'s first
+    hop when behind a proxy/load balancer (e.g. Render), else the direct
+    socket peer. Never raises - logging metadata isn't worth failing a
+    request over."""
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else None
+
 
 def attendance_is_assigned(attendance) -> bool:
     """True when the trainee is on the trainer's roster for this session - a

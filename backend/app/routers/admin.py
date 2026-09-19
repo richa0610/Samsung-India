@@ -5,6 +5,7 @@ from app.core.rate_limit import rate_limit
 from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.schemas.admin import AdminAuthSession, AdminLoginRequest
 from app.services import admin_service
+from app.utils.helpers import client_ip
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -21,4 +22,4 @@ def login(
     db: Session = Depends(get_db),
 ):
     tenant_id = get_tenant_id_from_request(request)
-    return admin_service.login(common_db, db, payload, tenant_id)
+    return admin_service.login(common_db, db, payload, tenant_id, ip_address=client_ip(request))

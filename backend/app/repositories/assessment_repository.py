@@ -120,6 +120,22 @@ def list_answers_for_conference_suite(db: Session, conference_uid: str, suite_ui
     )
 
 
+def list_answers_for_trainee_suite(
+    db: Session, conference_uid: str, trainee_uid: str, suite_uid: str
+) -> list[Assessment]:
+    """One trainee's answers for one conference+suite - the Training Detail
+    screen's per-question review (their pick vs. the correct answer)."""
+    return (
+        db.query(Assessment)
+        .filter(
+            Assessment.conferenceUid == conference_uid,
+            Assessment.traineeUid == trainee_uid,
+            Assessment.assessmentSuiteUid == suite_uid,
+        )
+        .all()
+    )
+
+
 def responders_by_question(db: Session, conference_uid: str, suite_uid: str) -> dict[str, int]:
     """questionId -> number of distinct trainees who have answered it, for the
     trainer's Live Studio per-row response counts."""

@@ -17,6 +17,7 @@ from app.models.attendance_log import AttendanceLog
 from app.models.booking import Booking
 from app.models.category import Category, SubCategory
 from app.models.conference import Conference
+from app.models.logs_master import LogsMaster
 from app.models.quiz import Assessment, AssessmentResult, AssessmentSuite
 from app.models.trainee import Trainee
 from app.models.venue import Venue
@@ -25,6 +26,7 @@ from app.utils.uid import next_uid
 # (model, uid attribute, prefix)
 REGISTRY = [
     (Conference, "conferenceUid", "CONF"),
+    (LogsMaster, "logsUid", "LOG"),
     (Trainee, "traineeUid", "TRN"),
     (Venue, "venueUid", "VEN"),
     (AssessmentSuite, "assessmentSuiteUid", "ASM"),

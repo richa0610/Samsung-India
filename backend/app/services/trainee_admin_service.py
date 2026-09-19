@@ -8,6 +8,7 @@ from app.models.trainee import Trainee
 from app.repositories import trainee_repository
 from app.routers.ws import manager as ws_manager
 from app.schemas.trainee_admin import TraineeAdminIn, TraineeAdminOut
+from app.services.activity_log_service import log_activity
 from app.utils.status import title_status
 
 
@@ -99,6 +100,14 @@ def register_trainee_admin(
     trainee = trainee_repository.create(db, trainee)
 
     background_tasks.add_task(ws_manager.broadcast, {"type": "trainee_created", "traineeUid": trainee.traineeUid})
+
+    log_activity(
+        db,
+        action="REGISTER_TRAINEE",
+        username=admin.username,
+        role=admin.role,
+        remarks=f"Registered trainee {trainee.traineeUid} ({trainee.name})",
+    )
 
     return _trainee_to_admin_out(trainee)
 

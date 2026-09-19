@@ -13,6 +13,7 @@ from app.schemas.trainee import (
     TraineeUpdate,
 )
 from app.services import trainee_service
+from app.utils.helpers import client_ip
 
 router = APIRouter(prefix="/trainees", tags=["trainees"])
 
@@ -23,8 +24,10 @@ router = APIRouter(prefix="/trainees", tags=["trainees"])
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(rate_limit(max_attempts=5, window_seconds=300))],
 )
-def register_trainee(payload: TraineeRegister, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    return trainee_service.register(db, payload, background_tasks)
+def register_trainee(
+    payload: TraineeRegister, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)
+):
+    return trainee_service.register(db, payload, background_tasks, ip_address=client_ip(request))
 
 
 @router.post(
@@ -34,7 +37,7 @@ def register_trainee(payload: TraineeRegister, background_tasks: BackgroundTasks
 )
 def login_trainee(payload: TraineeLogin, request: Request, db: Session = Depends(get_db)):
     tenant_id = get_tenant_id_from_request(request)
-    return trainee_service.login(db, payload, tenant_id)
+    return trainee_service.login(db, payload, tenant_id, ip_address=client_ip(request))
 
 
 @router.patch("/me", response_model=TokenResponse)

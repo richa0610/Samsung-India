@@ -49,6 +49,7 @@ from app.schemas.training import (
     TrainingOut,
 )
 from app.services import live_quiz_service
+from app.services.activity_log_service import log_activity
 from app.services.module_flow import (
     auto_advance_if_due,
     configured_modules,
@@ -675,6 +676,13 @@ def approve_training(db: Session, admin: Admin, conference_uid: str) -> Training
     conference.status = "Approved"
     conference.updatedBy = admin.username
     conference_repository.save(db, conference)
+    log_activity(
+        db,
+        action="APPROVE_TRAINING",
+        username=admin.username,
+        role=admin.role,
+        remarks=f"Approved training {conference.conferenceUid}",
+    )
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
         conferenceStatus=conference.conferenceStatus,
@@ -687,6 +695,13 @@ def reject_training(db: Session, admin: Admin, conference_uid: str) -> TrainingO
     conference.status = "Rejected"
     conference.updatedBy = admin.username
     conference_repository.save(db, conference)
+    log_activity(
+        db,
+        action="REJECT_TRAINING",
+        username=admin.username,
+        role=admin.role,
+        remarks=f"Rejected training {conference.conferenceUid}",
+    )
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
         conferenceStatus=conference.conferenceStatus,
@@ -1210,6 +1225,14 @@ async def start_training(
     conference_repository.save(db, conference)
     _nudge_session_room(background_tasks, conference_uid)
 
+    log_activity(
+        db,
+        action="START_SESSION",
+        username=admin.username,
+        role=admin.role,
+        remarks=f"Started session {conference.conferenceUid}",
+    )
+
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
         conferenceStatus=conference.conferenceStatus,
@@ -1413,6 +1436,14 @@ async def end_training(
     conference_repository.save(db, conference)
     _nudge_session_room(background_tasks, conference_uid)
 
+    log_activity(
+        db,
+        action="END_SESSION",
+        username=admin.username,
+        role=admin.role,
+        remarks=f"Ended session {conference.conferenceUid}",
+    )
+
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
         conferenceStatus=conference.conferenceStatus,
@@ -1484,6 +1515,14 @@ def mark_attendance(
     )
     attendance_repository.save(db)
 
+    log_activity(
+        db,
+        action="MARK_ATTENDANCE",
+        username=admin.username,
+        role=admin.role,
+        remarks=f"Marked {trainee_uid} {payload.status} for {conference_uid}: {payload.reason.strip()}",
+    )
+
     _nudge_session_room(background_tasks, conference_uid)
     return _build_dashboard(db, conference)
 
@@ -1514,6 +1553,14 @@ def unlock_proctoring(
     record.remarks = _append_remark_line(record.remarks, f"{admin.username} -> PROCTORING UNLOCK: {reason}")
     record.updatedBy = admin.username
     attendance_repository.save(db)
+
+    log_activity(
+        db,
+        action="UNLOCK_PROCTORING",
+        username=admin.username,
+        role=admin.role,
+        remarks=f"Unlocked {trainee_uid} on {conference_uid}: {reason}",
+    )
 
     _nudge_session_room(background_tasks, conference_uid)
     return _build_dashboard(db, conference)

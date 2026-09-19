@@ -89,7 +89,7 @@ export default function SessionBody({
     );
   }
 
-  if (sessionClosed && (!activities || activities.length === 0)) {
+  if (sessionClosed) {
     return (
       <View style={styles.centered}>
         <WaitingCard
@@ -152,15 +152,6 @@ export default function SessionBody({
         </View>
       )}
 
-      {sessionClosed && (
-        <View style={styles.completedBanner}>
-          <Ionicons name="checkmark-done-circle" size={18} color={Colors.recordedGreen} />
-          <AppText variant="caption" color={Colors.recordedGreen} weight={FontWeight.semiBold}>
-            Session Completed
-          </AppText>
-        </View>
-      )}
-
       <SessionTimeline
         activities={activities}
         dimmed={notStarted}
@@ -212,16 +203,5 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.waitingBlueBg,
     paddingVertical: 8,
     paddingHorizontal: 12,
-  },
-  completedBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: "#E8F5E9",
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#C8E6C9",
   },
 });

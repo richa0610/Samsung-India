@@ -19,8 +19,9 @@ from app.schemas.session import (
     SessionHistoryItem,
     SessionJoinInfo,
     TraineeDashboardOut,
+    TrainingDetailOut,
 )
-from app.services import live_quiz_service, session_service, trainee_dashboard_service
+from app.services import live_quiz_service, session_service, trainee_dashboard_service, training_detail_service
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -144,3 +145,12 @@ def get_trainee_dashboard(
     trainee: Trainee = Depends(get_current_trainee),
 ):
     return trainee_dashboard_service.build_trainee_dashboard(db, trainee, limit)
+
+
+@router.get("/{conference_uid}/detail", response_model=TrainingDetailOut)
+def get_training_detail(
+    conference_uid: str,
+    db: Session = Depends(get_db),
+    trainee: Trainee = Depends(get_current_trainee),
+):
+    return training_detail_service.get_training_detail(db, trainee, conference_uid)

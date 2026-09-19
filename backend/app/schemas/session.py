@@ -2,6 +2,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
+from app.schemas.assessment import QuestionOption
+
 
 class SessionModule(BaseModel):
     key: str
@@ -70,6 +72,49 @@ class SessionJoinInfo(BaseModel):
     trainerName: Optional[str] = None
     started: bool
     startsAt: Optional[str] = None
+
+
+class TrainingQuestionAttempt(BaseModel):
+    """One question in a Standard Test/Live Quiz/Survey, alongside this
+    trainee's own pick - the Training Detail screen's per-question review."""
+
+    id: int
+    question: str
+    options: List[QuestionOption]
+    selectedOptionId: Optional[str] = None
+    selectedOptionText: Optional[str] = None
+    # Surveys have no right answer - both are None there, and the UI just
+    # shows the trainee's pick with no correct/incorrect styling.
+    correctOptionId: Optional[str] = None
+    correctOptionText: Optional[str] = None
+    isCorrect: bool = False
+    answered: bool = False
+    points: float = 0
+
+
+class TrainingModuleDetail(BaseModel):
+    key: str
+    name: str
+    status: str  # "Completed" | "Missed" | "Absent" | "Scheduled"
+    score: Optional[str] = None  # "x/y", assessment-type modules only
+    completedAt: Optional[str] = None
+    # Populated for STANDARD_TEST / LIVE_QUIZ / SURVEY only - empty for ATTENDANCE.
+    questions: List[TrainingQuestionAttempt] = []
+
+
+class TrainingDetailOut(BaseModel):
+    """One past training's full detail for a trainee - every configured
+    module plus, for assessment-type modules, the question-by-question
+    review of what they answered. Powers the Training History screen's
+    tap-through detail view."""
+
+    conferenceUid: str
+    title: str
+    date: Optional[str] = None
+    location: Optional[str] = None
+    trainerName: Optional[str] = None
+    status: str
+    modules: List[TrainingModuleDetail] = []
 
 
 class SessionHistoryItem(BaseModel):

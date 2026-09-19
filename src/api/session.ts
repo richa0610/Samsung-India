@@ -354,6 +354,48 @@ export function getSessionHistory(token: string) {
   });
 }
 
+export type TrainingQuestionOption = { id: string; text: string };
+
+export type TrainingQuestionAttempt = {
+  id: number;
+  question: string;
+  options: TrainingQuestionOption[];
+  selectedOptionId: string | null;
+  selectedOptionText: string | null;
+  // Surveys have no right answer - both null there, and the UI shows the
+  // trainee's pick with no correct/incorrect styling.
+  correctOptionId: string | null;
+  correctOptionText: string | null;
+  isCorrect: boolean;
+  answered: boolean;
+  points: number;
+};
+
+export type TrainingModuleDetail = {
+  key: SessionModuleKey;
+  name: string;
+  status: string;
+  score: string | null;
+  completedAt: string | null;
+  questions: TrainingQuestionAttempt[];
+};
+
+export type TrainingDetail = {
+  conferenceUid: string;
+  title: string;
+  date: string | null;
+  location: string | null;
+  trainerName: string | null;
+  status: string;
+  modules: TrainingModuleDetail[];
+};
+
+export function getTrainingDetail(token: string, conferenceUid: string) {
+  return apiRequest<TrainingDetail>(`/sessions/${conferenceUid}/detail`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 // Pure client-side navigation state (not backed by any endpoint, real or
 // mock) - always the same implementation regardless of USE_MOCK_DATA.
 export {

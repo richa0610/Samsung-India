@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 
 import { CameraViewfinder, useSecurityCheckIn } from "@/components/attendance/security-checkin";
+import { LivenessInstructionOverlay, useFaceLivenessGate } from "@/components/liveness-check";
 import AppModal from "@/components/ui/AppModal";
 import AppText from "@/components/ui/AppText";
 import { UploadFile } from "@/api/training";
@@ -18,9 +19,25 @@ type TrainerCheckOutModalProps = {
   onConfirm: (photo: UploadFile, attendanceSheet: UploadFile) => void;
 };
 
+// How long to let the camera session settle after the live face-detector
+// output is detached before actually firing the still capture - some
+// devices cap how many concurrent camera streams they can run and throw
+// from capturePhotoToFile if the shutter fires mid-reconfiguration.
+const DETACH_SETTLE_MS = 350;
+
 export default function TrainerCheckOutModal({ visible, submitting, onClose, onConfirm }: TrainerCheckOutModalProps) {
   const camera = useSecurityCheckIn();
   const [sheet, setSheet] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+
+  // Runs only while the modal is open, the camera has permission, and no
+  // photo has been captured yet - stops (and re-arms on retake) otherwise.
+  const liveness = useFaceLivenessGate({ active: visible && camera.hasPermission && !camera.hasPhoto });
+
+  // True only for the brief window between tapping Capture and the shutter
+  // actually firing - see DETACH_SETTLE_MS above for why the detector output
+  // needs to be gone before that.
+  const [detachingForCapture, setDetachingForCapture] = useState(false);
+  const checkedPhotoUriRef = useRef<string | null>(null);
 
   const pickSheet = async () => {
     const result = await DocumentPicker.getDocumentAsync({
@@ -37,6 +54,48 @@ export default function TrainerCheckOutModal({ visible, submitting, onClose, onC
       ? (camera.photoSource as { uri: string }).uri
       : null;
 
+  const handleRetakeAndReset = () => {
+    camera.handleRetake();
+    liveness.reset();
+    checkedPhotoUriRef.current = null;
+  };
+
+  const handleSecureCapture = async () => {
+    if (!liveness.verified) return;
+    setDetachingForCapture(true);
+    await new Promise((resolve) => setTimeout(resolve, DETACH_SETTLE_MS));
+    await camera.handleCapture();
+    setDetachingForCapture(false);
+  };
+
+  // Defense-in-depth: the live check above only reflects the feed up to the
+  // moment just before the shutter fires, not the literal captured frame -
+  // this analyzes the actual saved photo and forces a retake if it somehow
+  // doesn't show exactly one face (e.g. the camera was nudged during the
+  // DETACH_SETTLE_MS settle window).
+  useEffect(() => {
+    if (!photoUri) return;
+    if (checkedPhotoUriRef.current === photoUri) return;
+    checkedPhotoUriRef.current = photoUri;
+
+    let cancelled = false;
+    (async () => {
+      const result = await liveness.verifyCapturedPhoto(photoUri);
+      if (cancelled) return;
+      if (!result.ok) {
+        Alert.alert(
+          result.faceCount === 0 ? "No face detected" : "Multiple faces detected",
+          "The captured photo doesn't clearly show one face. Please retake it.",
+        );
+        handleRetakeAndReset();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleRetakeAndReset/liveness identity isn't the trigger, the captured uri is
+  }, [photoUri]);
+
   const submit = () => {
     if (!photoUri || !sheet) return;
     onConfirm(
@@ -46,6 +105,7 @@ export default function TrainerCheckOutModal({ visible, submitting, onClose, onC
   };
 
   const canSubmit = !!photoUri && !!sheet && !submitting;
+  const captureDisabled = camera.capturing || detachingForCapture || (!camera.hasPhoto && !liveness.verified);
 
   return (
     <AppModal visible={visible} onClose={onClose} position="center">
@@ -67,14 +127,30 @@ export default function TrainerCheckOutModal({ visible, submitting, onClose, onC
           retryDevice={camera.retryDevice}
           photoOutput={camera.photoOutput}
           cameraRef={camera.cameraRef}
+          // Stays attached for as long as there's no photo yet, so presence
+          // is re-checked live right up until the moment Capture is tapped -
+          // only detached for the brief DETACH_SETTLE_MS window around the
+          // actual shutter call (see handleSecureCapture and the device
+          // stream-limit note there).
+          extraOutputs={!camera.hasPhoto && !detachingForCapture ? [liveness.faceDetectorOutput] : undefined}
+          overlay={
+            !camera.hasPhoto && (
+              <LivenessInstructionOverlay
+                step={liveness.step}
+                instruction={liveness.instruction}
+                detectorError={liveness.detectorError}
+                onRetry={liveness.reset}
+              />
+            )
+          }
         />
 
         <Pressable
-          style={[styles.captureBtn, camera.capturing && styles.dim]}
-          onPress={camera.hasPhoto ? camera.handleRetake : camera.handleCapture}
-          disabled={camera.capturing}
+          style={[styles.captureBtn, captureDisabled && styles.dim]}
+          onPress={camera.hasPhoto ? handleRetakeAndReset : handleSecureCapture}
+          disabled={captureDisabled}
         >
-          {camera.capturing ? (
+          {camera.capturing || detachingForCapture ? (
             <ActivityIndicator size="small" color={Colors.white} />
           ) : (
             <>

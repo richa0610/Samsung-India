@@ -45,8 +45,11 @@ export default function ActivityCta({
   }
 
   // Admission gate: the trainer hasn't marked this trainee present, so the
-  // module's action (check-in / enter) is blocked even if it's LIVE.
-  if (lockReason) {
+  // module's action (check-in / enter) is blocked even if it's LIVE. Once the
+  // module's window has actually closed (isMissed), that's final - show the
+  // same Missed state every other module falls back to below instead of
+  // "Locked", which wrongly implies it could still open.
+  if (lockReason && !isMissed) {
     return <WaitingCard title="Locked" subtitle={lockReason} />;
   }
 

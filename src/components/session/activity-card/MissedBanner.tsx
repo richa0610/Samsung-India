@@ -16,7 +16,7 @@ export default function MissedBanner() {
           Missed
         </AppText>
         <AppText variant="overline" color={Colors.danger}>
-          You missed this session, try next time.
+          You missed this session.
         </AppText>
       </View>
     </View>

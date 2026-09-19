@@ -11,6 +11,7 @@ export type TrainingStatus = "Completed" | "Ongoing" | "Scheduled" | "Missed" | 
 
 export type TrainingRowData = {
   id: string;
+  trainingName: string;
   status: TrainingStatus;
   date: string;
   day: string;
@@ -71,9 +72,12 @@ type TrainingDetailsTableProps = {
    *  is a capped preview (dashboard's 5 most recent) of a fuller history
    *  screen. Omit to render without it. */
   onViewAll?: () => void;
+  /** Tapping a row navigates to that training's full detail (modules +
+   *  question review). Omit to keep rows non-interactive. */
+  onPressRow?: (id: string) => void;
 };
 
-export default function TrainingDetailsTable({ trainings = [], onViewAll }: TrainingDetailsTableProps) {
+export default function TrainingDetailsTable({ trainings = [], onViewAll, onPressRow }: TrainingDetailsTableProps) {
   return (
     <View style={styles.container}>
       <View style={styles.tableCard}>
@@ -84,18 +88,28 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll }: Trai
           <AppText variant="body" weight={FontWeight.bold} color="#111827" style={styles.sectionTitle}>
             Training Details
           </AppText>
-          {onViewAll && (
+          {onViewAll ? (
             <Pressable onPress={onViewAll} hitSlop={8} accessibilityRole="button" accessibilityLabel="View all trainings">
               <AppText variant="caption" weight={FontWeight.bold} color="#2563EB">
                 View All
               </AppText>
             </Pressable>
+          ) : (
+            // Only shown without onViewAll (the full history page, not the
+            // dashboard's capped preview) - there, `trainings.length` is the
+            // true total, not just how many rows happen to be visible.
+            <View >
+              <AppText variant="caption" weight={FontWeight.bold}  >
+                ({trainings.length})
+              </AppText>
+            </View>
           )}
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View>
             <View style={styles.headerRow}>
+              <HeaderCell label="Training" col={styles.nameCol} />
               <HeaderCell label="Status" col={styles.statusCol} />
               <HeaderCell label="Date" col={styles.dateCol} />
               <HeaderCell label="Post Test" col={styles.scoreCol} center />
@@ -112,7 +126,19 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll }: Trai
             )}
 
             {trainings.map((row) => (
-              <View key={row.id} style={styles.dataRow}>
+              <Pressable
+                key={row.id}
+                style={styles.dataRow}
+                onPress={onPressRow ? () => onPressRow(row.id) : undefined}
+                accessibilityRole={onPressRow ? "button" : undefined}
+                accessibilityLabel={onPressRow ? `View details for ${row.trainingName}` : undefined}
+              >
+                <View style={[styles.cell, styles.nameCol]}>
+                  <AppText variant="caption" weight={FontWeight.bold} color="#1F2937" numberOfLines={2} style={styles.centerText}>
+                    {row.trainingName}
+                  </AppText>
+                </View>
+
                 <View style={[styles.cell, styles.statusCol]}>
                   <View style={[styles.statusPill, { backgroundColor: STATUS_META[row.status].bg }]}>
                     <Ionicons name={STATUS_META[row.status].icon} size={15} color={STATUS_META[row.status].color} />
@@ -157,7 +183,7 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll }: Trai
                     </View>
                   )}
                 </View>
-              </View>
+              </Pressable>
             ))}
           </View>
         </ScrollView>
@@ -167,7 +193,7 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll }: Trai
 }
 
 const styles = StyleSheet.create({
-  container: { paddingHorizontal: 16, marginTop: 18, marginBottom: 28 },
+  container: { paddingHorizontal: 9, marginTop: 18, marginBottom: 18 },
   tableCard: {
     backgroundColor: Colors.white,
     borderRadius: Radius.card,
@@ -202,7 +228,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "#F1F5F9",
     borderTopWidth: 1,
     borderTopColor: "#F1F5F9",
-    paddingVertical: 12,
+    paddingVertical: 6,
+    gap:1,
   },
   dataRow: {
     flexDirection: "row",
@@ -210,10 +237,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderBottomWidth: 1,
     borderBottomColor: "#F1F5F9",
-    paddingVertical: 16,
+    paddingVertical: 10,
   },
   emptyRow: { paddingVertical: 22, paddingHorizontal: 16, alignItems: "center" },
   cell: { paddingHorizontal: 6, alignItems: "center", justifyContent: "center" },
+  nameCol: { width: 140 },
   statusCol: { width: 120 },
   dateCol: { width: 140 },
   scoreCol: { width: 120 },
@@ -224,7 +252,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 4,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: Radius.pill,

@@ -19,6 +19,7 @@ export function useTrainingHistory() {
   const [refreshing, setRefreshing] = useState(false);
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [status, setStatus] = useState("");
 
   const load = useCallback(
     async (mode: "load" | "refresh" = "load") => {
@@ -49,14 +50,16 @@ export function useTrainingHistory() {
       trainings.filter((row) => {
         if (fromDate && (!row.rawDate || row.rawDate < fromDate)) return false;
         if (toDate && (!row.rawDate || row.rawDate > toDate)) return false;
+        if (status && row.status !== status) return false;
         return true;
       }),
-    [trainings, fromDate, toDate],
+    [trainings, fromDate, toDate, status],
   );
 
   const clearFilters = () => {
     setFromDate("");
     setToDate("");
+    setStatus("");
   };
 
   return {
@@ -69,7 +72,9 @@ export function useTrainingHistory() {
     toDate,
     setFromDate,
     setToDate,
+    status,
+    setStatus,
     clearFilters,
-    hasFilter: !!(fromDate || toDate),
+    hasFilter: !!(fromDate || toDate || status),
   };
 }

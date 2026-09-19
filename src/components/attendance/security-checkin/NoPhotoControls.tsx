@@ -8,15 +8,18 @@ import { FontWeight } from "@/theme/fontWeight";
 type NoPhotoControlsProps = {
   capturing: boolean;
   onCapture: () => void;
+  /** Blocks capture without hiding the button - e.g. while a liveness check hasn't passed yet. */
+  disabled?: boolean;
 };
 
-export default function NoPhotoControls({ capturing, onCapture }: NoPhotoControlsProps) {
+export default function NoPhotoControls({ capturing, onCapture, disabled }: NoPhotoControlsProps) {
+  const isDisabled = capturing || !!disabled;
   return (
     <>
       <Pressable
-        style={[styles.captureButton, capturing && styles.captureButtonDisabled]}
+        style={[styles.captureButton, isDisabled && styles.captureButtonDisabled]}
         onPress={onCapture}
-        disabled={capturing}
+        disabled={isDisabled}
         accessibilityRole="button"
         accessibilityLabel="Capture Photo"
       >

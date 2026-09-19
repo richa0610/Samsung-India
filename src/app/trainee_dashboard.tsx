@@ -117,6 +117,7 @@ export default function TraineeDashboardScreen() {
         <TrainingDetailsTable
           trainings={toTrainingRows(dashboard?.trainings ?? [])}
           onViewAll={() => router.push("/training_history")}
+          onPressRow={(conferenceUid) => router.push({ pathname: "/training_detail", params: { conferenceUid } })}
         />
       </ScrollView>
 

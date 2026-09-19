@@ -133,7 +133,8 @@ export async function reverseGeocode(coords: { latitude: number; longitude: numb
 }
 
 /**
- * Opens device/app settings so user can enable permissions.
+ * Opens this app's own permission settings page - correct destination when
+ * location permission was denied/blocked for the app specifically.
  */
 export async function openAppSettings(): Promise<void> {
   try {
@@ -141,6 +142,26 @@ export async function openAppSettings(): Promise<void> {
   } catch {
     // Fallback if settings cannot be opened
   }
+}
+
+/**
+ * Opens the device's system Location Services screen (the GPS on/off
+ * toggle) - correct destination when location is granted to the app but
+ * switched off device-wide, which openAppSettings (the app's own settings
+ * page) can't fix. Android exposes a direct intent for this; iOS has no
+ * public API to deep-link into that system screen, so app settings is the
+ * closest available fallback there.
+ */
+export async function openLocationSettings(): Promise<void> {
+  if (Platform.OS === "android") {
+    try {
+      await Linking.sendIntent("android.settings.LOCATION_SOURCE_SETTINGS");
+      return;
+    } catch {
+      // Fall through to the app-settings fallback below.
+    }
+  }
+  await openAppSettings();
 }
 
 /**

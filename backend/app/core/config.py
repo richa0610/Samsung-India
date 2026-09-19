@@ -56,10 +56,6 @@ class Settings(BaseSettings):
     # before this ever sits behind a public URL.
     DEBUG: bool = True
 
-    # Google Cloud Vision API key used for proctoring face-count checks
-    # during assessments. Leave blank to disable server-side face checks.
-    FACE_DETECTION_API_KEY: str = ""
-
     # Fallback warning count for tenants whose registry row has no explicit
     # proctoring_max_warnings value.
     DEFAULT_PROCTORING_MAX_WARNINGS: int = 3

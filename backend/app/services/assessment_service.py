@@ -8,6 +8,7 @@ from app.models.quiz import Assessment, AssessmentResult
 from app.models.trainee import Trainee
 from app.repositories import assessment_repository, conference_repository
 from app.schemas.assessment import AssessmentQuestionsOut, QuestionOut, SubmitRequest, SubmitResult
+from app.services.activity_log_service import log_activity
 from app.services.module_flow import mark_checkout_if_last_module
 
 
@@ -101,6 +102,14 @@ def submit_assessment(db: Session, trainee: Trainee, suite_uid: str, payload: Su
             mark_checkout_if_last_module(db, conference, trainee.traineeUid, "SURVEY")
 
     assessment_repository.commit(db)
+
+    log_activity(
+        db,
+        action="SUBMIT_ASSESSMENT",
+        username=str(trainee.phone),
+        role="trainee",
+        remarks=f"Submitted {suite_uid} for {payload.conferenceUid}: {total_score}/{max_score} ({percentage}%)",
+    )
 
     return SubmitResult(
         totalScore=total_score,

@@ -8,10 +8,16 @@ from app.models.trainee import Trainee
 from app.repositories import trainee_repository
 from app.routers.ws import manager as ws_manager
 from app.schemas.trainee import TokenResponse, TraineeLogin, TraineeRegister, TraineeUpdate
+from app.services.activity_log_service import log_activity
 from app.utils.validators import validate_profile_photo_upload
 
 
-def register(db: Session, payload: TraineeRegister, background_tasks: BackgroundTasks) -> Trainee:
+def register(
+    db: Session,
+    payload: TraineeRegister,
+    background_tasks: BackgroundTasks,
+    ip_address: str | None = None,
+) -> Trainee:
     existing = trainee_repository.get_by_phone_or_email(db, payload.phone, payload.email)
     if existing:
         raise bad_request("Trainee with this phone or email already exists")
@@ -20,15 +26,25 @@ def register(db: Session, payload: TraineeRegister, background_tasks: Background
 
     background_tasks.add_task(ws_manager.broadcast, {"type": "trainee_created", "traineeUid": trainee.traineeUid})
 
+    log_activity(
+        db,
+        action="REGISTER",
+        username=str(trainee.phone),
+        role="trainee",
+        remarks=f"Self-registered as {trainee.traineeUid}",
+        ip_address=ip_address,
+    )
+
     return trainee
 
 
-def login(db: Session, payload: TraineeLogin, tenant_id: str) -> TokenResponse:
+def login(db: Session, payload: TraineeLogin, tenant_id: str, ip_address: str | None = None) -> TokenResponse:
     trainee = trainee_repository.get_by_phone(db, payload.phone)
     if not trainee:
         raise not_found("No trainee found with this phone number")
 
     access_token = create_access_token(subject=str(trainee.phone), tenant_id=tenant_id, role="trainee")
+    log_activity(db, action="LOGIN", username=str(trainee.phone), role="trainee", ip_address=ip_address)
     return TokenResponse(access_token=access_token, trainee=trainee)
 
 

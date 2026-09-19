@@ -9,6 +9,7 @@ from app.models.common.tenant_registry import Tenant
 from app.models.conference import Conference
 from app.models.conference_activity_log import ConferenceActivityLog
 from app.models.data_scope import DataScope
+from app.models.logs_master import LogsMaster
 from app.models.quiz import Assessment, AssessmentResult, AssessmentSuite, Question
 from app.models.system_module import SystemModule
 from app.models.trainee import Trainee
@@ -38,6 +39,7 @@ __all__ = [
     "AttendanceLog",
     "Booking",
     "DataScope",
+    "LogsMaster",
     "SystemModule",
     "UidSequence",
     "UserPermission",

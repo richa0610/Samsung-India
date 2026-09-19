@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -11,6 +12,7 @@ import { FontWeight } from "@/theme/fontWeight";
 
 export default function TrainingHistoryScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const {
     onBack,
     trainings,
@@ -21,6 +23,8 @@ export default function TrainingHistoryScreen() {
     toDate,
     setFromDate,
     setToDate,
+    status,
+    setStatus,
     clearFilters,
     hasFilter,
   } = useTrainingHistory();
@@ -48,6 +52,8 @@ export default function TrainingHistoryScreen() {
         toDate={toDate}
         onFromDateChange={setFromDate}
         onToDateChange={setToDate}
+        status={status}
+        onStatusChange={setStatus}
         onClear={clearFilters}
         hasFilter={hasFilter}
       />
@@ -61,7 +67,10 @@ export default function TrainingHistoryScreen() {
           contentContainerStyle={styles.content}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.mainColour1]} tintColor={Colors.mainColour1} />}
         >
-          <TrainingDetailsTable trainings={toTrainingRows(trainings)} />
+          <TrainingDetailsTable
+            trainings={toTrainingRows(trainings)}
+            onPressRow={(conferenceUid) => router.push({ pathname: "/training_detail", params: { conferenceUid } })}
+          />
         </ScrollView>
       )}
     </SafeAreaView>

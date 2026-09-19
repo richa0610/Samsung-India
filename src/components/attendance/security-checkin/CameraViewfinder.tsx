@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { RefObject } from "react";
+import { ReactNode, RefObject } from "react";
 import { ActivityIndicator, Image, ImageSourcePropType, Pressable, StyleSheet, View } from "react-native";
-import { Camera, CameraDevice, CameraPhotoOutput, CameraRef } from "react-native-vision-camera";
+import { Camera, CameraDevice, CameraOutput, CameraPhotoOutput, CameraRef } from "react-native-vision-camera";
 
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
@@ -20,6 +20,10 @@ type CameraViewfinderProps = {
   retryDevice: () => void;
   photoOutput: CameraPhotoOutput;
   cameraRef: RefObject<CameraRef | null>;
+  /** Additional CameraOutputs (e.g. a useFaceLivenessGate detector output) to run alongside the photo output on the same device. */
+  extraOutputs?: CameraOutput[];
+  /** Rendered on top of the live camera stream only (never over the captured-photo preview) - e.g. a liveness instruction badge. */
+  overlay?: ReactNode;
 };
 
 export default function CameraViewfinder({
@@ -32,6 +36,8 @@ export default function CameraViewfinder({
   retryDevice,
   photoOutput,
   cameraRef,
+  extraOutputs,
+  overlay,
 }: CameraViewfinderProps) {
   return (
     <View style={styles.viewfinderBox}>
@@ -68,7 +74,16 @@ export default function CameraViewfinder({
       ) : !device ? (
         <ActivityIndicator color={Colors.white} />
       ) : (
-        <Camera ref={cameraRef} style={styles.cameraStream} device={device} isActive outputs={[photoOutput]} />
+        <>
+          <Camera
+            ref={cameraRef}
+            style={styles.cameraStream}
+            device={device}
+            isActive
+            outputs={extraOutputs ? [photoOutput, ...extraOutputs] : [photoOutput]}
+          />
+          {overlay}
+        </>
       )}
     </View>
   );

@@ -5,15 +5,26 @@ from app.core.media import resolve_trainer_avatar
 from app.core.security import create_access_token, verify_password
 from app.repositories import admin_repository
 from app.schemas.admin import AdminAuthSession, AdminLoginRequest, AdminOut
+from app.services.activity_log_service import log_activity
 
 
-def login(common_db: Session, db: Session, payload: AdminLoginRequest, tenant_id: str) -> AdminAuthSession:
+def login(
+    common_db: Session,
+    db: Session,
+    payload: AdminLoginRequest,
+    tenant_id: str,
+    ip_address: str | None = None,
+) -> AdminAuthSession:
     """`Admin` (superadmin/internal accounts) lives in the shared Common
     Database; `AgencyTeam` (partner-agency trainers) lives in the caller's
     own tenant database - see the DB-per-tenant split in app/database/."""
     admin = admin_repository.get_admin_by_username(common_db, payload.username)
     if admin and admin.password and verify_password(payload.password, admin.password):
         token = create_access_token(subject=f"admin:{admin.username}", tenant_id=tenant_id, role=admin.role)
+        # `logsmaster` is a per-tenant table (see app/models/logs_master.py) -
+        # write via `db` (this tenant), never `common_db`, even though the
+        # account itself was found in the Common DB.
+        log_activity(db, action="LOGIN", username=admin.username, role=admin.role, ip_address=ip_address)
         return AdminAuthSession(
             access_token=token,
             admin=AdminOut(
@@ -35,6 +46,7 @@ def login(common_db: Session, db: Session, payload: AdminLoginRequest, tenant_id
         token = create_access_token(
             subject=f"agencyteam:{agent.username}", tenant_id=tenant_id, role=agent.role or "trainer"
         )
+        log_activity(db, action="LOGIN", username=agent.username, role=agent.role or "trainer", ip_address=ip_address)
         return AdminAuthSession(
             access_token=token,
             admin=AdminOut(
