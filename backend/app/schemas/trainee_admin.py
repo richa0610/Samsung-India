@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, StringConstraints
 
 from app.schemas._common import (
     DigitStr,
@@ -33,7 +33,7 @@ class TraineeAdminIn(BaseModel):
     altEmail: Optional[EmailStr] = None
     altPhone: OptDigitStr = None
     address: OptTextStr = None
-    state: OptShortStr = None
+    state: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
     district: OptShortStr = None
     zone: ShortStr
     region: ShortStr

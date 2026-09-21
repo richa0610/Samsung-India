@@ -3,12 +3,14 @@ import { useCallback, useState } from "react";
 import { BackHandler } from "react-native";
 
 import { CurrentSession, TraineeDashboard, getCurrentSession, getTraineeDashboard } from "@/api/session";
+import { useAdminFilters } from "@/hooks/useAdminFilters";
 import { useAuth } from "@/hooks/useAuth";
 import { canNavigate } from "@/utils/navigationGuard";
 
 export function useTraineeDashboard() {
   const router = useRouter();
   const { trainee, token, logout } = useAuth();
+  const { applied, appliedKey } = useAdminFilters("trainee");
 
   const [session, setSession] = useState<CurrentSession | null>(null);
   const [dashboard, setDashboard] = useState<TraineeDashboard | null>(null);
@@ -28,11 +30,12 @@ export function useTraineeDashboard() {
     // screen (Training Details' "View All" -> /training_history).
     const [sessionResult, dashboardResult] = await Promise.allSettled([
       getCurrentSession(token),
-      getTraineeDashboard(token, 5),
+      getTraineeDashboard(token, 5, { start: applied.start, end: applied.end }),
     ]);
     setSession(sessionResult.status === "fulfilled" ? sessionResult.value : null);
     setDashboard(dashboardResult.status === "fulfilled" ? dashboardResult.value : null);
-  }, [token]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `appliedKey` is `applied`, serialised so an equal filter doesn't refetch
+  }, [token, appliedKey]);
 
   useFocusEffect(
     useCallback(() => {

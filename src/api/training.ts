@@ -1,4 +1,5 @@
 import { SelectOption } from "@/components/ui/SearchableSelect";
+import { AdminFilters, adminFilterParams } from "./adminFilters";
 import { apiRequest, apiUpload } from "./client";
 // All types are preserved — they are used extensively across screens.
 
@@ -71,6 +72,8 @@ export type TrainingAgendaItem = {
   conferenceUid: string;
   title: string;
   trainerName: string | null;
+  zone?: string | null;
+  sessionType?: string | null;
   conferenceDate: string | null;
   conferenceTime: string | null;
   conferenceStatus: string;
@@ -95,6 +98,8 @@ export type TrainerAgendaResponse = {
   totalSessions: number;
   completed: number;
   pending: number;
+  missed: number;
+  ongoing: number;
   executedPercentage: number;
   pendingPercentage: number;
   recentCompleted: TrainingAgendaItem[];
@@ -248,11 +253,16 @@ export function createTraining(token: string, payload: TrainingCreatePayload) {
   });
 }
 
-export function fetchTrainerAgenda(token: string, range?: { start?: string; end?: string; all?: boolean }) {
+export function fetchTrainerAgenda(
+  token: string,
+  range?: { start?: string; end?: string; all?: boolean; org?: boolean; filters?: AdminFilters },
+) {
   const params = new URLSearchParams();
   if (range?.start) params.set("start", range.start);
   if (range?.end) params.set("end", range.end);
   if (range?.all) params.set("all_sessions", "true");
+  if (range?.org) params.set("org", "true");
+  for (const [key, value] of adminFilterParams(range?.filters)) params.set(key, value);
   const query = params.toString();
   return apiRequest<TrainerAgendaResponse>(`/admin/trainings${query ? `?${query}` : ""}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -559,17 +569,68 @@ export function fetchPendingTrainings(token: string) {
   });
 }
 
-export function approveTraining(token: string, conferenceUid: string) {
-  return apiRequest<TrainingOut>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/approve`, {
-    method: "POST",
+export type AdminTrainingDetail = {
+  conferenceUid: string;
+  title: string;
+  zone?: string;
+  region?: string;
+  company?: string;
+  requestedBy?: string;
+
+  trainerEmployeeId?: string;
+  trainerName?: string;
+
+  state?: string;
+  district?: string;
+  venue?: string;
+  venueName?: string;
+
+  isResidential: boolean;
+  conferenceDate?: string;
+  conferenceTime?: string;
+  trainingEndDate?: string;
+  trainingHub?: string;
+  audience?: string;
+  sessionType?: string;
+  trainingType?: string;
+  batchSize?: string;
+
+  sessionFlow?: SessionFlowConfig;
+  checklist: string[];
+
+  conferenceStatus: string;
+  approvalStatus: string;
+
+  attendanceSheetPax?: string;
+  confirmedPax?: string;
+  remarks?: string;
+  checkInPhoto?: string;
+  checkOutPhoto?: string;
+  attendanceSheet?: string;
+  scheduleEditable: boolean;
+};
+
+export type ApprovalStatus = "Pending" | "Approved" | "Rejected";
+export type TrainingStatus = "Scheduled" | "Ongoing" | "Completed" | "Cancelled";
+
+export type TrainingUpdatePayload = TrainingCreatePayload & {
+  confirmedPax?: string;
+  approvalStatus?: ApprovalStatus;
+  trainingStatus?: TrainingStatus;
+  message?: string;
+};
+
+export function fetchTrainingDetail(token: string, conferenceUid: string) {
+  return apiRequest<AdminTrainingDetail>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/detail`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
-export function rejectTraining(token: string, conferenceUid: string) {
-  return apiRequest<TrainingOut>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/reject`, {
-    method: "POST",
+export function updateTraining(token: string, conferenceUid: string, payload: TrainingUpdatePayload) {
+  return apiRequest<TrainingOut>(`/admin/trainings/${encodeURIComponent(conferenceUid)}`, {
+    method: "PATCH",
     headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(payload),
   });
 }
 

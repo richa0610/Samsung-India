@@ -10,7 +10,7 @@ const STATUS_OPTIONS: SelectOption[] = [
   { label: "All Status", value: "" },
   { label: "Completed", value: "Completed" },
   { label: "Ongoing", value: "Ongoing" },
-  { label: "Scheduled", value: "Scheduled" },
+  { label: "Not Started", value: "Scheduled" },
   { label: "Missed", value: "Missed" },
   { label: "Absent", value: "Absent" },
 ];

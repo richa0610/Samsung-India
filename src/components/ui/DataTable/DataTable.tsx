@@ -25,6 +25,13 @@ const DEFAULT_PAGE_SIZE_OPTIONS: DataTablePageSize[] = [10, 25, 50, 100, "all"];
 // typical filled page instead of collapsing to just the header row.
 const FALLBACK_EMPTY_ROW_COUNT = 10;
 
+// Blank / placeholder values read as an explicit "NOT AVAILABLE" instead of an
+// empty cell or a stray dash.
+function displayCellText(value: string | null | undefined): string {
+  const text = (value ?? "").trim();
+  return text === "" || text === "--" || text === "-" ? "NOT AVAILABLE" : text;
+}
+
 function cellValue<T>(column: DataTableColumn<T>, row: T) {
   return column.searchValue ? column.searchValue(row) : column.exportValue ? column.exportValue(row, 0) : "";
 }
@@ -241,7 +248,7 @@ export default function DataTable<T>({
                             column.render(row, absoluteIndex)
                           ) : (
                             <AppText style={styles.bodyCellText}>
-                              {column.exportValue ? column.exportValue(row, absoluteIndex) : ""}
+                              {displayCellText(column.exportValue ? column.exportValue(row, absoluteIndex) : "")}
                             </AppText>
                           )}
                         </View>

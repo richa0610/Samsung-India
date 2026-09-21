@@ -17,7 +17,6 @@ SystemUI.setBackgroundColorAsync(Colors.background);
 export const TRAINER_ROUTES = [
   "/admin_dashboard",
   "/trainer_dashboard",
-  "/assessment_builder",
   "/add_training",
   "/pending_trainings",
   "/training_list",

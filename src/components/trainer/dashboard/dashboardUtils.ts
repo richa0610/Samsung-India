@@ -30,10 +30,11 @@ export function formatSessionTime(dateStr: string | null, timeStr: string | null
 }
 
 export type DashboardStats = {
-  totalTrainees: number;
   totalSessions: number;
   completed: number;
   pending: number;
+  missed: number;
+  ongoing: number;
   executedPercentage: number;
   pendingPercentage: number;
 };

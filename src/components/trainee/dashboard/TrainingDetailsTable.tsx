@@ -6,6 +6,7 @@ import { Colors } from "@/theme/colors";
 import { Radius } from "@/theme/radius";
 import { Shadows } from "@/theme/shadows";
 import { FontWeight } from "@/theme/typography";
+import { trainingStatusLabel } from "@/utils/trainingStatusLabel";
 
 export type TrainingStatus = "Completed" | "Ongoing" | "Scheduled" | "Missed" | "Absent";
 
@@ -143,7 +144,7 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll, onPres
                   <View style={[styles.statusPill, { backgroundColor: STATUS_META[row.status].bg }]}>
                     <Ionicons name={STATUS_META[row.status].icon} size={15} color={STATUS_META[row.status].color} />
                     <AppText variant="caption" weight={FontWeight.bold} color={STATUS_META[row.status].color}>
-                      {row.status}
+                      {trainingStatusLabel(row.status)}
                     </AppText>
                   </View>
                 </View>
@@ -193,7 +194,7 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll, onPres
 }
 
 const styles = StyleSheet.create({
-  container: { paddingHorizontal: 9, marginTop: 18, marginBottom: 18 },
+  container: { paddingHorizontal: 9, marginTop: 18, marginBottom: 6 },
   tableCard: {
     backgroundColor: Colors.white,
     borderRadius: Radius.card,

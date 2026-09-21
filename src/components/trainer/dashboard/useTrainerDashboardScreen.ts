@@ -15,10 +15,11 @@ import { toApiDate } from "./TrainerMoreMenu";
 const FALLBACK_POLL_MS = 60000;
 
 const EMPTY_STATS: DashboardStats = {
-  totalTrainees: 0,
   totalSessions: 0,
   completed: 0,
   pending: 0,
+  missed: 0,
+  ongoing: 0,
   executedPercentage: 0,
   pendingPercentage: 0,
 };
@@ -71,10 +72,11 @@ export function useTrainerDashboardScreen() {
             : undefined,
         );
         setStats({
-          totalTrainees: data.totalTrainees,
           totalSessions: data.totalSessions,
           completed: data.completed,
           pending: data.pending,
+          missed: data.missed,
+          ongoing: data.ongoing,
           executedPercentage: data.executedPercentage,
           pendingPercentage: data.pendingPercentage,
         });

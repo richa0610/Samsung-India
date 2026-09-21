@@ -13,6 +13,7 @@ import {
   TrainingDetailsTable,
   toTrainingRows,
 } from "@/components/trainee/dashboard";
+import AdminFilterBar from "@/components/admin/AdminFilterBar";
 import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { TraineeTab } from "@/hooks/useTraineeHome";
 import { useTraineeDashboard } from "@/hooks/useTraineeDashboard";
@@ -96,11 +97,17 @@ export default function TraineeDashboardScreen() {
           onLogout={requestLogout}
         />
 
+        <View style={styles.filterWrap}>
+          <AdminFilterBar scope="trainee" dateOnly />
+        </View>
+
         <TraineeMetricsGrid
           totalTrainings={metrics?.totalTrainings ?? 0}
           presentCount={metrics?.present ?? 0}
           absentCount={metrics?.absent ?? 0}
           scheduledCount={metrics?.scheduled ?? 0}
+          ongoingCount={metrics?.ongoing ?? 0}
+          notStartedCount={metrics?.notStarted ?? 0}
         />
 
         <Global_Percentage
@@ -110,7 +117,7 @@ export default function TraineeDashboardScreen() {
           periodGain={performance?.periodGain ?? null}
           globalRank={rankLabel(ranking?.globalRank ?? null)}
           globalPercentile={Math.round(ranking?.globalPercentile ?? 0)}
-          stateRank={rankLabel(ranking?.stateRank ?? null)}
+          stateRank={trainee?.state ? rankLabel(ranking?.stateRank ?? null) : "Add your state"}
           statePercentile={Math.round(ranking?.statePercentile ?? 0)}
         />
 
@@ -140,6 +147,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.headerBlue,
   },
   scrollContent: {
-    paddingBottom: 32,
+    paddingBottom: 8,
+  },
+  filterWrap: {
+    paddingHorizontal: 10,
+    paddingTop: 10,
   },
 });

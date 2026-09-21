@@ -16,12 +16,16 @@ const CONFERENCE_STATUS_PRESENTATION: Record<string, { label: string; tone: Stat
   Ongoing: { label: "Started", tone: "success" },
   Scheduled: { label: "Scheduled", tone: "warning" },
   Completed: { label: "Completed", tone: "neutral" },
+  Cancelled: { label: "Cancelled", tone: "danger" },
 };
 
 // A training's status is only meaningful once an admin has approved it -
 // until then it shows as Pending regardless of `conferenceStatus` (which
 // defaults to "Scheduled" the moment it's created, before any review).
 function presentationFor(row: TrainingAgendaItem): { label: string; tone: StatusTone } {
+  if (row.approvalStatus === "Rejected") {
+    return { label: "Rejected", tone: "danger" };
+  }
   if (row.approvalStatus !== "Approved") {
     return { label: "Pending", tone: "warning" };
   }

@@ -3,8 +3,10 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import forbidden
 from app.dependencies.auth import get_current_admin, require_admin_role
 from app.dependencies.database import get_db
+from app.dependencies.filters import ConferenceFilters, get_conference_filters
 from app.models.admin import Admin
 from app.schemas.trainee_admin import TraineeAdminIn, TraineeAdminOut
 from app.schemas.training import (
@@ -21,8 +23,11 @@ from app.schemas.training import (
     SessionReportOut,
     TopPerformer,
     TrainerAgendaResponse,
+    TrainingAdminUpdate,
     TrainingCreate,
+    TrainingDetailOut,
     TrainingOut,
+    TrainingStatusActionRequest,
 )
 from app.services import (
     assessment_builder_service,
@@ -92,13 +97,15 @@ def create_training(
 
 @router.get("/trainings", response_model=TrainerAgendaResponse)
 def list_trainer_trainings(
-    start: Optional[str] = None,
-    end: Optional[str] = None,
     all_sessions: bool = False,
+    org: bool = False,
+    filters: ConferenceFilters = Depends(get_conference_filters),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
 ):
-    return training_service.list_trainer_trainings(db, admin, start, end, all_sessions)
+    if org and getattr(admin, "role", None) != "admin":
+        raise forbidden("This view requires an admin account")
+    return training_service.list_trainer_trainings(db, admin, filters.start, filters.end, all_sessions, org, filters)
 
 
 @router.get("/trainings/pending", response_model=list[PendingSessionItem])
@@ -112,19 +119,25 @@ def list_pending_trainings(
 @router.post("/trainings/{conference_uid}/approve", response_model=TrainingOut)
 def approve_training(
     conference_uid: str,
+    payload: Optional[TrainingStatusActionRequest] = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_admin_role),
 ):
-    return training_service.approve_training(db, admin, conference_uid)
+    reason = payload.reason if payload else None
+    return training_service.approve_training(db, admin, conference_uid, reason=reason, background_tasks=background_tasks)
 
 
 @router.post("/trainings/{conference_uid}/reject", response_model=TrainingOut)
 def reject_training(
     conference_uid: str,
+    payload: Optional[TrainingStatusActionRequest] = None,
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_admin_role),
 ):
-    return training_service.reject_training(db, admin, conference_uid)
+    reason = payload.reason if payload else None
+    return training_service.reject_training(db, admin, conference_uid, reason=reason, background_tasks=background_tasks)
 
 
 @router.get("/trainings/{conference_uid}", response_model=SessionDashboardOut)
@@ -134,6 +147,26 @@ def get_session_dashboard(
     admin: Admin = Depends(get_current_admin),
 ):
     return training_service.get_session_dashboard(db, admin, conference_uid)
+
+
+@router.get("/trainings/{conference_uid}/detail", response_model=TrainingDetailOut)
+def get_training_detail(
+    conference_uid: str,
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(require_admin_role),
+):
+    return training_service.get_training_detail(db, conference_uid)
+
+
+@router.patch("/trainings/{conference_uid}", response_model=TrainingOut)
+def update_training(
+    conference_uid: str,
+    payload: TrainingAdminUpdate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(require_admin_role),
+):
+    return training_service.update_training(db, admin, conference_uid, payload, background_tasks)
 
 
 @router.get("/trainings/{conference_uid}/performers", response_model=list[TopPerformer])
@@ -343,10 +376,14 @@ def reset_attendance(
 
 @router.get("/attendance", response_model=list[AttendanceListItemOut])
 def list_attendance(
+    org: bool = False,
+    filters: ConferenceFilters = Depends(get_conference_filters),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
 ):
-    return training_service.list_attendance(db, admin)
+    if org and getattr(admin, "role", None) != "admin":
+        raise forbidden("This view requires an admin account")
+    return training_service.list_attendance(db, admin, org, filters)
 
 
 @router.post("/trainees", response_model=TraineeAdminOut, status_code=status.HTTP_201_CREATED)

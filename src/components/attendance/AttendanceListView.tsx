@@ -1,8 +1,9 @@
+import { ReactNode } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
-import { DataTable } from "@/components/ui/DataTable";
+import { DataTable, DataTableColumn } from "@/components/ui/DataTable";
 import AppText from "@/components/ui/AppText";
 import ScreenBanner from "@/components/ui/ScreenBanner";
 import { Colors } from "@/theme/colors";
@@ -21,6 +22,12 @@ type AttendanceListViewProps = {
   onBack: () => void;
   exportFileName: string;
   emptyLabel: string;
+  /** Overrides the default (trainer) columns - e.g. the admin's org-wide table. */
+  columns?: DataTableColumn<AttendanceListItem>[];
+  /** A bottom nav sits below this screen and already clears the safe area - don't reserve it twice. */
+  hasBottomNav?: boolean;
+  /** Rendered at the top of the scrolling card - the admin filter bar. */
+  topContent?: ReactNode;
 };
 
 export function AttendanceListView({
@@ -33,12 +40,16 @@ export function AttendanceListView({
   onBack,
   exportFileName,
   emptyLabel,
+  columns: customColumns,
+  hasBottomNav = false,
+  topContent,
 }: AttendanceListViewProps) {
   const insets = useSafeAreaInsets();
-  const columns = useAttendanceListColumns();
+  const defaultColumns = useAttendanceListColumns();
+  const columns = customColumns ?? defaultColumns;
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={styles.container} edges={hasBottomNav ? [] : ["bottom"]}>
       <ScreenBanner backgroundColor={Colors.mainColour1} style={[styles.banner, { paddingTop: insets.top + 12 }]}>
         <View style={styles.bannerRow}>
           <Pressable onPress={onBack} hitSlop={8}>
@@ -56,6 +67,7 @@ export function AttendanceListView({
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.mainColour1]} tintColor={Colors.mainColour1} />}
       >
+        {topContent}
         {loading ? (
           <View style={styles.centered}>
             <ActivityIndicator color={Colors.mainColour1} />

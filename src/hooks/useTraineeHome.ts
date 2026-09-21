@@ -8,6 +8,7 @@ import {
   AttendanceState,
   CurrentSession,
   SessionFlowState,
+  SessionModule,
   SessionModuleKey,
   getCurrentSession,
   getSessionFlowState,
@@ -22,6 +23,14 @@ import { useLocationPermission } from "@/hooks/useLocationPermission";
 import { canNavigate } from "@/utils/navigationGuard";
 
 export type TraineeTab = "rank" | "dashboard" | "home" | "profile";
+
+// Card headline: the question set name the trainer picked for
+// tests/quizzes/surveys, or a plain description for Attendance. Empty (no
+// heading rendered) when there is nothing real to show.
+function activityTitle(module: SessionModule): string {
+  if (module.key === "ATTENDANCE") return "Check-in & Check-out";
+  return module.suiteName ?? "";
+}
 
 export interface SessionActivityData {
   id: string;
@@ -354,7 +363,7 @@ export function useTraineeHome() {
         endTime: module.endTime ?? "",
         duration: module.duration ?? "--",
         type: module.name,
-        title: "Session Activity",
+        title: activityTitle(module),
         isLive: notStarted ? false : isLiveModule,
         isCompleted: isAttendance ? isAttendanceCompleted : module.isCompleted,
         isMissed: module.isMissed,

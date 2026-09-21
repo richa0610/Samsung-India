@@ -47,7 +47,7 @@ export default function TimelineItem({
     endTime: session.endTime || "10:00",
     duration: session.duration || "1h",
     type: session.type,
-    title: "Session Activity",
+    title: "",
     isLive: session.isLive,
     isCompleted: session.isCompleted,
     isMissed: session.isMissed,

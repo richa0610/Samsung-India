@@ -52,6 +52,13 @@ def list_pending(db: Session) -> list[Conference]:
     return db.query(Conference).filter(Conference.status == "Pending").order_by(Conference.timestamp.desc()).all()
 
 
+def list_all(db: Session) -> list[Conference]:
+    """Every conference org-wide, all trainers - the admin dashboard's
+    overview cards (unlike everything else here, which is scoped to one
+    trainer)."""
+    return db.query(Conference).all()
+
+
 def list_recent_completed_for_trainer(db: Session, trainer_employee_id: str, limit: int) -> list[Conference]:
     return (
         db.query(Conference)

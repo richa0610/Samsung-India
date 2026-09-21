@@ -1,6 +1,7 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import AuthHeader from "@/components/common/AppHeader";
@@ -49,6 +50,22 @@ export default function RoleSelectionScreen() {
                 subtitle="Attempt tests, track progress and improve your skills."
                 onPress={() => router.push("/scan")}
               />
+              {/* Plain button, not a RoleLoginCard - admins sign in through
+                  the same authenticated screen as trainers (admin.py checks
+                  the admin table first, falling back to agencyteam); the
+                  backend's role in the response is what actually routes to
+                  /admin_dashboard vs /trainer_dashboard. */}
+              <Pressable
+                style={styles.adminButton}
+                onPress={() => router.push({ pathname: "/trainer_login", params: { portal: "admin" } })}
+                accessibilityRole="button"
+                accessibilityLabel="Admin Login"
+              >
+                <Ionicons name="shield-checkmark-outline" size={16} color={Colors.gray600} />
+                <AppText variant="caption" color={Colors.gray600}>
+                  Admin Login
+                </AppText>
+              </Pressable>
 
               <SocialLoginRow />
 
@@ -91,4 +108,14 @@ const styles = StyleSheet.create({
   },
   contactText: { marginTop: 4 },
   securityFooter: { marginTop: 32 },
+  adminButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: 40,
+    borderRadius: Radius.xl,
+    borderWidth: 1,
+    borderColor: Colors.gray200,
+  },
 });

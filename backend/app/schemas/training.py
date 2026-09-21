@@ -141,10 +141,69 @@ class TrainingCreate(BaseModel):
     checklist: Optional[Annotated[list[ShortStr], Field(max_length=100)]] = None
 
 
+class TrainingAdminUpdate(TrainingCreate):
+    """PATCH /admin/trainings/{uid} - the full registration form plus the
+    admin-only review fields. Once a session has started only the review
+    fields are applied (see update_training)."""
+
+    confirmedPax: OptDigitStr = None
+    approvalStatus: Optional[Literal["Pending", "Approved", "Rejected"]] = None
+    trainingStatus: Optional[Literal["Scheduled", "Ongoing", "Completed", "Cancelled"]] = None
+    # Reason for an approve/reject decision - stored in `conference.remarks`.
+    message: OptTextStr = None
+
+
 class TrainingOut(BaseModel):
     conferenceUid: str
     conferenceStatus: str
     status: str
+
+
+class TrainingDetailOut(BaseModel):
+    """Full editable detail for one training - powers the admin's training
+    detail screen and is pre-filled into the edit form there. Field names
+    mirror `TrainingCreate` so the same payload shape can be resubmitted."""
+
+    conferenceUid: str
+    title: str
+    zone: Optional[str] = None
+    region: Optional[str] = None
+    company: Optional[str] = None
+    requestedBy: Optional[str] = None
+
+    trainerEmployeeId: Optional[str] = None
+    trainerName: Optional[str] = None
+
+    state: Optional[str] = None
+    district: Optional[str] = None
+    venue: Optional[str] = None
+    venueName: Optional[str] = None
+
+    isResidential: bool = False
+    conferenceDate: Optional[str] = None
+    conferenceTime: Optional[str] = None
+    trainingEndDate: Optional[str] = None
+    trainingHub: Optional[str] = None
+    audience: Optional[str] = None
+    sessionType: Optional[str] = None
+    trainingType: Optional[str] = None
+    batchSize: Optional[str] = None
+
+    sessionFlow: Optional[SessionFlowConfig] = None
+    checklist: list[str] = []
+
+    conferenceStatus: str
+    approvalStatus: str
+
+    # Post-training data + evidence, for the admin review page.
+    attendanceSheetPax: Optional[str] = None
+    confirmedPax: Optional[str] = None
+    remarks: Optional[str] = None
+    checkInPhoto: Optional[str] = None
+    checkOutPhoto: Optional[str] = None
+    attendanceSheet: Optional[str] = None
+    # Whether schedule/session-flow fields can still be changed (not started).
+    scheduleEditable: bool = True
 
 
 class AttendanceMarkRequest(BaseModel):
@@ -205,6 +264,8 @@ class TrainingAgendaItem(BaseModel):
     title: str
     trainerName: Optional[str] = None
     hoid: Optional[str] = None
+    zone: Optional[str] = None
+    sessionType: Optional[str] = None
     conferenceDate: Optional[str] = None
     conferenceTime: Optional[str] = None
     conferenceStatus: str
@@ -238,6 +299,8 @@ class TrainerAgendaResponse(BaseModel):
     totalSessions: int
     completed: int
     pending: int
+    missed: int = 0
+    ongoing: int = 0
     executedPercentage: int
     pendingPercentage: int
     recentCompleted: list[TrainingAgendaItem] = []
@@ -446,3 +509,7 @@ class SessionReportOut(BaseModel):
     summary: SessionReportSummary
     standardTest: list[SessionReportParticipant] = []
     liveQuiz: list[SessionReportParticipant] = []
+
+
+class TrainingStatusActionRequest(BaseModel):
+    reason: Optional[str] = None

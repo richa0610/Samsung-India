@@ -55,9 +55,11 @@ export default function SessionActivityCard({
         <HeaderBadges activity={activity} />
       </View>
 
-      <AppText variant="body" weight={FontWeight.bold} style={styles.activityTitle}>
-        {activity.title}
-      </AppText>
+      {activity.title ? (
+        <AppText variant="body" weight={FontWeight.bold} style={styles.activityTitle}>
+          {activity.title}
+        </AppText>
+      ) : null}
 
       <ActivityMetaRow activity={activity} isAttendance={isAttendance} isQuizOrPostTest={isQuiz || isPostTest} />
 

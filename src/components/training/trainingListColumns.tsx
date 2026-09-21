@@ -10,9 +10,17 @@ import { Radius } from "@/theme/radius";
 import { formatDisplayDate } from "@/utils/formatDisplayDate";
 import { TrainingAgendaItem } from "@/api/training";
 
+type ColumnOptions = {
+  /** Conference Report button target - defaults to `onEdit`. */
+  onReport?: (row: TrainingAgendaItem) => void;
+  /** Admin's org-wide list also shows Zone and Session Type. */
+  extended?: boolean;
+};
+
 export function buildTrainingListColumns(
   onEdit: (row: TrainingAgendaItem) => void,
-  statusColumn: DataTableColumn<TrainingAgendaItem>
+  statusColumn: DataTableColumn<TrainingAgendaItem>,
+  { onReport, extended = false }: ColumnOptions = {},
 ): DataTableColumn<TrainingAgendaItem>[] {
   return [
     {
@@ -41,7 +49,7 @@ export function buildTrainingListColumns(
       minWidth: 150,
       sortable: false,
       render: (row) => (
-        <Pressable style={styles.reportButton} onPress={() => onEdit(row)} hitSlop={4}>
+        <Pressable style={styles.reportButton} onPress={() => (onReport ?? onEdit)(row)} hitSlop={4}>
           <AppText style={styles.reportButtonText} color={Colors.white} weight={FontWeight.semiBold}>Conference Report</AppText>
         </Pressable>
       ),
@@ -49,6 +57,9 @@ export function buildTrainingListColumns(
     },
     statusColumn,
     { key: "trainingsId", header: "Trainings ID", minWidth: 118, exportValue: (row) => row.conferenceUid },
+    ...(extended
+      ? [{ key: "zone", header: "Zone", minWidth: 80, exportValue: (row: TrainingAgendaItem) => row.zone ?? "--" }]
+      : []),
     { key: "totalPax", header: "Total Pax (Trainer)", minWidth: 100, exportValue: (row) => String(row.traineeCount ?? 0) },
     { key: "trainerName", header: "Trainer Name", minWidth: 118, exportValue: (row) => row.trainerName ?? "--" },
     { key: "hoid", header: "HOID", minWidth: 96, exportValue: (row) => row.hoid ?? "--" },
@@ -60,6 +71,16 @@ export function buildTrainingListColumns(
       searchValue: (row) => row.conferenceDate ?? "",
     },
     { key: "time", header: "Time", minWidth: 76, exportValue: (row) => row.conferenceTime ?? "--" },
+    ...(extended
+      ? [
+          {
+            key: "sessionType",
+            header: "Session Type",
+            minWidth: 130,
+            exportValue: (row: TrainingAgendaItem) => row.sessionType ?? "--",
+          },
+        ]
+      : []),
     { key: "trainingType", header: "Training Type", minWidth: 130, exportValue: (row) => row.trainingType ?? "--" },
     { key: "venueName", header: "Venue Name", minWidth: 110, exportValue: (row) => row.venueName ?? "--" },
     { key: "state", header: "State", minWidth: 100, exportValue: (row) => row.state ?? "--" },

@@ -24,6 +24,8 @@ export type SessionModule = {
   score: string | null;
   ranDuration?: string | null;
   assessmentSuiteUid: string | null;
+  suiteName?: string | null;
+  questionCount?: number | null;
 };
 
 
@@ -296,6 +298,8 @@ export type DashboardMetrics = {
   present: number;
   absent: number;
   scheduled: number;
+  ongoing: number;
+  notStarted: number;
 };
 
 export type DashboardPerformance = {
@@ -341,8 +345,11 @@ export type TraineeDashboard = {
   trainings: DashboardTrainingRow[];
 };
 
-export function getTraineeDashboard(token: string, limit = 10) {
-  return apiRequest<TraineeDashboard>(`/sessions/dashboard?limit=${limit}`, {
+export function getTraineeDashboard(token: string, limit = 10, range?: { start?: string; end?: string }) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (range?.start) params.set("start", range.start);
+  if (range?.end) params.set("end", range.end);
+  return apiRequest<TraineeDashboard>(`/sessions/dashboard?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

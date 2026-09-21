@@ -3,6 +3,7 @@ import { DefaultTheme, ThemeProvider, usePathname } from "expo-router";
 import { AnimatedSplashOverlay } from "@/components/animated-icon";
 import BrandSplash from "@/components/common/BrandSplash";
 import { AppShell, AppStack, TRAINER_ROUTES, useRouteBlur } from "@/components/layout";
+import { AdminFiltersProvider } from "@/hooks/useAdminFilters";
 import { AuthProvider } from "@/hooks/useAuth";
 import { useAppFonts } from "@/hooks/useAppFonts";
 
@@ -19,12 +20,14 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
+      <AdminFiltersProvider>
       <ThemeProvider value={DefaultTheme}>
         <AnimatedSplashOverlay />
         <AppShell isTrainerRoute={isTrainerRoute}>
           <AppStack />
         </AppShell>
       </ThemeProvider>
+    </AdminFiltersProvider>
     </AuthProvider>
   );
 }

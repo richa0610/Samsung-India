@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,6 +23,14 @@ type TrainingListViewProps = {
   onRefresh: () => void;
   onBack: () => void;
   onEdit: (row: TrainingAgendaItem) => void;
+  /** Conference Report button target - defaults to `onEdit`. */
+  onReport?: (row: TrainingAgendaItem) => void;
+  /** Adds the Zone and Session Type columns (admin's org-wide list). */
+  extendedColumns?: boolean;
+  /** A bottom nav sits below this screen and already clears the safe area - don't reserve it twice. */
+  hasBottomNav?: boolean;
+  /** Rendered at the top of the scrolling card - the admin filter bar. */
+  topContent?: ReactNode;
   statusColumn: DataTableColumn<TrainingAgendaItem>;
   exportFileName: string;
   emptyLabel: string;
@@ -36,15 +45,19 @@ export function TrainingListView({
   onRefresh,
   onBack,
   onEdit,
+  onReport,
+  extendedColumns,
+  hasBottomNav = false,
+  topContent,
   statusColumn,
   exportFileName,
   emptyLabel,
 }: TrainingListViewProps) {
   const insets = useSafeAreaInsets();
-  const columns = buildTrainingListColumns(onEdit, statusColumn);
+  const columns = buildTrainingListColumns(onEdit, statusColumn, { onReport, extended: extendedColumns });
 
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
+    <SafeAreaView style={styles.container} edges={hasBottomNav ? [] : ["bottom"]}>
       <ScreenBanner backgroundColor={Colors.mainColour1} style={[styles.banner, { paddingTop: insets.top + 12 }]}>
         <View style={styles.bannerRow}>
           <Pressable onPress={onBack} hitSlop={8}>
@@ -62,6 +75,7 @@ export function TrainingListView({
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.mainColour1]} tintColor={Colors.mainColour1} />}
       >
+        {topContent}
         {loading ? (
           <View style={styles.centered}>
             <ActivityIndicator color={Colors.mainColour1} />

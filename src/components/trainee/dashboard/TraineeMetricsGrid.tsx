@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
@@ -12,6 +12,8 @@ export type TraineeMetricsProps = {
   presentCount?: number;
   absentCount?: number;
   scheduledCount?: number;
+  notStartedCount?: number;
+  ongoingCount?: number;
 };
 
 export default function TraineeMetricsGrid({
@@ -19,12 +21,13 @@ export default function TraineeMetricsGrid({
   presentCount = 0,
   absentCount = 0,
   scheduledCount = 0,
+  notStartedCount = 0,
+  ongoingCount = 0,
 }: TraineeMetricsProps) {
   const cards = [
     {
       title: "Total Trainings",
       value: totalTrainings,
-      subtitle: "All Time",
       valueColor: "#2563EB",
       iconName: "school" as const,
       iconColor: "#2563EB",
@@ -33,7 +36,6 @@ export default function TraineeMetricsGrid({
     {
       title: "Present",
       value: presentCount,
-      subtitle: "This Period",
       valueColor: "#16A34A",
       iconName: "calendar-outline" as const,
       iconColor: "#16A34A",
@@ -42,30 +44,56 @@ export default function TraineeMetricsGrid({
     {
       title: "Absent",
       value: absentCount,
-      subtitle: "This Period",
       valueColor: "#DC2626",
       iconName: "person-remove-outline" as const,
       iconColor: "#DC2626",
       iconBg: "#FEF2F2",
     },
     {
-      title: "Assigned / Scheduled",
+      title: "Scheduled",
       value: scheduledCount,
-      subtitle: "This Period",
       valueColor: "#EA580C",
       iconName: "calendar-number-outline" as const,
       iconColor: "#EA580C",
       iconBg: "#FFF7ED",
     },
+    {
+      title: "Ongoing",
+      value: ongoingCount,
+      valueColor: "#0EA5E9",
+      iconName: "radio-outline" as const,
+      iconColor: "#0EA5E9",
+      iconBg: "#F0F9FF",
+    },
+    {
+      title: "Not Started",
+      value: notStartedCount,
+      valueColor: "#7C3AED",
+      iconName: "alert-circle-outline" as const,
+      iconColor: "#7C3AED",
+      iconBg: "#F5F3FF",
+    },
   ];
 
   return (
-    <View style={styles.grid}>
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.grid}
+      style={styles.scroll}
+    >
       {cards.map((card) => (
         <View key={card.title} style={styles.card}>
           <View style={[styles.iconCircle, { backgroundColor: card.iconBg }]}>
-            <Ionicons name={card.iconName} size={18} color={card.iconColor} />
+            <Ionicons name={card.iconName} size={15} color={card.iconColor} />
           </View>
+          <AppText
+            variant="h2"
+            weight={FontWeight.bold}
+            style={[styles.value, { color: card.valueColor }]}
+          >
+            {card.value}
+          </AppText>
           <AppText
             variant="tiny"
             color="#4B5563"
@@ -75,35 +103,26 @@ export default function TraineeMetricsGrid({
           >
             {card.title}
           </AppText>
-          <AppText
-            variant="h2"
-            weight={FontWeight.bold}
-            style={[styles.value, { color: card.valueColor }]}
-          >
-            {card.value}
-          </AppText>
-          <AppText variant="tiny" color="#9CA3AF" style={styles.subtitle}>
-            {card.subtitle}
-          </AppText>
         </View>
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: { flexGrow: 0, marginTop: 10 },
   grid: {
     flexDirection: "row",
-    gap: 4,
+    gap: 8,
     paddingHorizontal: 10,
-    marginTop: 10,
+    paddingVertical: 4,
   },
   card: {
-    flex: 1,
+    width: 84,
     backgroundColor: Colors.white,
     borderRadius: Radius.card,
-    paddingVertical: 12,
-    paddingHorizontal: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
@@ -111,24 +130,19 @@ const styles = StyleSheet.create({
     ...Shadows.card,
   },
   iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 6,
+    marginBottom: 2,
+  },
+  value: {
+    fontSize: 18,
+    textAlign: "center",
   },
   title: {
     fontSize: 9.5,
-    textAlign: "center",
-  },
-  value: {
-    fontSize: 20,
-    marginVertical: 2,
-    textAlign: "center",
-  },
-  subtitle: {
-    fontSize: 8.5,
     textAlign: "center",
   },
 });

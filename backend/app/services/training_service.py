@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.constants import LIVE_QUIZ_STATE_IDLE, MODULE_LABELS, PASS_THRESHOLD_PERCENT
 from app.core.exceptions import bad_request, conflict, forbidden, not_found
 from app.core.media import media_subdir
+from app.dependencies.filters import ConferenceFilters
 from app.models.admin import Admin
 from app.models.attendance import Attendance
 from app.models.conference import Conference
@@ -29,14 +30,17 @@ from app.utils.status import title_status
 from app.utils.validators import validate_document_upload, validate_image_upload
 from app.schemas.training import (
     AssessmentSummary,
+    AttendanceConfig,
     AttendanceListItemOut,
     AttendanceMarkRequest,
     AudienceBreakdown,
     AuditLogEntry,
     ExecutionFlowItem,
+    ModuleConfig,
     PendingSessionItem,
     ProctoringUnlockRequest,
     SessionDashboardOut,
+    SessionFlowConfig,
     SessionHeroStat,
     SessionReportOut,
     SessionReportParticipant,
@@ -44,8 +48,10 @@ from app.schemas.training import (
     TopPerformer,
     TraineeRow,
     TrainerAgendaResponse,
+    TrainingAdminUpdate,
     TrainingAgendaItem,
     TrainingCreate,
+    TrainingDetailOut,
     TrainingOut,
 )
 from app.services import live_quiz_service
@@ -416,6 +422,185 @@ def create_training(db: Session, payload: TrainingCreate, background_tasks: Back
         conference.trainerEmployeeId,
         {"type": "training_created", "conferenceUid": conference.conferenceUid},
     )
+    background_tasks.add_task(
+        ws_manager.broadcast,
+        {"type": "training_created", "conferenceUid": conference.conferenceUid},
+    )
+
+    return TrainingOut(
+        conferenceUid=conference.conferenceUid,
+        conferenceStatus=conference.conferenceStatus,
+        status=conference.status,
+    )
+
+
+def get_training_detail(db: Session, conference_uid: str) -> TrainingDetailOut:
+    """Full editable detail for one training, pre-filled into the admin's
+    edit form - the read counterpart to `update_training` below."""
+    conference = _find_any_conference(db, conference_uid)
+    session_config = json.loads(conference.sessionConfig) if conference.sessionConfig else {}
+
+    session_flow = None
+    if session_config:
+        session_flow = SessionFlowConfig(
+            attendance=AttendanceConfig(**session_config["attendance"]) if session_config.get("attendance") else None,
+            standardTest=ModuleConfig(**session_config["standardTest"]) if session_config.get("standardTest") else None,
+            liveQuiz=ModuleConfig(**session_config["liveQuiz"]) if session_config.get("liveQuiz") else None,
+            survey=ModuleConfig(**session_config["survey"]) if session_config.get("survey") else None,
+        )
+
+    venue_name = None
+    if conference.venueUid:
+        venue = catalog_repository.get_venue_by_uid(db, conference.venueUid)
+        venue_name = venue.name if venue else None
+
+    return TrainingDetailOut(
+        conferenceUid=conference.conferenceUid,
+        title=conference.suiteTitle or conference.trainingType or "Training Session",
+        zone=conference.zone,
+        region=conference.region,
+        company=conference.company,
+        requestedBy=conference.requestedBy,
+        trainerEmployeeId=conference.trainerEmployeeId,
+        trainerName=conference.trainerName,
+        state=conference.state,
+        district=conference.district,
+        venue=conference.venueUid,
+        venueName=venue_name,
+        isResidential=conference.conferenceType == "Residential Conference",
+        conferenceDate=conference.conferenceDate,
+        conferenceTime=conference.conferenceTime,
+        trainingEndDate=session_config.get("trainingEndDate"),
+        trainingHub=conference.trainingHub,
+        audience=conference.audience,
+        sessionType=conference.sessionType,
+        trainingType=conference.trainingType,
+        batchSize=conference.batchSize,
+        sessionFlow=session_flow,
+        checklist=conference.checklistUid.split(",") if conference.checklistUid else [],
+        conferenceStatus=title_status(conference.conferenceStatus),
+        approvalStatus=title_status(conference.status),
+        attendanceSheetPax=conference.attendanceSheetPax,
+        confirmedPax=conference.confirmedPax,
+        remarks=conference.remarks,
+        checkInPhoto=conference.startConferenceImage,
+        checkOutPhoto=conference.conferenceImage,
+        attendanceSheet=conference.attendanceSheet,
+        scheduleEditable=conference.conferenceStatus in _EDITABLE_CONFERENCE_STATUSES,
+    )
+
+
+# Once a session has actually started, its schedule/venue/session-flow are
+# locked in (attendance may already be running against them) - only a
+# training that hasn't gone live yet can still have those changed. The admin
+# review fields (pax, approval/training status, message) stay editable.
+_EDITABLE_CONFERENCE_STATUSES = {"Scheduled", "Pending", "Not Started"}
+
+
+def _apply_schedule_fields(db: Session, conference: Conference, payload: TrainingCreate) -> None:
+    session_config = {}
+    if payload.isResidential and payload.trainingEndDate:
+        session_config["trainingEndDate"] = payload.trainingEndDate
+    if payload.sessionFlow:
+        if payload.sessionFlow.attendance:
+            session_config["attendance"] = payload.sessionFlow.attendance.model_dump(exclude_none=True)
+        if payload.sessionFlow.standardTest:
+            session_config["standardTest"] = payload.sessionFlow.standardTest.model_dump(exclude_none=True)
+        if payload.sessionFlow.liveQuiz:
+            session_config["liveQuiz"] = payload.sessionFlow.liveQuiz.model_dump(exclude_none=True)
+        if payload.sessionFlow.survey:
+            session_config["survey"] = payload.sessionFlow.survey.model_dump(exclude_none=True)
+
+    # Same geofencing rule as create_training: pin the check-in radius to the
+    # chosen venue's coordinates, only when geofencing is actually on.
+    geo_latitude = geo_longitude = None
+    geo_radius = None
+    attendance_cfg = session_config.get("attendance")
+    if attendance_cfg and attendance_cfg.get("geoFencing"):
+        geo_radius = attendance_cfg.get("geoRadius") or 100
+        if payload.venue:
+            venue = catalog_repository.get_venue_by_uid(db, payload.venue)
+            if venue and venue.latitude is not None and venue.longitude is not None:
+                geo_latitude = venue.latitude
+                geo_longitude = venue.longitude
+
+    conference.zone = payload.zone
+    conference.region = payload.region
+    conference.company = payload.company
+    conference.requestedBy = payload.requestedBy
+    conference.trainerEmployeeId = payload.trainerEmployeeId
+    conference.trainerName = payload.trainerName
+    conference.conferenceType = "Residential Conference" if payload.isResidential else "Non Residential Conference"
+    conference.conferenceDate = payload.conferenceDate
+    conference.conferenceTime = payload.conferenceTime
+    conference.enableCheckIn = 1 if session_config.get("attendance") else 0
+    conference.trainingHub = payload.trainingHub
+    conference.audience = payload.audience
+    conference.sessionType = payload.sessionType
+    conference.trainingType = payload.trainingType
+    conference.batchSize = payload.batchSize
+    conference.state = payload.state
+    conference.district = payload.district
+    conference.venueUid = payload.venue
+    conference.geoLatitude = geo_latitude
+    conference.geoLongitude = geo_longitude
+    conference.geoRadius = geo_radius
+    conference.checklistUid = ",".join(payload.checklist) if payload.checklist else None
+    conference.sessionConfig = json.dumps(session_config) if session_config else None
+    conference.postAssessmentUid = (
+        payload.sessionFlow.standardTest.assessmentSuiteUid
+        if payload.sessionFlow and payload.sessionFlow.standardTest
+        else None
+    )
+    conference.surveyUid = (
+        payload.sessionFlow.survey.assessmentSuiteUid if payload.sessionFlow and payload.sessionFlow.survey else None
+    )
+
+
+def update_training(
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    payload: TrainingAdminUpdate,
+    background_tasks: Optional[BackgroundTasks] = None,
+) -> TrainingOut:
+    conference = _find_any_conference(db, conference_uid)
+
+    if conference.conferenceStatus in _EDITABLE_CONFERENCE_STATUSES:
+        _apply_schedule_fields(db, conference, payload)
+
+    if payload.confirmedPax is not None:
+        conference.confirmedPax = payload.confirmedPax
+
+    decision = None
+    if payload.approvalStatus and payload.approvalStatus != title_status(conference.status):
+        if payload.approvalStatus in ("Approved", "Rejected") and not (payload.message or "").strip():
+            raise bad_request("Add a message explaining why you are approving or rejecting this training.")
+        conference.status = payload.approvalStatus
+        decision = payload.approvalStatus
+
+    if payload.trainingStatus and payload.trainingStatus != title_status(conference.conferenceStatus):
+        conference.conferenceStatus = payload.trainingStatus
+
+    if payload.message and payload.message.strip():
+        conference.remarks = payload.message.strip()
+
+    conference.updatedBy = admin.username
+    conference_repository.save(db, conference)
+
+    if decision:
+        action = "APPROVE_TRAINING" if decision == "Approved" else "REJECT_TRAINING" if decision == "Rejected" else "UPDATE_TRAINING"
+        remarks = f"{decision} training {conference.conferenceUid}: {(payload.message or '').strip()}".rstrip(": ")
+    else:
+        action, remarks = "UPDATE_TRAINING", f"Updated training {conference.conferenceUid}"
+    log_activity(db, action=action, username=admin.username, role=admin.role, remarks=remarks)
+
+    if background_tasks:
+        background_tasks.add_task(
+            ws_manager.send_to,
+            conference.trainerEmployeeId,
+            {"type": "training_updated", "conferenceUid": conference.conferenceUid},
+        )
 
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
@@ -431,13 +616,21 @@ def _get_owned_conference(db: Session, admin: Admin, conference_uid: str) -> Con
     return conference
 
 
+def _get_viewable_conference(db: Session, admin: Admin, conference_uid: str) -> Conference:
+    """Read access: an admin account can open any trainer's session, a trainer
+    only their own. Write actions (start/end/modules/attendance) stay owner-only."""
+    if getattr(admin, "role", None) == "admin":
+        return _find_any_conference(db, conference_uid)
+    return _get_owned_conference(db, admin, conference_uid)
+
+
 def list_all_performers(db: Session, admin: Admin, conference_uid: str) -> list[TopPerformer]:
     """Every trainee ranked on whichever assessment the dashboard's Top
     Performers card is currently tracking - Live Quiz while it's the
     active module, Post Test otherwise (see _build_dashboard's own
     top_performers). Powers the card's "View All" page; unlike the card
     itself, this isn't capped to 5."""
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_viewable_conference(db, admin, conference_uid)
 
     if conference.activeModuleId == "LIVE_QUIZ":
         ranked = live_quiz_service.live_quiz_ranked_results(db, conference)
@@ -524,6 +717,8 @@ def _to_agenda_item(
         title=conference.suiteTitle or conference.trainingType or "Training Session",
         trainerName=conference.trainerName,
         hoid=conference.trainerEmployeeId,
+        zone=conference.zone,
+        sessionType=conference.sessionType,
         conferenceDate=conference.conferenceDate,
         conferenceTime=conference.conferenceTime,
         conferenceStatus=title_status(conference.conferenceStatus),
@@ -547,7 +742,13 @@ def _to_agenda_item(
 
 
 def list_trainer_trainings(
-    db: Session, admin: Admin, start: Optional[str], end: Optional[str], all_sessions: bool
+    db: Session,
+    admin: Admin,
+    start: Optional[str],
+    end: Optional[str],
+    all_sessions: bool,
+    org: bool = False,
+    filters: Optional[ConferenceFilters] = None,
 ) -> TrainerAgendaResponse:
     """Powers the trainer's Home agenda, and (with `all_sessions=true`) the
     Training List / Pending Training List / Sessions screens that need this
@@ -565,7 +766,14 @@ def list_trainer_trainings(
     is scoped to that range/scope instead."""
     is_default_view = start is None and end is None and not all_sessions
 
-    if all_sessions:
+    if org:
+        # Admin-only org-wide view: every trainer's trainings, newest first.
+        conferences = sorted(
+            [c for c in conference_repository.list_all(db) if filters is None or filters.matches(c)],
+            key=lambda c: c.timestamp or datetime.min,
+            reverse=True,
+        )
+    elif all_sessions:
         conferences = conference_repository.list_all_for_trainer(db, admin.username)
     elif is_default_view:
         conferences = conference_repository.list_for_trainer(db, admin.username, exact_date=date.today().isoformat())
@@ -601,18 +809,41 @@ def list_trainer_trainings(
     for uids in trainee_source.values():
         all_trainee_uids |= uids
 
-    total_sessions = len(conferences)
-    completed = sum(1 for c in conferences if title_status(c.conferenceStatus) == "Completed")
+    # Cancelled trainings stay in the session list (so they show as Cancelled)
+    # but never count toward any dashboard number.
+    counted = [c for c in conferences if title_status(c.conferenceStatus) != "Cancelled"]
+    total_sessions = len(counted)
+    completed = sum(1 for c in counted if title_status(c.conferenceStatus) == "Completed")
     # Pending = incoming AND approved: not yet started (excludes Ongoing/Live -
     # that's running right now, not "incoming"), not Completed, and actually
     # Approved (a training still awaiting admin approval, or Rejected, isn't
     # a real incoming session). Was `total_sessions - completed`, which lumped
     # in-progress and not-yet-approved sessions into "Pending" too.
-    pending = sum(
-        1
-        for c in conferences
-        if title_status(c.status) == "Approved" and title_status(c.conferenceStatus) not in ("Ongoing", "Live", "Completed")
-    )
+    # Missed = approved but never started, and its scheduled date has already
+    # passed (venue/IST date). Kept out of `pending` so a stale session isn't
+    # counted as both "incoming" and "missed".
+    today_ist = ist_now().date().isoformat()
+
+    def _not_started_approved(rows: list[Conference]) -> list[Conference]:
+        return [
+            c
+            for c in rows
+            if title_status(c.status) == "Approved"
+            and title_status(c.conferenceStatus) not in ("Ongoing", "Live", "Completed", "Cancelled")
+        ]
+
+    def _is_past(c: Conference) -> bool:
+        return bool(c.conferenceDate) and c.conferenceDate < today_ist
+
+    # The default view only lists today's sessions, so Planned (all upcoming)
+    # and Ongoing count across the trainer's whole history there; with an
+    # explicit range/all_sessions they follow that scope. Missed always
+    # follows the selected date range (today's, on the default view).
+    scoped = conference_repository.list_all_for_trainer(db, admin.username) if is_default_view else counted
+    pending = sum(1 for c in _not_started_approved(scoped) if not _is_past(c))
+    missed = sum(1 for c in _not_started_approved(counted) if _is_past(c))
+    # Ongoing = every session that is live right now, same scope as above.
+    ongoing = sum(1 for c in scoped if title_status(c.conferenceStatus) in ("Ongoing", "Live"))
     executed_percentage = round((completed / total_sessions) * 100) if total_sessions else 0
     pending_percentage = round((pending / total_sessions) * 100) if total_sessions else 0
 
@@ -641,6 +872,8 @@ def list_trainer_trainings(
         totalSessions=total_sessions,
         completed=completed,
         pending=pending,
+        missed=missed,
+        ongoing=ongoing,
         executedPercentage=executed_percentage,
         pendingPercentage=pending_percentage,
         recentCompleted=recent_completed,
@@ -671,18 +904,31 @@ def _find_any_conference(db: Session, conference_uid: str) -> Conference:
     return conference
 
 
-def approve_training(db: Session, admin: Admin, conference_uid: str) -> TrainingOut:
+def approve_training(
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    reason: Optional[str] = None,
+    background_tasks: Optional[BackgroundTasks] = None,
+) -> TrainingOut:
     conference = _find_any_conference(db, conference_uid)
     conference.status = "Approved"
     conference.updatedBy = admin.username
+    if reason:
+        conference.remarks = reason
     conference_repository.save(db, conference)
     log_activity(
         db,
         action="APPROVE_TRAINING",
         username=admin.username,
         role=admin.role,
-        remarks=f"Approved training {conference.conferenceUid}",
+        remarks=f"Approved training {conference.conferenceUid}: {reason}" if reason else f"Approved training {conference.conferenceUid}",
     )
+    if background_tasks:
+        background_tasks.add_task(
+            ws_manager.broadcast,
+            {"type": "training_status_changed", "conferenceUid": conference.conferenceUid},
+        )
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
         conferenceStatus=conference.conferenceStatus,
@@ -690,18 +936,31 @@ def approve_training(db: Session, admin: Admin, conference_uid: str) -> Training
     )
 
 
-def reject_training(db: Session, admin: Admin, conference_uid: str) -> TrainingOut:
+def reject_training(
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    reason: Optional[str] = None,
+    background_tasks: Optional[BackgroundTasks] = None,
+) -> TrainingOut:
     conference = _find_any_conference(db, conference_uid)
     conference.status = "Rejected"
     conference.updatedBy = admin.username
+    if reason:
+        conference.remarks = reason
     conference_repository.save(db, conference)
     log_activity(
         db,
         action="REJECT_TRAINING",
         username=admin.username,
         role=admin.role,
-        remarks=f"Rejected training {conference.conferenceUid}",
+        remarks=f"Rejected training {conference.conferenceUid}: {reason}" if reason else f"Rejected training {conference.conferenceUid}",
     )
+    if background_tasks:
+        background_tasks.add_task(
+            ws_manager.broadcast,
+            {"type": "training_status_changed", "conferenceUid": conference.conferenceUid},
+        )
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
         conferenceStatus=conference.conferenceStatus,
@@ -899,7 +1158,7 @@ def _build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut
 
 
 def get_session_dashboard(db: Session, admin: Admin, conference_uid: str) -> SessionDashboardOut:
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_viewable_conference(db, admin, conference_uid)
     return _build_dashboard(db, conference)
 
 
@@ -932,7 +1191,7 @@ def _report_duration_label(conference: Conference) -> Optional[str]:
 
 
 def get_session_report(db: Session, admin: Admin, conference_uid: str) -> SessionReportOut:
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_viewable_conference(db, admin, conference_uid)
     # The report is a post-session artifact - only available once the trainer
     # has ended the session (mirrors the disabled "Report" button on the
     # Session Dashboard).
@@ -1169,6 +1428,8 @@ async def start_training(
     conference = _get_owned_conference(db, admin, conference_uid)
     if conference.conferenceEndsOn is not None:
         raise conflict("This session has already ended")
+    if title_status(conference.conferenceStatus) == "Cancelled":
+        raise conflict("This session was cancelled by an admin")
     if title_status(conference.status) != "Approved":
         raise forbidden("This session hasn't been approved by an admin yet")
     # A session can only be started on (or after) its scheduled date - not
@@ -1468,6 +1729,7 @@ def _nudge_session_room(background_tasks: BackgroundTasks, conference_uid: str) 
     instead of waiting for the 10s poll. The payload is a thin nudge; the
     real state travels over REST."""
     background_tasks.add_task(ws_manager.send_to_room, conference_uid, {"type": "session"})
+    background_tasks.add_task(ws_manager.broadcast, {"type": "training_status_changed", "conferenceUid": conference_uid})
 
 
 def mark_attendance(
@@ -1577,13 +1839,18 @@ def reset_attendance(
     return _build_dashboard(db, conference)
 
 
-def list_attendance(db: Session, admin: Admin) -> list[AttendanceListItemOut]:
+def list_attendance(
+    db: Session, admin: Admin, org: bool = False, filters: Optional[ConferenceFilters] = None
+) -> list[AttendanceListItemOut]:
     """Powers the trainer's Attendance List / Pending Attendance / Confirmed
     Attendance screens (all three fetch this same list and split it
     client-side by `marked`). Scoped to this trainer's own conferences,
     same as list_trainer_trainings - this lives in the trainer's own More
     menu, not a cross-trainer admin view."""
-    conferences = conference_repository.list_all_for_trainer(db, admin.username)
+    if org:
+        conferences = [c for c in conference_repository.list_all(db) if filters is None or filters.matches(c)]
+    else:
+        conferences = conference_repository.list_all_for_trainer(db, admin.username)
     conference_by_uid = {c.conferenceUid: c for c in conferences}
     conference_uids = list(conference_by_uid.keys())
     if not conference_uids:

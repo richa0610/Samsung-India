@@ -4,28 +4,27 @@
  * loading/refreshing states, and action states.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
+import { AdminDashboardStats, fetchAdminDashboardStats } from "@/api/admin";
+import { useAdminFilters } from "@/hooks/useAdminFilters";
 import { useAuth } from "@/hooks/useAuth";
 import {
   ApiError,
-  AssessmentSuiteOut,
   PendingSessionItem,
-  approveTraining,
-  fetchAssessmentSuites,
   fetchPendingTrainings,
-  rejectTraining,
 } from "@/api/training";
+import { subscribe } from "@/services/liveEvents";
 
 export function useAdminDashboard() {
   const router = useRouter();
   const { admin, adminToken, adminLogout } = useAuth();
+  const { applied, appliedKey } = useAdminFilters("home");
 
   const [pending, setPending] = useState<PendingSessionItem[]>([]);
-  const [suites, setSuites] = useState<AssessmentSuiteOut[]>([]);
+  const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [actioningUid, setActioningUid] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(
@@ -38,12 +37,12 @@ export function useAdminDashboard() {
       }
       setError(null);
       try {
-        const [pendingList, suiteList] = await Promise.all([
+        const [pendingList, statsResult] = await Promise.all([
           fetchPendingTrainings(adminToken),
-          fetchAssessmentSuites(adminToken),
+          fetchAdminDashboardStats(adminToken, applied),
         ]);
         setPending(pendingList);
-        setSuites(suiteList);
+        setStats(statsResult);
       } catch (err) {
         setError(
           err instanceof ApiError
@@ -58,7 +57,8 @@ export function useAdminDashboard() {
         }
       }
     },
-    [adminToken],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `appliedKey` is `applied`, serialised so an equal filter doesn't refetch
+    [adminToken, appliedKey],
   );
 
   useFocusEffect(
@@ -67,31 +67,20 @@ export function useAdminDashboard() {
     }, [load]),
   );
 
-  const handleApprove = async (uid: string) => {
-    if (!adminToken || actioningUid) return;
-    setActioningUid(uid);
-    try {
-      await approveTraining(adminToken, uid);
-      await load();
-    } catch {
-      setError("Couldn't approve this session.");
-    } finally {
-      setActioningUid(null);
-    }
-  };
-
-  const handleReject = async (uid: string) => {
-    if (!adminToken || actioningUid) return;
-    setActioningUid(uid);
-    try {
-      await rejectTraining(adminToken, uid);
-      await load();
-    } catch {
-      setError("Couldn't reject this session.");
-    } finally {
-      setActioningUid(null);
-    }
-  };
+  // Live WebSocket subscription: silently refetch dashboard stats and lists
+  // whenever a relevant event arrives over /ws/admin
+  useEffect(() => {
+    const unsubCreated = subscribe("training_created", () => load(true));
+    const unsubStatus = subscribe("training_status_changed", () => load(true));
+    const unsubUpdated = subscribe("training_updated", () => load(true));
+    const unsubAttendance = subscribe("attendance_marked", () => load(true));
+    return () => {
+      unsubCreated();
+      unsubStatus();
+      unsubUpdated();
+      unsubAttendance();
+    };
+  }, [load]);
 
   const handleLogout = () => {
     adminLogout();
@@ -101,14 +90,11 @@ export function useAdminDashboard() {
   return {
     admin,
     pending,
-    suites,
+    stats,
     loading,
     refreshing,
-    actioningUid,
     error,
     refresh: () => load(true),
-    handleApprove,
-    handleReject,
     handleLogout,
   };
 }

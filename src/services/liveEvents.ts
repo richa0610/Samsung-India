@@ -4,7 +4,12 @@
 // they care about and trigger a silent refetch, instead of each polling
 // on its own interval.
 
-export type LiveEventType = "training_created" | "trainee_created" | "attendance_marked";
+export type LiveEventType =
+  | "training_created"
+  | "trainee_created"
+  | "attendance_marked"
+  | "training_status_changed"
+  | "training_updated";
 
 export type LiveEvent = {
   type: LiveEventType;

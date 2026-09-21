@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 
 import { SelectOption } from "@/components/ui/SearchableSelect";
 import { STATES } from "@/data/states";
 import { useAuth } from "@/hooks/useAuth";
+import { subscribe } from "@/services/liveEvents";
 import {
   ApiError,
   AssessmentSuiteOut,
+  ApprovalStatus,
   ModuleConfig,
+  TrainingStatus,
   createTraining,
   fetchAssessmentSuites,
   fetchAudiences,
@@ -15,9 +18,11 @@ import {
   fetchRequestedByOptions,
   fetchSessionTypes,
   fetchTrainers,
+  fetchTrainingDetail,
   fetchTrainingHubs,
   fetchTrainingTypes,
   fetchVenues,
+  updateTraining,
 } from "@/api/training";
 import {
   DEFAULT_CATEGORY_OPTIONS,
@@ -41,9 +46,32 @@ const emptyModule = (): EvaluationModuleState => ({
   questionCount: "",
 });
 
-export function useAddTrainingForm() {
+const toApprovalStatus = (value: string): ApprovalStatus =>
+  value === "Approved" || value === "Rejected" ? value : "Pending";
+
+// "Live" is the same running state as "Ongoing" for the admin's dropdown.
+const toTrainingStatus = (value: string): TrainingStatus =>
+  value === "Ongoing" || value === "Live"
+    ? "Ongoing"
+    : value === "Completed" || value === "Cancelled"
+      ? value
+      : "Scheduled";
+
+// How often the review fields re-check the server while the page is open, as
+// a backstop for a missed live push.
+const LIVE_REFRESH_MS = 8000;
+
+// Passing an existing training's UID switches the form into edit mode: it
+// loads that training's current detail into the same fields this hook
+// already exposes (so the existing section components render unchanged),
+// and submits via updateTraining instead of createTraining.
+export function useAddTrainingForm(editing?: { conferenceUid: string }) {
   const router = useRouter();
   const { adminToken, admin, adminLogout } = useAuth();
+  const isEditing = !!editing;
+
+  const [loadingDetail, setLoadingDetail] = useState(isEditing);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [zone, setZone] = useState("");
   const [region, setRegion] = useState("");
@@ -88,7 +116,29 @@ export function useAddTrainingForm() {
   const [moduleEnabledAt, setModuleEnabledAt] = useState<Partial<Record<ModuleKey, number>>>({});
 
   const [checklist, setChecklist] = useState<string[]>([]);
-  const [agreeTerms, setAgreeTerms] = useState(false);
+  // Already agreed once at creation - editing an existing training shouldn't
+  // re-prompt for Terms & Conditions.
+  const [agreeTerms, setAgreeTerms] = useState(isEditing);
+
+  // Admin review fields - only used in edit mode.
+  const [attendanceSheetPax, setAttendanceSheetPax] = useState("");
+  const [confirmedPax, setConfirmedPax] = useState("");
+  const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus>("Pending");
+  const [originalApproval, setOriginalApproval] = useState<ApprovalStatus>("Pending");
+  const [trainingStatus, setTrainingStatus] = useState<TrainingStatus>("Scheduled");
+  const [adminMessage, setAdminMessage] = useState("");
+  const [adminConfirm, setAdminConfirm] = useState(false);
+  const [scheduleEditable, setScheduleEditable] = useState(true);
+  const [evidence, setEvidence] = useState<{
+    checkInPhoto?: string;
+    checkOutPhoto?: string;
+    attendanceSheet?: string;
+  }>({});
+
+  // Last value the server reported for each dropdown - a live refresh only
+  // overwrites a dropdown the admin hasn't already changed themselves.
+  const serverApprovalRef = useRef<ApprovalStatus>("Pending");
+  const serverTrainingRef = useRef<TrainingStatus>("Scheduled");
 
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -144,6 +194,149 @@ export function useAddTrainingForm() {
     const load = adminToken && district ? fetchVenues(adminToken, district) : Promise.resolve([]);
     load.then(setVenueOptions).catch(() => setVenueOptions([]));
   }, [adminToken, district]);
+
+  useEffect(() => {
+    if (!editing || !adminToken) return;
+    let cancelled = false;
+    fetchTrainingDetail(adminToken, editing.conferenceUid)
+      .then((detail) => {
+        if (cancelled) return;
+        setZone(detail.zone ?? "");
+        setRegion(detail.region ?? "");
+        // The stored value is already whatever the admin resolved it to last
+        // time (a known option or a free-typed name) - "Other" + that text
+        // always displays and resubmits it correctly either way.
+        setRequestedByOption(detail.requestedBy ? "Other" : "");
+        setRequestedByOther(detail.requestedBy ?? "");
+
+        setTrainerId(detail.trainerEmployeeId ?? "");
+        setTrainerName(detail.trainerName ?? "");
+        setStateValue(STATES.find((s) => s.label === detail.state)?.value ?? "");
+        setDistrict(detail.district ?? "");
+        setVenue(detail.venue ?? "");
+
+        setIsResidential(detail.isResidential);
+        setConferenceDate(detail.conferenceDate ?? "");
+        setConferenceTime(detail.conferenceTime ?? "");
+        setTrainingEndDate(detail.trainingEndDate ?? "");
+        setTrainingHub(detail.trainingHub ?? "");
+        setAudience(detail.audience ?? "");
+        setSessionType(detail.sessionType ?? "");
+        setTrainingType(detail.trainingType ?? "");
+        setBatchSize(detail.batchSize ?? "");
+
+        const flow = detail.sessionFlow;
+        if (flow?.attendance) {
+          setAttendanceEnabled(true);
+          setCheckInOpens(flow.attendance.checkInOpens ?? "");
+          setCheckOutCloses(flow.attendance.checkOutCloses ?? "");
+          setGeoFencing(flow.attendance.geoFencing);
+        } else {
+          setAttendanceEnabled(false);
+        }
+
+        const now = Date.now();
+        const nextModules: Record<ModuleKey, EvaluationModuleState> = {
+          standardTest: emptyModule(),
+          liveQuiz: emptyModule(),
+          survey: emptyModule(),
+        };
+        const nextEnabledAt: Partial<Record<ModuleKey, number>> = {};
+        (["standardTest", "liveQuiz", "survey"] as ModuleKey[]).forEach((key) => {
+          const module = flow?.[key];
+          if (!module) return;
+          nextModules[key] = {
+            enabled: true,
+            category: module.category,
+            assessmentSuiteUid: module.assessmentSuiteUid,
+            questionCount: module.questionCount != null ? String(module.questionCount) : "",
+            startTime: module.startTime,
+            endTime: module.endTime,
+            checkIn: module.checkIn,
+            unlockCondition: module.unlockCondition ?? "Automatic",
+          };
+          nextEnabledAt[key] = now;
+        });
+        setModules(nextModules);
+        setModuleEnabledAt(nextEnabledAt);
+        setAttendanceEnabledAt(now);
+
+        setChecklist(detail.checklist ?? []);
+
+        setAttendanceSheetPax(detail.attendanceSheetPax ?? "0");
+        setConfirmedPax(detail.confirmedPax && detail.confirmedPax !== "0" ? detail.confirmedPax : "");
+        const approval = toApprovalStatus(detail.approvalStatus);
+        setApprovalStatus(approval);
+        setOriginalApproval(approval);
+        serverApprovalRef.current = approval;
+        const training = toTrainingStatus(detail.conferenceStatus);
+        setTrainingStatus(training);
+        serverTrainingRef.current = training;
+        setAdminMessage(detail.remarks ?? "");
+        setScheduleEditable(detail.scheduleEditable);
+        setEvidence({
+          checkInPhoto: detail.checkInPhoto,
+          checkOutPhoto: detail.checkOutPhoto,
+          attendanceSheet: detail.attendanceSheet,
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setLoadError(err instanceof ApiError ? err.message : "Couldn't load this training's details.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingDetail(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `editing` is a fresh object each render; its conferenceUid is the real trigger
+  }, [editing?.conferenceUid, adminToken]);
+
+  // Post-Training Data + Session Evidence are live: once the trainer starts
+  // the session the status flips to Started, and their check-in / check-out
+  // photos and attendance sheet appear as they're captured - no reopening.
+  useEffect(() => {
+    if (!editing || !adminToken) return;
+    let cancelled = false;
+    const refresh = () => {
+      fetchTrainingDetail(adminToken, editing.conferenceUid)
+        .then((detail) => {
+          if (cancelled) return;
+          setAttendanceSheetPax(detail.attendanceSheetPax ?? "0");
+          setScheduleEditable(detail.scheduleEditable);
+          setEvidence({
+            checkInPhoto: detail.checkInPhoto,
+            checkOutPhoto: detail.checkOutPhoto,
+            attendanceSheet: detail.attendanceSheet,
+          });
+
+          const training = toTrainingStatus(detail.conferenceStatus);
+          const previousTraining = serverTrainingRef.current;
+          serverTrainingRef.current = training;
+          setTrainingStatus((current) => (current === previousTraining ? training : current));
+
+          const approval = toApprovalStatus(detail.approvalStatus);
+          const previousApproval = serverApprovalRef.current;
+          serverApprovalRef.current = approval;
+          setOriginalApproval(approval);
+          setApprovalStatus((current) => (current === previousApproval ? approval : current));
+        })
+        .catch(() => {});
+    };
+    const timer = setInterval(refresh, LIVE_REFRESH_MS);
+    const unsubscribers = [
+      subscribe("training_status_changed", refresh),
+      subscribe("training_updated", refresh),
+      subscribe("attendance_marked", refresh),
+    ];
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `editing` is a fresh object each render; its conferenceUid is the real trigger
+  }, [editing?.conferenceUid, adminToken]);
 
   const categoryOptions: SelectOption[] = useMemo(() => {
     const merged = new Map<string, SelectOption>();
@@ -257,6 +450,17 @@ export function useAddTrainingForm() {
       setNotice("Please agree to the Terms & Conditions to continue.");
       return;
     }
+    if (isEditing) {
+      const decided = approvalStatus !== originalApproval && approvalStatus !== "Pending";
+      if (decided && !adminMessage.trim()) {
+        setNotice(`Add a message explaining why you are marking this training ${approvalStatus.toLowerCase()}.`);
+        return;
+      }
+      if (!adminConfirm) {
+        setNotice("Please confirm the details above are correct.");
+        return;
+      }
+    }
     if (!adminToken) {
       setNotice("Your session has expired. Please log in again.");
       return;
@@ -292,7 +496,7 @@ export function useAddTrainingForm() {
     setSubmitting(true);
     setNotice(null);
     try {
-      await createTraining(adminToken, {
+      const payload = {
         zone: cleanText(zone, 100) || undefined,
         region: cleanText(region, 100) || undefined,
         company: cleanText(company, 120) || undefined,
@@ -325,7 +529,21 @@ export function useAddTrainingForm() {
           survey: modules.survey.enabled ? toPayloadModule(modules.survey) : undefined,
         },
         checklist,
-      });
+        ...(isEditing
+          ? {
+              confirmedPax: digitsOnly(confirmedPax) || undefined,
+              approvalStatus,
+              trainingStatus,
+              message: adminMessage.trim() || undefined,
+            }
+          : {}),
+      };
+
+      if (editing) {
+        await updateTraining(adminToken, editing.conferenceUid, payload);
+      } else {
+        await createTraining(adminToken, payload);
+      }
 
       router.back();
     } catch (err) {
@@ -341,6 +559,10 @@ export function useAddTrainingForm() {
   };
 
   return {
+    isEditing,
+    loadingDetail,
+    loadError,
+
     zone, setZone,
     region, setRegion,
     company,
@@ -384,6 +606,16 @@ export function useAddTrainingForm() {
 
     checklist, setChecklist,
     agreeTerms, setAgreeTerms,
+
+    attendanceSheetPax,
+    confirmedPax, setConfirmedPax,
+    approvalStatus, setApprovalStatus,
+    originalApproval,
+    trainingStatus, setTrainingStatus,
+    adminMessage, setAdminMessage,
+    adminConfirm, setAdminConfirm,
+    scheduleEditable,
+    evidence,
 
     submitting, notice, handleSubmit,
   };

@@ -47,6 +47,11 @@ def list_for_trainee(db: Session, trainee_uid: str) -> list[Attendance]:
     return db.query(Attendance).filter(Attendance.traineeUid == trainee_uid).all()
 
 
+def count_by_status(db: Session, status: str) -> int:
+    """Org-wide count, all conferences - the admin dashboard's Audience card."""
+    return db.query(Attendance).filter(Attendance.status == status).count()
+
+
 def list_attended_trainee_uids(db: Session) -> set[str]:
     """Trainees marked Present in at least one training - the population the
     dashboard ranks (a brand-new trainee who's never attended is excluded)."""

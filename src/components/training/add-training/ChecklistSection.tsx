@@ -11,7 +11,16 @@ import { Spacing } from "@/theme/spacing";
 import { SectionTitle } from "./SectionTitle";
 import { AddTrainingForm } from "./useAddTrainingForm";
 
-export function ChecklistSection({ form }: { form: AddTrainingForm }) {
+export function ChecklistSection({
+  form,
+  submitLabel = "Register Training Session",
+  hideSubmit = false,
+}: {
+  form: AddTrainingForm;
+  submitLabel?: string;
+  /** Edit mode renders its own confirm + submit after the admin sections. */
+  hideSubmit?: boolean;
+}) {
   return (
     <AppCard style={styles.card}>
       <SectionTitle index={5} title="Checklist" icon="checkmark-circle-outline" />
@@ -24,18 +33,22 @@ export function ChecklistSection({ form }: { form: AddTrainingForm }) {
         onChange={form.setChecklist}
       />
 
-      <Pressable style={styles.checkboxRow} onPress={() => form.setAgreeTerms((v) => !v)}>
-        <View style={[styles.checkbox, form.agreeTerms && styles.checkboxChecked]}>
-          {form.agreeTerms && <Ionicons name="checkmark" size={12} color={Colors.white} />}
-        </View>
-        <AppText style={styles.checkboxLabel}>
-          I agree to the <AppText style={styles.termsLink} color={Colors.mainColour1}>Terms &amp; Conditions</AppText>.
-        </AppText>
-      </Pressable>
+      {!hideSubmit && (
+        <>
+          <Pressable style={styles.checkboxRow} onPress={() => form.setAgreeTerms((v) => !v)}>
+            <View style={[styles.checkbox, form.agreeTerms && styles.checkboxChecked]}>
+              {form.agreeTerms && <Ionicons name="checkmark" size={12} color={Colors.white} />}
+            </View>
+            <AppText style={styles.checkboxLabel}>
+              I agree to the <AppText style={styles.termsLink} color={Colors.mainColour1}>Terms &amp; Conditions</AppText>.
+            </AppText>
+          </Pressable>
 
-      {form.notice && <AppText style={styles.notice}>{form.notice}</AppText>}
+          {form.notice && <AppText style={styles.notice}>{form.notice}</AppText>}
 
-      <AppButton title="Register Training Session" onPress={form.handleSubmit} loading={form.submitting} />
+          <AppButton title={submitLabel} onPress={form.handleSubmit} loading={form.submitting} />
+        </>
+      )}
     </AppCard>
   );
 }

@@ -64,7 +64,7 @@ export function useRegisterForm({ joinCode, onSuccess }: UseRegisterFormOptions 
         designation: values.designation || undefined,
         employee_id: values.employee_id || undefined,
         supervisorName: values.supervisorName || undefined,
-        state: values.state || undefined,
+        state: values.state,
         district: values.district || undefined,
       });
 

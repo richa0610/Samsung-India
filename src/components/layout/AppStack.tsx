@@ -8,7 +8,9 @@ export function AppStack() {
       <Stack.Screen name="trainer_dashboard" />
       <Stack.Screen name="trainer_profile" />
       <Stack.Screen name="admin_dashboard" />
-      <Stack.Screen name="assessment_builder" />
+      <Stack.Screen name="admin_attendance_list" />
+      <Stack.Screen name="admin_confirmed_attendance" />
+      <Stack.Screen name="admin_pending_attendance" />
       <Stack.Screen name="add_training" />
       <Stack.Screen name="pending_trainings" />
       <Stack.Screen name="training_list" />

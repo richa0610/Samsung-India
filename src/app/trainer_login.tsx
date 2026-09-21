@@ -16,7 +16,12 @@ import { useTrainerLogin } from "@/hooks/useTrainerLogin";
 
 export default function TrainerLoginScreen() {
   const router = useRouter();
-  const { reason } = useLocalSearchParams<{ reason?: string }>();
+  const { reason, portal } = useLocalSearchParams<{ reason?: string; portal?: string }>();
+  // Same screen/hook/backend call for both entry points (admin.py already
+  // checks the admin table first, falling back to agencyteam, and the
+  // response's role decides admin_dashboard vs trainer_dashboard) - only the
+  // copy differs, matching how each portal's own credential is worded.
+  const isAdminPortal = portal === "admin";
 
   const {
     username,
@@ -67,12 +72,15 @@ export default function TrainerLoginScreen() {
             </Pressable>
 
             <AppCard style={styles.card}>
-              <AuthHeader title="Welcome Back" subtitle="Authenticate to access your session" />
+              <AuthHeader
+                title={isAdminPortal ? "Admin Login" : "Welcome Back"}
+                subtitle={isAdminPortal ? "Login to access dashboard" : "Authenticate to access your session"}
+              />
 
               <View style={styles.body}>
                 <AppInput
-                  label="Company ID / Phone No"
-                  placeholder="Enter Company ID or Phone No"
+                  label={isAdminPortal ? "Username" : "Company ID / Phone No"}
+                  placeholder={isAdminPortal ? "Enter username" : "Enter Company ID or Phone No"}
                   value={username}
                   onChangeText={setUsername}
                   autoCapitalize="none"
@@ -81,7 +89,7 @@ export default function TrainerLoginScreen() {
                 />
                 <AppInput
                   label="Password"
-                  placeholder="Enter Password"
+                  placeholder={isAdminPortal ? "Password" : "Enter Password"}
                   value={password}
                   onChangeText={setPassword}
                   secureTextEntry

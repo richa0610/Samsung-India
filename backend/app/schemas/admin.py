@@ -24,3 +24,88 @@ class AdminAuthSession(BaseModel):
     access_token: str
     token_type: str = "bearer"
     admin: AdminOut
+
+
+class TrainingTypeStatusCount(BaseModel):
+    status: str
+    count: int
+
+
+class TrainingTypeGroup(BaseModel):
+    type: str
+    statuses: list[TrainingTypeStatusCount] = []
+
+
+class TrainingStatsOut(BaseModel):
+    planned: int = 0
+    completed: int = 0
+    pending: int = 0
+    ratePercent: float = 0.0
+    typeBreakdown: list[TrainingTypeGroup] = []
+
+
+class AudienceStatusItem(BaseModel):
+    label: str
+    count: int
+    color: Optional[str] = None
+
+
+class AudienceSection(BaseModel):
+    title: str
+    items: list[AudienceStatusItem] = []
+
+
+class AudienceStatsOut(BaseModel):
+    participants: int = 0
+    present: int = 0
+    absent: int = 0
+    presentPercent: float = 0.0
+    absentPercent: float = 0.0
+    typeBreakdown: list[AudienceSection] = []
+
+
+class TrainerStatusItem(BaseModel):
+    label: str
+    count: int
+
+
+class TrainerStatusSection(BaseModel):
+    title: str = "In Training"
+    items: list[TrainerStatusItem] = []
+
+
+class TrainerStatsOut(BaseModel):
+    pool: int = 0
+    inTraining: int = 0
+    idle: int = 0
+    utilizationPercent: float = 0.0
+    statusAnalysis: list[TrainerStatusSection] = []
+
+
+class AssessmentGapItem(BaseModel):
+    label: str
+    value: str
+    color: Optional[str] = None
+
+
+class AssessmentGapSection(BaseModel):
+    title: str
+    items: list[AssessmentGapItem] = []
+
+
+class AssessmentStatsOut(BaseModel):
+    attempts: int = 0
+    passCount: int = 0
+    failCount: int = 0
+    avgPercent: float = 0.0
+    eligibilityGaps: list[AssessmentGapSection] = []
+
+
+class AdminDashboardStatsOut(BaseModel):
+    """Org-wide (not per-trainer) summary for the admin dashboard's four
+    overview cards - Training/Audience/Trainers/Assessment."""
+
+    training: TrainingStatsOut
+    audience: AudienceStatsOut
+    trainers: TrainerStatsOut
+    assessment: AssessmentStatsOut

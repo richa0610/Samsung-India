@@ -11,6 +11,7 @@ import { Colors } from "@/theme/colors";
 import { FontWeight } from "@/theme/fontWeight";
 import { Radius } from "@/theme/radius";
 import { Shadows } from "@/theme/shadows";
+import { trainingStatusLabel } from "@/utils/trainingStatusLabel";
 
 export default function TrainingDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -52,6 +53,22 @@ export default function TrainingDetailScreen() {
             </AppText>
           </Pressable>
         </View>
+      ) : detail.status === "Missed" ? (
+        // A missed training has nothing to review - no attendance, no
+        // attempted modules - so skip straight to the outcome instead of an
+        // empty-looking module list, same idea as the Home screen's "Session
+        // Completed" card once a session closes.
+        <View style={styles.centered}>
+          <View style={styles.missedIconWrap}>
+            <Ionicons name="close-circle" size={40} color="#DC2626" />
+          </View>
+          <AppText variant="body" weight={FontWeight.bold} color="#111827" align="center">
+            Session Missed
+          </AppText>
+          <AppText variant="caption" color={Colors.gray600} align="center">
+            You missed this training. Try to join your next scheduled session on time.
+          </AppText>
+        </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.summaryCard}>
@@ -83,7 +100,7 @@ export default function TrainingDetailScreen() {
                   OVERALL STATUS
                 </AppText>
                 <AppText variant="body" weight={FontWeight.bold} color={overallMeta?.color ?? "#111827"}>
-                  {detail.status}
+                  {trainingStatusLabel(detail.status)}
                 </AppText>
               </View>
               {overallMeta && (
@@ -126,6 +143,15 @@ const styles = StyleSheet.create({
   bannerTitle: { fontSize: 17 },
   bannerSubtitle: { fontSize: 12, opacity: 0.9, marginTop: 2 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 24 },
+  missedIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: "#FEF2F2",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 4,
+  },
   retryButton: {
     backgroundColor: Colors.mainColour1,
     paddingHorizontal: 22,

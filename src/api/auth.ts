@@ -37,7 +37,7 @@ export type RegisterPayload = {
   designation?: string;
   employee_id?: string;
   supervisorName?: string;
-  state?: string;
+  state: string;
   district?: string;
 };
 

@@ -12,10 +12,12 @@ import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/hooks/useAuth";
 import { TrainingAgendaItem, fetchTrainerAgenda } from "@/api/training";
+import { useAdminFilters } from "@/hooks/useAdminFilters";
 import { subscribe } from "@/services/liveEvents";
 
-export function useTrainerAgendaList(filterPendingOnly = false) {
+export function useTrainerAgendaList(filterPendingOnly = false, org = false) {
   const { adminToken } = useAuth();
+  const { applied, appliedKey } = useAdminFilters("lists");
   const [items, setItems] = useState<TrainingAgendaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,10 +31,16 @@ export function useTrainerAgendaList(filterPendingOnly = false) {
         // Both callers (Training List, Pending Training List) want this
         // trainer's complete history, not the agenda endpoint's default
         // today-only scope - see all_sessions on GET /admin/trainings.
-        const data = await fetchTrainerAgenda(adminToken, { all: true });
+        const data = await fetchTrainerAgenda(adminToken, { all: true, org, filters: org ? applied : undefined });
+        // Org-wide (admin) "other" list = everything already reviewed
+        // (approved or rejected); a trainer's own list is approved only.
         setItems(
           data.trainings.filter((item) =>
-            filterPendingOnly ? item.approvalStatus === "Pending" : item.approvalStatus === "Approved",
+            filterPendingOnly
+              ? item.approvalStatus === "Pending"
+              : org
+                ? item.approvalStatus !== "Pending"
+                : item.approvalStatus === "Approved",
           ),
         );
       } catch {
@@ -42,7 +50,8 @@ export function useTrainerAgendaList(filterPendingOnly = false) {
         else if (mode === "load") setLoading(false);
       }
     },
-    [adminToken, filterPendingOnly],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `appliedKey` is `applied`, serialised so an equal filter doesn't refetch
+    [adminToken, filterPendingOnly, org, appliedKey],
   );
 
   useFocusEffect(

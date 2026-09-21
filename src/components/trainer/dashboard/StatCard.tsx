@@ -10,7 +10,7 @@ type StatCardProps = {
   title: string;
   value: number | string;
   valueColor: string;
-  subtext: string;
+  subtext?: string;
   subtextColor?: string;
   isActive?: boolean;
 };
@@ -34,9 +34,11 @@ export default function StatCard({
         {title}
       </AppText>
       <AppText style={[styles.value, { color: valueColor }]}>{value}</AppText>
-      <AppText style={[styles.subtext, { color: subtextColor }]} numberOfLines={1}>
-        {subtext}
-      </AppText>
+      {subtext ? (
+        <AppText style={[styles.subtext, { color: subtextColor }]} numberOfLines={1}>
+          {subtext}
+        </AppText>
+      ) : null}
     </View>
   );
 }

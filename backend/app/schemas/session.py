@@ -24,6 +24,10 @@ class SessionModule(BaseModel):
     completedAt: Optional[str] = None
     score: Optional[str] = None
     assessmentSuiteUid: Optional[str] = None
+    # Question set the trainer picked for this module + how many of its
+    # questions the trainee gets (assessment-type modules only).
+    suiteName: Optional[str] = None
+    questionCount: Optional[int] = None
 
 
 class CurrentSession(BaseModel):
@@ -132,6 +136,10 @@ class DashboardMetrics(BaseModel):
     present: int = 0
     absent: int = 0
     scheduled: int = 0
+    ongoing: int = 0
+    # Sessions on the trainee's roster whose scheduled date has passed without
+    # the trainer ever starting them.
+    notStarted: int = 0
 
 
 class DashboardPerformance(BaseModel):

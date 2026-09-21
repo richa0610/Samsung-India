@@ -25,6 +25,7 @@ from app.schemas.session import (
 )
 from app.services import session_service
 from app.services.module_flow import live_quiz_suite_uid
+from app.utils.date_utils import ist_now
 from app.utils.status import title_status
 
 _PERIOD_DAYS = 30
@@ -84,6 +85,20 @@ def _trainee_status_for(conference, attendance) -> str:
     return "Scheduled"
 
 
+def _session_ended(conference) -> bool:
+    """The trainer ended the session (Completed, or an end time is recorded)."""
+    return title_status(conference.conferenceStatus) == "Completed" or conference.conferenceEndsOn is not None
+
+
+def _never_started(conference) -> bool:
+    """The trainer never started this session and its scheduled date (IST) has
+    already passed - it just didn't happen, so it isn't the trainee's absence."""
+    if title_status(conference.conferenceStatus) in ("Ongoing", "Live", "Completed", "Cancelled"):
+        return False
+    scheduled_day = (conference.conferenceDate or "").strip()
+    return bool(scheduled_day) and scheduled_day < ist_now().date().isoformat()
+
+
 def _rank_in(pool: list[tuple[str, float]], trainee_uid: str) -> tuple[int | None, int, float | None]:
     """`pool` is (uid, percent), sorted best-first. Competition ranking - every
     trainee with a strictly higher percent is ahead; ties share a rank.
@@ -104,7 +119,11 @@ def _ranking_pool(db: Session) -> list[tuple[str, float]]:
     but was never Present anywhere is not ranked."""
     results = assessment_repository.list_all_submitted_results(db)
     conf_uids = {r.conferenceUid for r in results}
-    confs = {c.conferenceUid: c for c in conference_repository.list_by_uids(db, conf_uids)}
+    confs = {
+        c.conferenceUid: c
+        for c in conference_repository.list_by_uids(db, conf_uids)
+        if title_status(c.conferenceStatus) != "Cancelled"
+    }
     accepted = {uid: _test_and_quiz_suites(c) for uid, c in confs.items()}
     present_pairs = set(attendance_repository.list_present_pairs(db, list(conf_uids)))
 
@@ -124,7 +143,9 @@ def _ranking_pool(db: Session) -> list[tuple[str, float]]:
     return pool
 
 
-def build_trainee_dashboard(db: Session, trainee: Trainee, limit: int) -> TraineeDashboardOut:
+def build_trainee_dashboard(
+    db: Session, trainee: Trainee, limit: int, start: str | None = None, end: str | None = None
+) -> TraineeDashboardOut:
     conference, started, _start_at = session_service._select_current_conference(db, trainee=trainee)
 
     attendance_rows = attendance_repository.list_for_trainee(db, trainee.traineeUid)
@@ -138,31 +159,57 @@ def build_trainee_dashboard(db: Session, trainee: Trainee, limit: int) -> Traine
     conf_uids = set(attendance_by_conf) | set(results_by_conf)
     conferences_by_uid = {c.conferenceUid: c for c in conference_repository.list_by_uids(db, conf_uids)}
 
+    # A cancelled training is dropped from every number and row on this
+    # dashboard, as if the trainee was never part of it.
+    cancelled_uids = {uid for uid, c in conferences_by_uid.items() if title_status(c.conferenceStatus) == "Cancelled"}
+    # The dashboard's date filter drops trainings outside [start, end] the same
+    # way (ranking stays all-time, since a rank is relative to everyone).
+    if start or end:
+        cancelled_uids |= {
+            uid
+            for uid, c in conferences_by_uid.items()
+            if (start and (c.conferenceDate or "") < start) or (end and (c.conferenceDate or "") > end)
+        }
+    if cancelled_uids:
+        attendance_rows = [row for row in attendance_rows if row.conferenceUid not in cancelled_uids]
+        result_rows = [row for row in result_rows if row.conferenceUid not in cancelled_uids]
+        attendance_by_conf = {uid: row for uid, row in attendance_by_conf.items() if uid not in cancelled_uids}
+        results_by_conf = {uid: rows for uid, rows in results_by_conf.items() if uid not in cancelled_uids}
+        conf_uids -= cancelled_uids
+        conferences_by_uid = {uid: c for uid, c in conferences_by_uid.items() if uid not in cancelled_uids}
+
     # --- metrics ---------------------------------------------------------
-    present = sum(1 for row in attendance_rows if row.status == "Present")
-    # Assigned/Scheduled = only INCOMING trainings: a roster row still
-    # awaiting the trainee to even join ("Pending") whose session hasn't
-    # started or ended yet. A "Joined" row means they already showed up, and
-    # a "Pending" row whose session is over/live isn't incoming any more -
-    # it's "Missed" or "Ongoing" in the table below instead.
-    scheduled = sum(
-        1
-        for uid, att in attendance_by_conf.items()
-        if att.status == "Pending" and uid in conferences_by_uid and _trainee_status_for(conferences_by_uid[uid], att) == "Scheduled"
-    )
-    # Absent = assigned to this trainee but never actually attended - either
-    # the trainer explicitly marked them Absent, or the session has since
-    # ended while they were only Joined/Pending and never checked in. Mirrors
-    # the Training Details table's "Absent"/"Missed" row status exactly, so
-    # this number always matches what the table shows.
-    absent = sum(
-        1
-        for uid, att in attendance_by_conf.items()
-        if uid in conferences_by_uid and _trainee_status_for(conferences_by_uid[uid], att) in ("Absent", "Missed")
-    )
-    total_trainings = len(conf_uids)
+    # Every training the trainee is part of lands in exactly ONE bucket, so the
+    # cards always add up to Total Trainings. In priority order:
+    #   Present     - marked Present at the session
+    #   Absent      - the trainer ended it and they were never marked Present
+    #   Ongoing     - it started, hasn't been ended, and they aren't Present
+    #   Not Started - its date has passed but the trainer never started it
+    #   Scheduled   - still upcoming (assigned / joined, not begun)
+    present = absent = ongoing = not_started = scheduled = 0
+    for uid in conf_uids:
+        conference = conferences_by_uid.get(uid)
+        if conference is None:
+            continue
+        att = attendance_by_conf.get(uid)
+        if att is not None and att.status == "Present":
+            present += 1
+        elif _session_ended(conference):
+            absent += 1
+        elif title_status(conference.conferenceStatus) in ("Ongoing", "Live"):
+            ongoing += 1
+        elif _never_started(conference):
+            not_started += 1
+        else:
+            scheduled += 1
+    total_trainings = present + absent + ongoing + not_started + scheduled
     metrics = DashboardMetrics(
-        totalTrainings=total_trainings, present=present, absent=absent, scheduled=scheduled
+        totalTrainings=total_trainings,
+        present=present,
+        absent=absent,
+        ongoing=ongoing,
+        scheduled=scheduled,
+        notStarted=not_started,
     )
 
     # --- performance: Standard Test + Live Quiz marks, for sessions the

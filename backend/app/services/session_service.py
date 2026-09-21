@@ -28,7 +28,7 @@ from app.schemas.session import (
 )
 from app.services.module_flow import auto_advance_if_due, configured_modules
 from app.services.proctoring_settings_service import get_proctoring_settings
-from app.utils.date_utils import duration, parse_module_start
+from app.utils.date_utils import duration, ist_now, parse_module_start
 from app.utils.helpers import attendance_is_assigned
 from app.utils.status import title_status
 
@@ -57,27 +57,22 @@ def _conference_start(conference: Conference) -> datetime | None:
 
 def _session_is_over(conference: Conference) -> bool:
     """True once a session should stop counting as active for a trainee.
-    Checked in order:
 
-      1. The trainer explicitly ended it (`conferenceStatus == "Completed"`).
-      2. Staleness guard: If the session was dated before today, it's over even
-         if the trainer walked away without hitting End Session.
-      3. It's actively running right now (`Ongoing`/`Live`).
-      4. Otherwise, not live and not completed -> over if before today."""
-    if title_status(conference.conferenceStatus) == "Completed":
+    A session that has been started (`Ongoing`/`Live`) stays active until the
+    trainer explicitly ends it - it is never timed out by the date, so a
+    session running past midnight isn't cut off. It is over only when:
+
+      1. The trainer ended it (`Completed`, or `conferenceEndsOn` is set) or an
+         admin cancelled it.
+      2. It was never started and its scheduled date is already before today
+         (IST), i.e. it was missed."""
+    status = title_status(conference.conferenceStatus)
+    if status in ("Completed", "Cancelled") or conference.conferenceEndsOn is not None:
         return True
-    now_date_str = datetime.now().strftime("%Y-%m-%d")
-    reference_day = (
-        conference.conferenceEndsOn
-        or (conference.actualStartedAt.strftime("%Y-%m-%d") if conference.actualStartedAt else None)
-        or conference.conferenceDate
-        or ""
-    ).strip()
-    if reference_day and reference_day < now_date_str:
-        return True
-    if title_status(conference.conferenceStatus) in _LIVE_STATUSES:
+    if status in _LIVE_STATUSES:
         return False
-    return False
+    scheduled_day = (conference.conferenceDate or "").strip()
+    return bool(scheduled_day) and scheduled_day < ist_now().date().isoformat()
 
 
 def _select_current_conference(
@@ -529,6 +524,9 @@ def get_current_session(
         result = assessment_repository.get_latest_result(db, conference.conferenceUid, trainee.traineeUid, suite_uid)
         completed = result is not None
         live = not is_over and not completed and conference.activeModuleId == key
+        suite = assessment_repository.get_suite_by_uid(db, suite_uid)
+        suite_name = (suite.examTitle or suite.courseName) if suite else None
+        question_count = module_cfg.get("questionCount") or (suite.noOfQuestion if suite else None)
 
         module_by_key[key] = SessionModule(
             key=key,
@@ -545,6 +543,8 @@ def get_current_session(
             completedAt=result.submittedAt.strftime("%H:%M") if result and result.submittedAt else None,
             score=f"{float(result.totalScore):g}/{float(result.maxScore):g}" if result else None,
             assessmentSuiteUid=suite_uid,
+            suiteName=suite_name,
+            questionCount=question_count or None,
         )
 
     # Emit in the flow's time-sorted order; anything built but not in that

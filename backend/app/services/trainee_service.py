@@ -51,6 +51,13 @@ def login(db: Session, payload: TraineeLogin, tenant_id: str, ip_address: str | 
 def update_me(db: Session, trainee: Trainee, payload: TraineeUpdate, tenant_id: str) -> TokenResponse:
     updates = payload.model_dump(exclude_unset=True, exclude_none=True)
 
+    # State is compulsory (it drives the State Ranking) - a profile save must
+    # leave the trainee with one, whether it's already saved or sent now.
+    if not (updates.get("state") or "").strip() and not (trainee.state or "").strip():
+        raise bad_request("State is required")
+    if "state" in updates:
+        updates["state"] = updates["state"].strip()
+
     if "phone" in updates or "email" in updates:
         conflict = trainee_repository.get_update_conflict(
             db,

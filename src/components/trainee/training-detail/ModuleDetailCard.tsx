@@ -7,6 +7,7 @@ import { Colors } from "@/theme/colors";
 import { FontWeight } from "@/theme/fontWeight";
 import { Radius } from "@/theme/radius";
 import { Shadows } from "@/theme/shadows";
+import { trainingStatusLabel } from "@/utils/trainingStatusLabel";
 import QuestionReviewItem from "./QuestionReviewItem";
 import { statusMetaFor } from "./statusMeta";
 
@@ -60,7 +61,7 @@ export default function ModuleDetailCard({ module, expanded, onToggle }: ModuleD
         <View style={[styles.statusPill, { backgroundColor: meta.bg }]}>
           <Ionicons name={meta.icon} size={13} color={meta.color} />
           <AppText variant="tiny" weight={FontWeight.bold} color={meta.color}>
-            {module.status}
+            {trainingStatusLabel(module.status)}
           </AppText>
         </View>
 

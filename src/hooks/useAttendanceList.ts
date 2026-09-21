@@ -10,10 +10,12 @@ import { useCallback, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { useAuth } from "@/hooks/useAuth";
 import { AttendanceListItem, fetchAttendanceList } from "@/api/attendanceList";
+import { useAdminFilters } from "@/hooks/useAdminFilters";
 import { subscribe } from "@/services/liveEvents";
 
-export function useAttendanceList(mode: "all" | "pending" | "confirmed" = "all") {
+export function useAttendanceList(mode: "all" | "pending" | "confirmed" = "all", org = false) {
   const { adminToken } = useAuth();
+  const { applied, appliedKey } = useAdminFilters("lists");
   const [items, setItems] = useState<AttendanceListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -24,7 +26,7 @@ export function useAttendanceList(mode: "all" | "pending" | "confirmed" = "all")
       if (loadMode === "refresh") setRefreshing(true);
       else if (loadMode === "load") setLoading(true);
       try {
-        const data = await fetchAttendanceList(adminToken);
+        const data = await fetchAttendanceList(adminToken, org, org ? applied : undefined);
         setItems(
           mode === "pending"
             ? data.filter((item) => !item.marked)
@@ -39,7 +41,8 @@ export function useAttendanceList(mode: "all" | "pending" | "confirmed" = "all")
         else if (loadMode === "load") setLoading(false);
       }
     },
-    [adminToken, mode],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `appliedKey` is `applied`, serialised so an equal filter doesn't refetch
+    [adminToken, mode, org, appliedKey],
   );
 
   useFocusEffect(

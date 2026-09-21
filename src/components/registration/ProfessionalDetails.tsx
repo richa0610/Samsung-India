@@ -109,9 +109,10 @@ export default function ProfessionalDetails({
                     <Controller
                         control={control}
                         name="state"
+                        rules={{ required: "State is required" }}
                         render={({ field: { value, onChange } }) => (
                             <InlineSelect
-                                placeholder="Select State"
+                                placeholder="Select State*"
                                 value={value}
                                 disabled={locked("state")}
                                 onSelect={(newValue) => {
@@ -143,6 +144,9 @@ export default function ProfessionalDetails({
                     />
                 </View>
             </View>
+            {errors.state && (
+                <AppText style={styles.error}>{errors.state.message}</AppText>
+            )}
         </View>
     );
 }

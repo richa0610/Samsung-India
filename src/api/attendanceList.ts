@@ -1,3 +1,4 @@
+import { AdminFilters, adminFilterParams } from "./adminFilters";
 import { apiRequest } from "./client";
 
 export type AttendanceListItem = {
@@ -35,8 +36,13 @@ export type AttendanceListItem = {
   trainerTrainingsPending: number;
 };
 
-export function fetchAttendanceList(token: string) {
-  return apiRequest<AttendanceListItem[]>("/admin/attendance", {
+/** `org` (admin accounts only) lists attendance across every trainer's trainings. */
+export function fetchAttendanceList(token: string, org = false, filters?: AdminFilters) {
+  const params = new URLSearchParams();
+  if (org) params.set("org", "true");
+  for (const [key, value] of adminFilterParams(filters)) params.set(key, value);
+  const query = params.toString();
+  return apiRequest<AttendanceListItem[]>(`/admin/attendance${query ? `?${query}` : ""}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

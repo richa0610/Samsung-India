@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 from sqlalchemy.orm import Session
 
@@ -141,10 +143,12 @@ def get_session_history(
 @router.get("/dashboard", response_model=TraineeDashboardOut)
 def get_trainee_dashboard(
     limit: int = 10,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return trainee_dashboard_service.build_trainee_dashboard(db, trainee, limit)
+    return trainee_dashboard_service.build_trainee_dashboard(db, trainee, limit, start, end)
 
 
 @router.get("/{conference_uid}/detail", response_model=TrainingDetailOut)

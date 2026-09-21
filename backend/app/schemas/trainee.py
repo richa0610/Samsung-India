@@ -11,8 +11,15 @@ class TraineeRegister(BaseModel):
     designation: Optional[str] = Field(default=None, max_length=150)
     employee_id: Optional[str] = Field(default=None, max_length=100)
     supervisorName: Optional[str] = Field(default=None, max_length=100)
-    state: Optional[str] = Field(default=None, max_length=100)
+    state: str = Field(min_length=1, max_length=100)
     district: Optional[str] = Field(default=None, max_length=100)
+
+    @field_validator("state")
+    @classmethod
+    def state_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("State is required")
+        return value.strip()
 
     @field_validator("phone")
     @classmethod

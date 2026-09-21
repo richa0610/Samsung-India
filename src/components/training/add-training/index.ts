@@ -5,3 +5,4 @@ export { TrainerVenueSection } from "./TrainerVenueSection";
 export { TrainingDetailsSection } from "./TrainingDetailsSection";
 export { SessionFlowSection } from "./SessionFlowSection";
 export { ChecklistSection } from "./ChecklistSection";
+export { AdminReviewSections } from "./AdminReviewSections";
