@@ -22,7 +22,7 @@ export default function StatCard({
   value,
   valueColor,
   subtext,
-  subtextColor = "#9CA3AF",
+  subtextColor = Colors.gray400,
   isActive = false,
 }: StatCardProps) {
   return (
@@ -49,7 +49,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 14,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     paddingVertical: 3,
     paddingHorizontal: 2,
     gap: 1,
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 8.5,
-    color: "#6B7280",
+    color: Colors.gray500,
     marginTop: 5,
     textAlign: "center",
     fontWeight: "500",

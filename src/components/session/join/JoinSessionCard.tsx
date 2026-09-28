@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 13, color: "#505050", marginBottom: 6 },
   value: { fontSize: 15, color: "#303030", fontWeight: "bold" },
   joinButton: {
-    backgroundColor: "#006AFF",
+    backgroundColor: Colors.mainColour1,
     height: 48,
     borderRadius: 8,
   },

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
+from app.core.ttl_cache import TTLCache
 from app.database.common import common_engine
 from app.database.connection import build_connect_args
 from app.models.common.tenant_registry import Tenant
@@ -29,10 +30,57 @@ class TenantConnectionManager:
     Guarantees failure isolation: an outage on one tenant's database does not
     affect other tenants or the FastAPI application."""
 
+    # How long a "this tenant is active" verdict is trusted before the registry is asked again -
+    # same order of magnitude as the admin dashboard's own stats cache (admin.py), chosen for the
+    # same reason: bound the extra Common DB round trip this adds to every tenant-scoped request,
+    # while still noticing a suspension within a bounded, short window rather than never (see
+    # `_check_tenant_active`).
+    STATUS_CACHE_SECONDS = 30
+
     def __init__(self) -> None:
         self._engines: Dict[str, Engine] = {}
         self._sessionmakers: Dict[str, sessionmaker] = {}
         self._lock = threading.Lock()
+        self._status_cache = TTLCache(ttl_seconds=self.STATUS_CACHE_SECONDS, max_entries=500)
+
+    def clear_status_cache(self) -> None:
+        """Forces the next `get_engine`/`get_session` call for every tenant to re-read the
+        registry instead of trusting a cached verdict. Tests use this so they don't have to wait
+        out STATUS_CACHE_SECONDS after flipping a tenant's status; production has no caller for
+        this today (the cache expiring on its own is what normal operation relies on)."""
+        self._status_cache.clear()
+
+    def _check_tenant_active(self, tenant_uid: str, common_db: Optional[Session]) -> None:
+        """Re-verifies the tenant is still active on every call - not just when its connection
+        pool is first created. Without this, a tenant suspended after its first request (which
+        creates and caches the Engine) would keep working indefinitely on the cached pool, since
+        `get_engine`'s fast path below never touched the registry again. A short TTL cache (not a
+        live query every call) bounds the added cost to one Common DB round trip per tenant per
+        `STATUS_CACHE_SECONDS`, not per request.
+
+        Fails safe in both directions: a cached "not active" verdict always raises, even before
+        touching the database again; a Common DB error while checking is logged and treated as
+        "unknown, trust what's already running" rather than taking down an otherwise-healthy
+        tenant connection - consistent with this class's own failure-isolation guarantee, and
+        with how a Common DB error is already handled in the cold path below."""
+        cached = self._status_cache.get(tenant_uid)
+        if cached is not None:
+            if cached != "active":
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant account is suspended or inactive")
+            return
+        if common_db is None:
+            return
+        try:
+            record = common_db.query(Tenant).filter(Tenant.tenant_uid == tenant_uid).first()
+        except SQLAlchemyError as exc:
+            logger.error("Failed to re-check tenant status for '%s': %s", tenant_uid, exc)
+            return
+        if record is None:
+            return
+        tenant_status = (record.status or "").lower()
+        self._status_cache.set(tenant_uid, tenant_status)
+        if tenant_status != "active":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant account is suspended or inactive")
 
     def _build_tenant_url(
         self, user: str, password: str, host: str, port: int, db_name: str
@@ -59,10 +107,12 @@ class TenantConnectionManager:
     ) -> Engine:
         """Resolves or lazily creates a dedicated connection pool Engine for the tenant."""
         if tenant_uid in self._engines:
+            self._check_tenant_active(tenant_uid, common_db)
             return self._engines[tenant_uid]
 
         with self._lock:
             if tenant_uid in self._engines:
+                self._check_tenant_active(tenant_uid, common_db)
                 return self._engines[tenant_uid]
 
             tenant_record: Optional[Tenant] = None
@@ -77,6 +127,9 @@ class TenantConnectionManager:
                     logger.error("Failed to query tenant registry from Common DB: %s", exc)
 
             if tenant_record:
+                # Primes _status_cache with the verdict just read, so get_engine's fast path
+                # above doesn't immediately re-query Common DB on the very next call.
+                self._status_cache.set(tenant_uid, tenant_record.status.lower())
                 if tenant_record.status.lower() != "active":
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,

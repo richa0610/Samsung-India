@@ -21,7 +21,7 @@ type SubmissionSummaryCardProps = {
 export default function SubmissionSummaryCard({ rows }: SubmissionSummaryCardProps) {
   return (
     <View style={styles.summaryCard}>
-      <AppText variant="label" weight={FontWeight.semiBold} color="#111827" style={styles.summaryCardTitle}>
+      <AppText variant="label" weight={FontWeight.semiBold} color={Colors.black} style={styles.summaryCardTitle}>
         Submission Summary
       </AppText>
 
@@ -40,10 +40,10 @@ function SummaryRow({ label, value, icon, iconColor, iconBg, isLast }: Submissio
       <View style={[styles.summaryIcon, { backgroundColor: iconBg }]}>
         <Ionicons name={icon} size={16} color={iconColor} />
       </View>
-      <AppText variant="caption" color="#4B5563" style={styles.summaryLabel}>
+      <AppText variant="caption" color={Colors.gray600} style={styles.summaryLabel}>
         {label}
       </AppText>
-      <AppText variant="caption" color="#111827" style={styles.summaryValue}>
+      <AppText variant="caption" color={Colors.black} style={styles.summaryValue}>
         {value}
       </AppText>
     </View>
@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#F3F4F6",
+    borderColor: Colors.gray100,
     paddingHorizontal: 15,
     paddingVertical: 15,
     ...createShadow({ x: 0, y: 2, blur: 6, opacity: 0.04, elevation: 1 }),
@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
   },
   summaryRowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: Colors.gray100,
   },
   summaryIcon: {
     width: 28,

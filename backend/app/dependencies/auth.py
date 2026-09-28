@@ -9,6 +9,7 @@ from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.models.trainee import Trainee
 from app.repositories import admin_repository, trainee_repository
+from app.services.access_service import resolve_scope
 
 bearer_scheme = HTTPBearer()
 
@@ -55,6 +56,10 @@ def get_current_admin(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired session",
     )
+    not_authorized_for_tenant = HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not authorized for this tenant",
+    )
 
     try:
         payload = jwt.decode(
@@ -71,6 +76,17 @@ def get_current_admin(
         admin = admin_repository.get_admin_by_username(common_db, subject.removeprefix("admin:"))
         if not admin:
             raise unauthorized
+        # The token's own tenant claim, not anything a header on this request could carry - see
+        # get_tenant_id_from_request, which already prefers this same verified claim once a
+        # token decodes. Re-checked on every request (not just at login) via the same
+        # admin_access grant everything else in the admin panel already goes through, so a
+        # grant revoked after the token was issued stops working immediately, and a token
+        # minted for one tenant can never be reused against another.
+        token_tenant = payload.get("tenant_id")
+        if not isinstance(token_tenant, str) or not token_tenant.strip():
+            raise unauthorized
+        if not resolve_scope(common_db, admin, token_tenant).allowed:
+            raise not_authorized_for_tenant
         return admin
 
     if subject.startswith("agencyteam:"):

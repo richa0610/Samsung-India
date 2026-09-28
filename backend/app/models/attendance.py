@@ -1,4 +1,5 @@
 from sqlalchemy import (
+    Index,
     BigInteger,
     Boolean,
     Column,
@@ -19,6 +20,11 @@ class Attendance(Base):
     """Mirrors the real `attendance` table (mmtbtwob_tops)."""
 
     __tablename__ = "attendance"
+
+    # Serves the admin Attendance List and dashboard: rows of a set of trainings,
+    # filtered / grouped by status (e.g. "Present") and paired with the trainee.
+    # (conferenceUid, traineeUid) and each column alone are already indexed.
+    __table_args__ = (Index("ix_attendance_conf_status_trainee", "conferenceUid", "status", "traineeUid"),)
 
     id = Column(Integer, primary_key=True, index=True)
 

@@ -17,7 +17,7 @@ import {
 } from "@/services/exportService";
 import DataTableToolbar from "./DataTableToolbar";
 import Pagination from "./Pagination";
-import { DataTableColumn, DataTablePageSize, DataTableToolbarVariant, ExportAction } from "./types";
+import { DataTableColumn, DataTablePageSize, DataTableServerMode, DataTableToolbarVariant, ExportAction } from "./types";
 
 const DEFAULT_PAGE_SIZE_OPTIONS: DataTablePageSize[] = [10, 25, 50, 100, "all"];
 // Row-slot count to fall back on for an empty table when pageSize is "all" (no
@@ -49,6 +49,8 @@ type DataTableProps<T> = {
   toolbarVariant?: DataTableToolbarVariant;
   headerBackgroundColor?: string;
   headerTextColor?: string;
+  /** Server-driven mode (see DataTableServerMode) - search, sort, paging and export all go through the server. */
+  server?: DataTableServerMode<T>;
 };
 
 export default function DataTable<T>({
@@ -64,6 +66,7 @@ export default function DataTable<T>({
   toolbarVariant = "full",
   headerBackgroundColor,
   headerTextColor,
+  server,
 }: DataTableProps<T>) {
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState<DataTablePageSize>(defaultPageSize);
@@ -77,14 +80,19 @@ export default function DataTable<T>({
     [columns, hiddenColumns]
   );
 
+  // In server mode the rows arrive already searched and sorted, and are all shown
+  // (they're loaded in pages of their own), so none of the client-side work applies.
+  const activeSort = server ? server.sort : sort;
+  const pageSizeValue: DataTablePageSize = server ? server.pageSize : pageSize;
+
   const searchedData = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return data;
+    if (server || !query) return data;
     return data.filter((row) => visibleColumns.some((column) => cellValue(column, row).toLowerCase().includes(query)));
-  }, [data, search, visibleColumns]);
+  }, [data, search, server, visibleColumns]);
 
   const filteredData = useMemo(() => {
-    if (!sort) return searchedData;
+    if (server || !sort) return searchedData;
     const column = visibleColumns.find((c) => c.key === sort.key);
     if (!column) return searchedData;
     const withValue = searchedData.map((row) => ({ row, value: cellValue(column, row) }));
@@ -98,9 +106,13 @@ export default function DataTable<T>({
       return sort.direction === "asc" ? comparison : -comparison;
     });
     return withValue.map((entry) => entry.row);
-  }, [searchedData, sort, visibleColumns]);
+  }, [searchedData, server, sort, visibleColumns]);
 
   const toggleSort = (key: string) => {
+    if (server) {
+      server.onSortChange(key);
+      return;
+    }
     setSort((prev) => {
       if (!prev || prev.key !== key) return { key, direction: "asc" };
       if (prev.direction === "asc") return { key, direction: "desc" };
@@ -109,14 +121,17 @@ export default function DataTable<T>({
     setPage(1);
   };
 
-  const pageCount = pageSize === "all" ? 1 : Math.max(Math.ceil(filteredData.length / pageSize), 1);
-  const currentPage = Math.min(page, pageCount);
+  // Server mode: `data` is already just the current page, so the count and the
+  // range come from the server's total instead of slicing the array.
+  const totalRows = server ? (server.total ?? data.length) : filteredData.length;
+  const pageCount = pageSizeValue === "all" ? 1 : Math.max(Math.ceil(totalRows / pageSizeValue), 1);
+  const currentPage = server ? server.page : Math.min(page, pageCount);
 
   const pagedData = useMemo(() => {
-    if (pageSize === "all") return filteredData;
-    const start = (currentPage - 1) * pageSize;
-    return filteredData.slice(start, start + pageSize);
-  }, [filteredData, pageSize, currentPage]);
+    if (server || pageSizeValue === "all") return filteredData;
+    const start = (currentPage - 1) * pageSizeValue;
+    return filteredData.slice(start, start + pageSizeValue);
+  }, [filteredData, server, pageSizeValue, currentPage]);
 
   const toExportRows = (rows: T[]) =>
     rows.map((row, index) => {
@@ -126,6 +141,10 @@ export default function DataTable<T>({
       });
       return record;
     });
+
+  // Rows to export: what's on screen, or - in server mode - every matching row
+  // fetched from the server (the table itself only holds the pages loaded so far).
+  const exportRowsNow = async () => toExportRows(server ? await server.onExportAll() : filteredData);
 
   const exportColumns = visibleColumns.map((column) => ({ key: column.key, header: column.header }));
 
@@ -160,7 +179,7 @@ export default function DataTable<T>({
               <AppText style={styles.downloadTitle} weight={FontWeight.semiBold}>{title}</AppText>
               <Pressable
                 style={styles.downloadBtn}
-                onPress={() => runExport("excel", () => exportTableAsExcel(exportColumns, toExportRows(filteredData), exportFileName))}
+                onPress={() => runExport("excel", async () => exportTableAsExcel(exportColumns, await exportRowsNow(), exportFileName))}
                 disabled={busyAction === "excel"}
               >
                 {busyAction === "excel" ? (
@@ -175,14 +194,22 @@ export default function DataTable<T>({
             </View>
           ) : (
             <DataTableToolbar
-              pageSize={pageSize}
-              pageSizeOptions={pageSizeOptions}
+              pageSize={server ? server.pageSize : pageSize}
+              pageSizeOptions={server ? server.pageSizeOptions : pageSizeOptions}
               onPageSizeChange={(size) => {
+                if (server) {
+                  if (typeof size === "number") server.onPageSizeChange(size);
+                  return;
+                }
                 setPageSize(size);
                 setPage(1);
               }}
-              search={search}
+              search={server ? server.search : search}
               onSearchChange={(value) => {
+                if (server) {
+                  server.onSearchChange(value);
+                  return;
+                }
                 setSearch(value);
                 setPage(1);
               }}
@@ -190,11 +217,11 @@ export default function DataTable<T>({
               columns={columns.map((column) => ({ key: column.key, header: column.header }))}
               hiddenColumns={hiddenColumns}
               onToggleColumn={toggleColumn}
-              onCopy={() => runExport("copy", () => copyTableToClipboard(exportColumns, toExportRows(filteredData)))}
-              onExportCsv={() => runExport("csv", () => exportTableAsCsv(exportColumns, toExportRows(filteredData), exportFileName))}
-              onExportExcel={() => runExport("excel", () => exportTableAsExcel(exportColumns, toExportRows(filteredData), exportFileName))}
-              onExportPdf={() => runExport("pdf", () => exportTableAsPdf(title, exportColumns, toExportRows(filteredData), exportFileName))}
-              onPrint={() => runExport("print", () => printTable(title, exportColumns, toExportRows(filteredData)))}
+              onCopy={() => runExport("copy", async () => copyTableToClipboard(exportColumns, await exportRowsNow()))}
+              onExportCsv={() => runExport("csv", async () => exportTableAsCsv(exportColumns, await exportRowsNow(), exportFileName))}
+              onExportExcel={() => runExport("excel", async () => exportTableAsExcel(exportColumns, await exportRowsNow(), exportFileName))}
+              onExportPdf={() => runExport("pdf", async () => exportTableAsPdf(title, exportColumns, await exportRowsNow(), exportFileName))}
+              onPrint={() => runExport("print", async () => printTable(title, exportColumns, await exportRowsNow()))}
               busyAction={busyAction}
             />
           )}
@@ -210,8 +237,8 @@ export default function DataTable<T>({
             <View style={styles.tableInner}>
               <View style={[styles.headerRow, headerBackgroundColor ? { backgroundColor: headerBackgroundColor } : null]}>
                 {visibleColumns.map((column) => {
-                  const isSortable = column.sortable !== false;
-                  const isActive = sort?.key === column.key;
+                  const isSortable = column.sortable !== false && (!server || server.sortableKeys.has(column.key));
+                  const isActive = activeSort?.key === column.key;
                   const headerColor = headerTextColor ?? (isActive ? Colors.mainColour1 : Colors.gray600);
                   return (
                     <Pressable
@@ -239,7 +266,7 @@ export default function DataTable<T>({
                   one instead of collapsing to just the header row. */}
               <View style={styles.rowsArea}>
                 {pagedData.map((row, localIndex) => {
-                  const absoluteIndex = (pageSize === "all" ? 0 : (currentPage - 1) * pageSize) + localIndex;
+                  const absoluteIndex = (pageSizeValue === "all" ? 0 : (currentPage - 1) * pageSizeValue) + localIndex;
                   return (
                     <View key={keyExtractor(row, absoluteIndex)} style={styles.bodyRow}>
                       {visibleColumns.map((column) => (
@@ -260,7 +287,7 @@ export default function DataTable<T>({
                 {Array.from({
                   length: Math.max(
                     0,
-                    (pageSize === "all" ? FALLBACK_EMPTY_ROW_COUNT : pageSize) - pagedData.length
+                    (pageSizeValue === "all" ? FALLBACK_EMPTY_ROW_COUNT : pageSizeValue) - pagedData.length
                   ),
                 }).map((_, index) => (
                   <View key={`filler-${index}`} style={styles.bodyRow}>
@@ -285,10 +312,10 @@ export default function DataTable<T>({
           <Pagination
             page={currentPage}
             pageCount={pageCount}
-            totalRows={filteredData.length}
-            rangeStart={filteredData.length === 0 ? 0 : pageSize === "all" ? 1 : (currentPage - 1) * (pageSize as number) + 1}
-            rangeEnd={pageSize === "all" ? filteredData.length : Math.min(currentPage * (pageSize as number), filteredData.length)}
-            onPageChange={setPage}
+            totalRows={totalRows}
+            rangeStart={totalRows === 0 ? 0 : pageSizeValue === "all" ? 1 : (currentPage - 1) * (pageSizeValue as number) + 1}
+            rangeEnd={pageSizeValue === "all" ? totalRows : Math.min(currentPage * (pageSizeValue as number), totalRows)}
+            onPageChange={server ? server.onPageChange : setPage}
           />
         </View>
       </View>

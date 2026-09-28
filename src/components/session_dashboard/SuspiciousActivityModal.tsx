@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import AppModal from "@/components/ui/AppModal";
 import { ParticipantItem } from "./sessionDashboardTypes";
+import { Colors } from "@/theme/colors";
 
 type SuspiciousActivityModalProps = {
   participant: ParticipantItem | null;
@@ -21,7 +22,7 @@ export default function SuspiciousActivityModal({ participant, onClose }: Suspic
       contentStyle={styles.sheet}
     >
       <View style={styles.header}>
-        <Ionicons name="warning" size={16} color="#F59E0B" />
+        <Ionicons name="warning" size={16} color={Colors.warning} />
         <AppText style={styles.title}>SUSPICIOUS ACTIVITY</AppText>
       </View>
       <View style={styles.divider} />
@@ -60,15 +61,15 @@ const styles = StyleSheet.create({
     maxHeight: "70%",
   },
   header: { flexDirection: "row", alignItems: "center", gap: 8 },
-  title: { fontSize: 13, fontWeight: "800", color: "#F59E0B", letterSpacing: 0.5 },
-  divider: { borderTopWidth: 1, borderTopColor: "#374151", borderStyle: "dashed", marginTop: 10, marginBottom: 10 },
-  metaLine: { fontSize: 12, color: "#9CA3AF", marginBottom: 4 },
-  metaValue: { color: "#F3F4F6", fontWeight: "700" },
-  logsLabel: { fontSize: 12, fontWeight: "800", color: "#F3F4F6", marginTop: 12, marginBottom: 8 },
+  title: { fontSize: 13, fontWeight: "800", color: Colors.warning, letterSpacing: 0.5 },
+  divider: { borderTopWidth: 1, borderTopColor: Colors.gray700, borderStyle: "dashed", marginTop: 10, marginBottom: 10 },
+  metaLine: { fontSize: 12, color: Colors.gray400, marginBottom: 4 },
+  metaValue: { color: Colors.gray100, fontWeight: "700" },
+  logsLabel: { fontSize: 12, fontWeight: "800", color: Colors.gray100, marginTop: 12, marginBottom: 8 },
   logsList: { maxHeight: 220 },
   logRow: { flexDirection: "row", gap: 6, marginBottom: 10, paddingRight: 4 },
-  bullet: { color: "#9CA3AF", fontSize: 12 },
-  logText: { flex: 1, fontSize: 11, color: "#D1D5DB", lineHeight: 16 },
+  bullet: { color: Colors.gray400, fontSize: 12 },
+  logText: { flex: 1, fontSize: 11, color: Colors.gray300, lineHeight: 16 },
   closeBtn: { marginTop: 8, alignSelf: "flex-end" },
   closeText: { fontSize: 13, color: "#3B82F6", fontWeight: "700" },
 });

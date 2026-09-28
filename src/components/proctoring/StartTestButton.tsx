@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
   button: {
     height: 52,
     borderRadius: 14,
-    backgroundColor: "#00A859",
+    backgroundColor: Colors.recordedGreen,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
       x: 0,
       y: 3,
       blur: 6,
-      color: "#00A859",
+      color: Colors.recordedGreen,
       opacity: 0.2,
       elevation: 3,
     }),

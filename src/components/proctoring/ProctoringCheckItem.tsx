@@ -25,7 +25,7 @@ export default function ProctoringCheckItem({ item }: ProctoringCheckItemProps) 
     <View style={styles.container}>
       {/* Mint Icon Box */}
       <View style={styles.iconBox}>
-        <Ionicons name={item.icon} size={20} color="#00A859" />
+        <Ionicons name={item.icon} size={20} color={Colors.recordedGreen} />
       </View>
 
       {/* Title & Description Column */}
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "#00A859",
+    backgroundColor: Colors.recordedGreen,
     alignItems: "center",
     justifyContent: "center",
   },

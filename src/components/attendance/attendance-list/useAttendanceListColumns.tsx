@@ -61,7 +61,6 @@ export function useAttendanceListColumns(): DataTableColumn<AttendanceListItem>[
     },
     { key: "updatedBy", header: "Updated By", minWidth: 96, exportValue: (row) => row.updatedBy ?? "--" },
     { key: "updationOn", header: "Updation On", minWidth: 140, exportValue: (row) => row.updationOn ?? "--" },
-    { key: "lastUpdates", header: "Timestamp", minWidth: 140, exportValue: (row) => row.lastUpdates ?? "--" },
   ];
 }
 

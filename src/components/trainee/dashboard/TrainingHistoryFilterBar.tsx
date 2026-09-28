@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   sectionLabel: {
     fontSize: 10.5,
     fontWeight: "700",
-    color: "#9CA3AF",
+    color: Colors.gray400,
     letterSpacing: 0.6,
     textTransform: "uppercase",
   },

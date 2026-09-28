@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import StatCard from "./StatCard";
 import { DashboardStats } from "./dashboardUtils";
+import { Colors } from "@/theme/colors";
 
 type SummaryStatsRowProps = {
   stats: DashboardStats;
@@ -12,27 +13,27 @@ export default function SummaryStatsRow({ stats }: SummaryStatsRowProps) {
   return (
     <View style={styles.container}>
       <StatCard
-        icon={<Ionicons name="book-outline" size={16} color="#10B981" />}
-        iconBg="#ECFDF5"
+        icon={<Ionicons name="book-outline" size={16} color={Colors.statusGreen} />}
+        iconBg={Colors.successBgSoft}
         title="Total Sessions"
         value={stats.totalSessions}
-        valueColor="#10B981"
+        valueColor={Colors.statusGreen}
       />
 
       <StatCard
-        icon={<Ionicons name="calendar-outline" size={16} color="#F59E0B" />}
+        icon={<Ionicons name="calendar-outline" size={16} color={Colors.warning} />}
         iconBg="#FFFBEB"
         title="Completed"
         value={stats.completed}
-        valueColor="#F59E0B"
+        valueColor={Colors.warning}
       />
 
       <StatCard
-        icon={<Ionicons name="time-outline" size={16} color="#EF4444" />}
-        iconBg="#FEF2F2"
+        icon={<Ionicons name="time-outline" size={16} color={Colors.red} />}
+        iconBg={Colors.dangerBgSoft}
         title="Planned"
         value={stats.pending}
-        valueColor="#EF4444"
+        valueColor={Colors.red}
       />
 
       <StatCard

@@ -192,13 +192,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 24,
-    color: "#111827",
+    color: Colors.black,
     textAlign: "center",
     letterSpacing: 0.2,
   },
   subtitle: {
     fontSize: 12,
-    color: "#6B7280",
+    color: Colors.gray500,
     textAlign: "center",
     marginTop: 6,
     marginBottom: 10,

@@ -56,6 +56,15 @@ export default function AdminStatCard({
   isExpanded,
   style,
 }: AdminStatCardProps) {
+  // With nothing to show (a zero total) the ring would only be an empty coloured
+  // circle, so it's dropped and just the number is shown, at the same size.
+  const hasData = Number(ringValue ?? bigNumber) !== 0;
+  const ringLabel = ringContent ?? (
+    <AppText variant="caption" weight={FontWeight.bold} color={Colors.black}>
+      {ringValue}
+    </AppText>
+  );
+
   return (
     <View style={[styles.card, style]}>
       <View style={[styles.accentBar, { backgroundColor: accent }]} />
@@ -64,7 +73,7 @@ export default function AdminStatCard({
           <View style={[styles.iconTile, { backgroundColor: `${accent}1F` }]}>
             <Ionicons name={icon} size={16} color={accent} />
           </View>
-          <AppText variant="caption" weight={FontWeight.bold} color="#374151" style={styles.title}>
+          <AppText variant="caption" weight={FontWeight.bold} color={Colors.gray700} style={styles.title}>
             {title}
           </AppText>
         </View>
@@ -77,36 +86,36 @@ export default function AdminStatCard({
 
       <View style={styles.mainRow}>
         <View style={styles.bigNumberColumn}>
-          <AppText weight={FontWeight.bold} color="#111827" style={styles.bigNumber}>
+          <AppText weight={FontWeight.bold} color={Colors.black} style={styles.bigNumber}>
             {bigNumber}
           </AppText>
-          <AppText variant="tiny" weight={FontWeight.bold} color="#9CA3AF" style={styles.bigLabel}>
+          <AppText variant="tiny" weight={FontWeight.bold} color={Colors.gray400} style={styles.bigLabel}>
             {bigLabel}
           </AppText>
         </View>
 
-        <ProgressRing
-          percentage={ringPercentage}
-          color={ringColor}
-          trackColor={ringTrackColor}
-          size={50}
-          strokeWidth={5.5}
-        >
-          {ringContent ?? (
-            <AppText variant="caption" weight={FontWeight.bold} color="#111827">
-              {ringValue}
-            </AppText>
-          )}
-        </ProgressRing>
+        {hasData ? (
+          <ProgressRing
+            percentage={ringPercentage}
+            color={ringColor}
+            trackColor={ringTrackColor}
+            size={50}
+            strokeWidth={5.5}
+          >
+            {ringLabel}
+          </ProgressRing>
+        ) : (
+          <View style={styles.emptyRing}>{ringLabel}</View>
+        )}
       </View>
 
       <View style={styles.subRow}>
         {subItems.map((item) => (
-          <View key={item.label} style={[styles.subItem, { backgroundColor: `${item.color ?? "#6B7280"}12` }]}>
-            <AppText variant="tiny" weight={FontWeight.bold} color={item.color ?? "#374151"} numberOfLines={1}>
+          <View key={item.label} style={[styles.subItem, { backgroundColor: `${item.color ?? Colors.gray500}12` }]}>
+            <AppText variant="tiny" weight={FontWeight.bold} color={item.color ?? Colors.gray700} numberOfLines={1}>
               {item.label}
             </AppText>
-            <AppText variant="caption" weight={FontWeight.bold} color="#111827">
+            <AppText variant="caption" weight={FontWeight.bold} color={Colors.black}>
               {item.value}
             </AppText>
           </View>
@@ -132,12 +141,13 @@ export default function AdminStatCard({
 }
 
 const styles = StyleSheet.create({
+  emptyRing: { width: 50, height: 50, alignItems: "center", justifyContent: "center" },
   card: {
     width: "100%",
     backgroundColor: Colors.white,
     borderRadius: Radius.xxxl,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     paddingVertical: 10,
     paddingLeft: 14,
     paddingRight: 12,
@@ -184,7 +194,7 @@ const styles = StyleSheet.create({
   subItem: { flex: 1, gap: 1, alignItems: "center", borderRadius: Radius.xl, paddingVertical: 5 },
   divider: {
     height: 1,
-    backgroundColor: "#F1F5F9",
+    backgroundColor: Colors.slate100,
     marginTop: 7,
     marginBottom: 6,
   },

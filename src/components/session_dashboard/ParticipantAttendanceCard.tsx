@@ -56,11 +56,11 @@ export default function ParticipantAttendanceCard({
     <View style={styles.card}>
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Ionicons name="people" size={18} color="#111827" />
+          <Ionicons name="people" size={18} color={Colors.black} />
           <AppText style={styles.title}>PARTICIPANT MASTER LIST</AppText>
         </View>
         <Pressable style={styles.refreshBtn} onPress={onRefresh} hitSlop={6}>
-          <Ionicons name="reload" size={11} color="#374151" />
+          <Ionicons name="reload" size={11} color={Colors.gray700} />
           <AppText style={styles.refreshText}>Refresh Data</AppText>
         </Pressable>
       </View>
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 12,
     marginHorizontal: 14,
     marginTop: 10,
@@ -148,30 +148,30 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   titleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  title: { fontSize: 11.5, fontWeight: "800", color: "#111827", letterSpacing: 0.3 },
+  title: { fontSize: 11.5, fontWeight: "800", color: Colors.black, letterSpacing: 0.3 },
   refreshBtn: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
     backgroundColor: Colors.gray50,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: Colors.gray300,
     borderRadius: 6,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  refreshText: { fontSize: 9, color: "#374151", fontWeight: "600" },
+  refreshText: { fontSize: 9, color: Colors.gray700, fontWeight: "600" },
   filterRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  filterLabel: { fontSize: 8.5, color: "#4B5563" },
+  filterLabel: { fontSize: 8.5, color: Colors.gray600 },
   searchBox: { flexDirection: "row", alignItems: "center", gap: 6 },
   searchInput: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: Colors.gray300,
     borderRadius: 6,
     width: 110,
     height: 24,
@@ -184,12 +184,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "#FAFAFB",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     paddingVertical: 10,
     paddingHorizontal: 8,
     borderRadius: 10,
   },
-  thText: { fontSize: 8, fontWeight: "700", color: "#374151", textAlign: "center", lineHeight: 10.5 },
-  empty: { fontSize: 10, color: "#6B7280", textAlign: "center", paddingVertical: 18 },
-  paginationInfo: { fontSize: 8, color: "#6B7280", marginTop: 8 },
+  thText: { fontSize: 8, fontWeight: "700", color: Colors.gray700, textAlign: "center", lineHeight: 10.5 },
+  empty: { fontSize: 10, color: Colors.gray500, textAlign: "center", paddingVertical: 18 },
+  paginationInfo: { fontSize: 8, color: Colors.gray500, marginTop: 8 },
 });

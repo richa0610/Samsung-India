@@ -24,21 +24,21 @@ export type TrainingRowData = {
 };
 
 const STATUS_META: Record<TrainingStatus, { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
-  Completed: { icon: "checkmark-circle-outline", color: "#059669", bg: "#ECFDF5" },
-  Ongoing: { icon: "radio-outline", color: "#2563EB", bg: "#EFF6FF" },
+  Completed: { icon: "checkmark-circle-outline", color: "#059669", bg: Colors.successBgSoft },
+  Ongoing: { icon: "radio-outline", color: Colors.blueAccent, bg: Colors.blue50 },
   Scheduled: { icon: "time-outline", color: "#EA580C", bg: "#FFF7ED" },
-  Missed: { icon: "close-circle-outline", color: "#DC2626", bg: "#FEF2F2" },
-  Absent: { icon: "remove-circle-outline", color: "#6B7280", bg: "#F3F4F6" },
+  Missed: { icon: "close-circle-outline", color: Colors.danger, bg: Colors.dangerBgSoft },
+  Absent: { icon: "remove-circle-outline", color: Colors.gray500, bg: Colors.gray100 },
 };
 
 function HeaderCell({ label, hint, col, center }: { label: string; hint?: string; col: object; center?: boolean }) {
   return (
     <View style={[styles.cell, col, center ? styles.centerAlign : undefined]}>
-      <AppText variant="caption" weight={FontWeight.bold} color="#374151" style={styles.centerText}>
+      <AppText variant="caption" weight={FontWeight.bold} color={Colors.gray700} style={styles.centerText}>
         {label}
       </AppText>
       {hint ? (
-        <AppText variant="tiny" color="#6B7280" style={styles.centerText}>
+        <AppText variant="tiny" color={Colors.gray500} style={styles.centerText}>
           {hint}
         </AppText>
       ) : null}
@@ -50,15 +50,15 @@ function ScoreCell({ score }: { score?: string }) {
   return (
     <View style={[styles.cell, styles.scoreCol, styles.centerAlign]}>
       {!score || score === "-" ? (
-        <AppText variant="caption" color="#9CA3AF">
+        <AppText variant="caption" color={Colors.gray400}>
           -
         </AppText>
       ) : (
         <View style={styles.scoreRow}>
-          <AppText variant="caption" weight={FontWeight.bold} color="#1F2937">
+          <AppText variant="caption" weight={FontWeight.bold} color={Colors.gray800}>
             {score.split("/")[0]}
           </AppText>
-          <AppText variant="tiny" color="#6B7280">
+          <AppText variant="tiny" color={Colors.gray500}>
             /{score.split("/")[1]}
           </AppText>
         </View>
@@ -84,14 +84,14 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll, onPres
       <View style={styles.tableCard}>
         <View style={styles.cardHeader}>
           <View style={styles.clipboardBadge}>
-            <Ionicons name="document-text" size={17} color="#2563EB" />
+            <Ionicons name="document-text" size={17} color={Colors.blueAccent} />
           </View>
-          <AppText variant="body" weight={FontWeight.bold} color="#111827" style={styles.sectionTitle}>
+          <AppText variant="body" weight={FontWeight.bold} color={Colors.black} style={styles.sectionTitle}>
             Training Details
           </AppText>
           {onViewAll ? (
             <Pressable onPress={onViewAll} hitSlop={8} accessibilityRole="button" accessibilityLabel="View all trainings">
-              <AppText variant="caption" weight={FontWeight.bold} color="#2563EB">
+              <AppText variant="caption" weight={FontWeight.bold} color={Colors.blueAccent}>
                 View All
               </AppText>
             </Pressable>
@@ -120,7 +120,7 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll, onPres
 
             {trainings.length === 0 && (
               <View style={styles.emptyRow}>
-                <AppText variant="caption" color="#9CA3AF">
+                <AppText variant="caption" color={Colors.gray400}>
                   No trainings yet
                 </AppText>
               </View>
@@ -135,7 +135,7 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll, onPres
                 accessibilityLabel={onPressRow ? `View details for ${row.trainingName}` : undefined}
               >
                 <View style={[styles.cell, styles.nameCol]}>
-                  <AppText variant="caption" weight={FontWeight.bold} color="#1F2937" numberOfLines={2} style={styles.centerText}>
+                  <AppText variant="caption" weight={FontWeight.bold} color={Colors.gray800} numberOfLines={2} style={styles.centerText}>
                     {row.trainingName}
                   </AppText>
                 </View>
@@ -153,10 +153,10 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll, onPres
                   <View style={styles.dateWrap}>
                     <Ionicons name="calendar-outline" size={18} color="#1E3A8A" />
                     <View>
-                      <AppText variant="caption" weight={FontWeight.bold} color="#1F2937">
+                      <AppText variant="caption" weight={FontWeight.bold} color={Colors.gray800}>
                         {row.date}
                       </AppText>
-                      <AppText variant="tiny" color="#6B7280">
+                      <AppText variant="tiny" color={Colors.gray500}>
                         {row.day}
                       </AppText>
                     </View>
@@ -168,16 +168,16 @@ export default function TrainingDetailsTable({ trainings = [], onViewAll, onPres
 
                 <View style={[styles.cell, styles.rankCol, styles.centerAlign]}>
                   {!row.ranking || row.ranking === "-" ? (
-                    <AppText variant="caption" color="#9CA3AF">
+                    <AppText variant="caption" color={Colors.gray400}>
                       -
                     </AppText>
                   ) : (
                     <View style={styles.centerAlign}>
-                      <AppText variant="caption" weight={FontWeight.bold} color="#111827">
+                      <AppText variant="caption" weight={FontWeight.bold} color={Colors.black}>
                         {row.ranking}
                       </AppText>
                       {row.rankingScope ? (
-                        <AppText variant="tiny" color="#6B7280">
+                        <AppText variant="tiny" color={Colors.gray500}>
                           {row.rankingScope}
                         </AppText>
                       ) : null}
@@ -199,7 +199,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: Radius.card,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     overflow: "hidden",
     ...Shadows.card,
   },
@@ -215,7 +215,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -226,9 +226,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: "#FBFBFC",
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: Colors.slate100,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: Colors.slate100,
     paddingVertical: 6,
     gap:1,
   },
@@ -237,7 +237,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: Colors.slate100,
     paddingVertical: 10,
   },
   emptyRow: { paddingVertical: 22, paddingHorizontal: 16, alignItems: "center" },

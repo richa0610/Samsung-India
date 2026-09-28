@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   pendingWrap: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 28 },
-  pendingTitle: { fontSize: 18, color: "#111827" },
+  pendingTitle: { fontSize: 18, color: Colors.black },
   pendingBody: { fontSize: 13, textAlign: "center", lineHeight: 19 },
   continueButton: {
     height: 52,

@@ -79,10 +79,11 @@ def get_live_quiz(
 def submit_live_quiz_answer(
     payload: LiveAnswerRequest,
     background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return live_quiz_service.submit_live_answer(db, trainee, payload, background_tasks)
+    return live_quiz_service.submit_live_answer(db, trainee, payload, background_tasks, get_tenant_id_from_request(request))
 
 
 @router.post("/live-quiz/timeout", response_model=LiveAnswerResult)

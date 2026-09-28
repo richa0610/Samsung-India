@@ -1,6 +1,5 @@
 import json
 import logging
-from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -21,6 +20,7 @@ from app.schemas.assessment import (
 from app.models.quiz import Assessment, AssessmentResult, AssessmentSuite, Question
 from app.repositories import assessment_repository, attendance_repository
 from app.services import assessment_service
+from app.utils.date_utils import utc_now
 
 router = APIRouter(prefix="/assessments", tags=["assessments"])
 
@@ -63,7 +63,7 @@ def submit_assessment(
 
     total_score = 0
     correct_count = 0
-    now = datetime.now()
+    now = utc_now()
 
     for answer in payload.answers:
         is_correct = (

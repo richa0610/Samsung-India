@@ -18,7 +18,7 @@ export default function ActivityMetaRow({ activity, isAttendance, isQuizOrPostTe
   return (
     <View style={styles.metaRow}>
       <View style={styles.durationPill}>
-        <AppText variant="overline" weight={FontWeight.bold} color="#374151" style={styles.durationText}>
+        <AppText variant="overline" weight={FontWeight.bold} color={Colors.gray700} style={styles.durationText}>
           {duration}
         </AppText>
       </View>
@@ -34,7 +34,7 @@ export default function ActivityMetaRow({ activity, isAttendance, isQuizOrPostTe
 
       {isCompleted && isQuizOrPostTest && (
         <View style={styles.completedQuizInfo}>
-          <Ionicons name="trophy" size={14} color="#F59E0B" />
+          <Ionicons name="trophy" size={14} color={Colors.warning} />
           <AppText variant="caption" color={Colors.headerBlue} weight={FontWeight.semiBold}>
             {completedAt ?? "Completed successfully"}
           </AppText>

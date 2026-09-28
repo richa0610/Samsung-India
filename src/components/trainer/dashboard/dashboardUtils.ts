@@ -1,4 +1,5 @@
 import { DatePreset } from "@/components/trainer/DateDrop";
+import { Colors } from "@/theme/colors";
 
 export type { DatePreset };
 
@@ -48,10 +49,10 @@ export type SessionStatusType = "completed" | "in_progress" | "upcoming";
 export function getSessionStatusInfo(status?: string | null): { label: string; type: SessionStatusType; bg: string; color: string } {
   const norm = (status || "").toLowerCase();
   if (norm === "completed") {
-    return { label: "Completed", type: "completed", bg: "#DCFCE7", color: "#16A34A" };
+    return { label: "Completed", type: "completed", bg: "#DCFCE7", color: Colors.success };
   }
   if (norm === "ongoing" || norm === "live") {
-    return { label: "Live", type: "in_progress", bg: "#FEE2E2", color: "#EF4444" };
+    return { label: "Live", type: "in_progress", bg: Colors.dangerBg, color: Colors.red };
   }
   return { label: "Upcoming", type: "upcoming", bg: "#FEF3C7", color: "#D97706" };
 }

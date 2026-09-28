@@ -1,5 +1,4 @@
 import json
-from datetime import datetime
 
 from sqlalchemy.orm import Session
 
@@ -10,6 +9,7 @@ from app.repositories import assessment_repository, conference_repository
 from app.schemas.assessment import AssessmentQuestionsOut, QuestionOut, SubmitRequest, SubmitResult
 from app.services.activity_log_service import log_activity
 from app.services.module_flow import mark_checkout_if_last_module
+from app.utils.date_utils import utc_now
 
 
 def score_answers(questions: list, answers_by_qid: dict[int, str | None]) -> tuple[int, int, float, int]:
@@ -57,7 +57,7 @@ def submit_assessment(db: Session, trainee: Trainee, suite_uid: str, payload: Su
     if not questions:
         raise not_found("No questions found for this assessment")
 
-    now = datetime.now()
+    now = utc_now()
 
     for answer in payload.answers:
         assessment_repository.add_answer(

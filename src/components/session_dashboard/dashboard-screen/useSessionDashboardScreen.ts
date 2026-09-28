@@ -475,11 +475,11 @@ export function useSessionDashboardScreen() {
   };
   const dismissPendingModuleNotice = () => setPendingModuleLabel(null);
 
-  const handleConfirmEndSession = async (photo: UploadFile, attendanceSheet: UploadFile) => {
+  const handleConfirmEndSession = async (photo: UploadFile, attendanceSheet: UploadFile, totalPax: number) => {
     if (!adminToken) return;
     setEndingSession(true);
     try {
-      await endTraining(adminToken, conferenceUid, photo, attendanceSheet);
+      await endTraining(adminToken, conferenceUid, photo, attendanceSheet, totalPax);
       setShowCheckOutModal(false);
       router.replace("/trainer_dashboard");
     } catch (err) {

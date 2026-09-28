@@ -37,7 +37,7 @@ export default function TopPerformersCard({
             accessibilityLabel="View All"
           >
             <AppText style={styles.toggleText}>View All</AppText>
-            <Ionicons name="chevron-forward" size={13} color="#0066FF" />
+            <Ionicons name="chevron-forward" size={13} color={Colors.brandBlue} />
           </Pressable>
         )}
       </View>
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 12,
     marginHorizontal: 14,
     marginTop: 10,
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 12.5,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     letterSpacing: 0.3,
   },
   toggleBtn: {
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     fontSize: 11.5,
-    color: "#0066FF",
+    color: Colors.brandBlue,
     fontWeight: "700",
   },
   list: {
@@ -137,11 +137,11 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 13,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
   },
   emptySubtitle: {
     fontSize: 11,
-    color: "#6B7280",
+    color: Colors.gray500,
     fontWeight: "500",
     textAlign: "center",
     paddingHorizontal: 20,
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     backgroundColor: Colors.white,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     borderRadius: 10,
     paddingVertical: 7,
     paddingHorizontal: 8,
@@ -174,17 +174,17 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#111827",
+    color: Colors.black,
     flex: 1,
   },
   scoreText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#0066FF",
+    color: Colors.brandBlue,
   },
   percentageText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#6B7280",
+    color: Colors.gray500,
   },
 });

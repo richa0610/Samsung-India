@@ -96,12 +96,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   subtitle: {
-    color: "#EF4444",
+    color: Colors.red,
     fontSize: 13,
     marginBottom: 10,
   },
   description: {
-    color: "#9CA3AF",
+    color: Colors.gray400,
     fontSize: 13.5,
     lineHeight: 20,
     marginBottom: 20,
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   closeText: {
-    color: "#60A5FA",
+    color: Colors.blue400,
     fontSize: 15,
   },
 });

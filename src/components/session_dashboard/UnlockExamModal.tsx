@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import AppModal from "@/components/ui/AppModal";
 import { ParticipantItem } from "./sessionDashboardTypes";
+import { Colors } from "@/theme/colors";
 
 type UnlockExamModalProps = {
   participant: ParticipantItem | null;
@@ -35,7 +36,7 @@ export default function UnlockExamModal({ participant, onCancel, onConfirm }: Un
       contentStyle={styles.sheet}
     >
       <View style={styles.header}>
-        <Ionicons name="warning" size={16} color="#F59E0B" />
+        <Ionicons name="warning" size={16} color={Colors.warning} />
         <AppText style={styles.title}>UNLOCK EXAM FOR : {participant?.name}</AppText>
       </View>
 
@@ -45,7 +46,7 @@ export default function UnlockExamModal({ participant, onCancel, onConfirm }: Un
         value={reason}
         onChangeText={setReason}
         placeholder=""
-        placeholderTextColor="#6B7280"
+        placeholderTextColor={Colors.gray500}
         multiline
       />
 
@@ -69,8 +70,8 @@ const styles = StyleSheet.create({
     width: "88%",
   },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  title: { flex: 1, fontSize: 14, fontWeight: "800", color: "#F3F4F6", lineHeight: 19 },
-  label: { fontSize: 12, color: "#D1D5DB", marginTop: 18, marginBottom: 8 },
+  title: { flex: 1, fontSize: 14, fontWeight: "800", color: Colors.gray100, lineHeight: 19 },
+  label: { fontSize: 12, color: Colors.gray300, marginTop: 18, marginBottom: 8 },
   input: {
     backgroundColor: "#343B47",
     borderRadius: 8,
@@ -78,7 +79,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 12,
-    color: "#F3F4F6",
+    color: Colors.gray100,
     textAlignVertical: "top",
   },
   actionsRow: {
@@ -87,7 +88,7 @@ const styles = StyleSheet.create({
     gap: 20,
     marginTop: 18,
   },
-  cancelText: { fontSize: 13, color: "#60A5FA", fontWeight: "600" },
-  okText: { fontSize: 13, color: "#60A5FA", fontWeight: "800" },
+  cancelText: { fontSize: 13, color: Colors.blue400, fontWeight: "600" },
+  okText: { fontSize: 13, color: Colors.blue400, fontWeight: "800" },
   okTextDisabled: { opacity: 0.4 },
 });

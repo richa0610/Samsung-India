@@ -49,19 +49,19 @@ export default function LiveStudioCard({
         <Summary
           label="STATE"
           value={isPaused ? "PAUSED" : (STATE_LABELS[state] ?? state)}
-          color="#2563EB"
+          color={Colors.blueAccent}
           fontSize={9.5}
         />
         <Summary label="ACTIVE Q" value={activeOrder ? `Q${activeOrder}` : "—"} />
         <Summary
           label="TIME LEFT"
           value={state === "QUESTION_LIVE" ? `${secondsLeft}s` : "—"}
-          color={state === "QUESTION_LIVE" && secondsLeft <= 5 ? "#DC2626" : "#EA580C"}
+          color={state === "QUESTION_LIVE" && secondsLeft <= 5 ? Colors.danger : "#EA580C"}
         />
         <Summary
           label="RESPONSES"
           value={`${totalResponses}/${participants}`}
-          color="#10B981"
+          color={Colors.statusGreen}
           highlighted
         />
       </View>
@@ -129,14 +129,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     overflow: "hidden",
     marginHorizontal: 14,
     marginTop: 10,
     ...Shadows.card,
   },
   headerBanner: {
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
     paddingVertical: 9,
     paddingHorizontal: 12,
     flexDirection: "row",
@@ -152,14 +152,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.gray50,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     borderRadius: 10,
     paddingVertical: 6,
     alignItems: "center",
   },
-  summaryBoxHighlighted: { backgroundColor: "#FFFFFF", borderColor: "#10B981", borderWidth: 1.5 },
-  summaryLabel: { fontSize: 7.5, fontWeight: "700", color: "#6B7280" },
-  summaryValue: { fontSize: 12.5, fontWeight: "800", color: "#111827", marginTop: 1 },
+  summaryBoxHighlighted: { backgroundColor: Colors.white, borderColor: Colors.statusGreen, borderWidth: 1.5 },
+  summaryLabel: { fontSize: 7.5, fontWeight: "700", color: Colors.gray500 },
+  summaryValue: { fontSize: 12.5, fontWeight: "800", color: Colors.black, marginTop: 1 },
   questionsList: { paddingHorizontal: 10, gap: 5, marginBottom: 10 },
-  empty: { fontSize: 9, color: "#6B7280", textAlign: "center", paddingVertical: 16 },
+  empty: { fontSize: 9, color: Colors.gray500, textAlign: "center", paddingVertical: 16 },
 });

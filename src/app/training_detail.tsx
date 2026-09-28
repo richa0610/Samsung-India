@@ -60,9 +60,9 @@ export default function TrainingDetailScreen() {
         // Completed" card once a session closes.
         <View style={styles.centered}>
           <View style={styles.missedIconWrap}>
-            <Ionicons name="close-circle" size={40} color="#DC2626" />
+            <Ionicons name="close-circle" size={40} color={Colors.danger} />
           </View>
-          <AppText variant="body" weight={FontWeight.bold} color="#111827" align="center">
+          <AppText variant="body" weight={FontWeight.bold} color={Colors.black} align="center">
             Session Missed
           </AppText>
           <AppText variant="caption" color={Colors.gray600} align="center">
@@ -76,13 +76,13 @@ export default function TrainingDetailScreen() {
               <>
                 <View style={styles.summaryRow}>
                   <View style={styles.summaryIconWrap}>
-                    <Ionicons name="person" size={16} color="#2563EB" />
+                    <Ionicons name="person" size={16} color={Colors.blueAccent} />
                   </View>
                   <View style={styles.summaryTextColumn}>
-                    <AppText variant="tiny" weight={FontWeight.bold} color="#9CA3AF" style={styles.summaryLabel}>
+                    <AppText variant="tiny" weight={FontWeight.bold} color={Colors.gray400} style={styles.summaryLabel}>
                       TRAINER
                     </AppText>
-                    <AppText variant="body" weight={FontWeight.bold} color="#111827">
+                    <AppText variant="body" weight={FontWeight.bold} color={Colors.black}>
                       {detail.trainerName}
                     </AppText>
                   </View>
@@ -93,13 +93,13 @@ export default function TrainingDetailScreen() {
 
             <View style={styles.summaryRow}>
               <View style={[styles.summaryIconWrap, overallMeta && { backgroundColor: overallMeta.bg }]}>
-                <Ionicons name="shield-checkmark" size={16} color={overallMeta?.color ?? "#2563EB"} />
+                <Ionicons name="shield-checkmark" size={16} color={overallMeta?.color ?? Colors.blueAccent} />
               </View>
               <View style={styles.summaryTextColumn}>
-                <AppText variant="tiny" weight={FontWeight.bold} color="#9CA3AF" style={styles.summaryLabel}>
+                <AppText variant="tiny" weight={FontWeight.bold} color={Colors.gray400} style={styles.summaryLabel}>
                   OVERALL STATUS
                 </AppText>
-                <AppText variant="body" weight={FontWeight.bold} color={overallMeta?.color ?? "#111827"}>
+                <AppText variant="body" weight={FontWeight.bold} color={overallMeta?.color ?? Colors.black}>
                   {trainingStatusLabel(detail.status)}
                 </AppText>
               </View>
@@ -111,12 +111,12 @@ export default function TrainingDetailScreen() {
             </View>
           </View>
 
-          <AppText variant="caption" weight={FontWeight.bold} color="#9CA3AF" style={styles.sectionLabel}>
+          <AppText variant="caption" weight={FontWeight.bold} color={Colors.gray400} style={styles.sectionLabel}>
             MODULES
           </AppText>
 
           {detail.modules.length === 0 ? (
-            <AppText variant="caption" color="#9CA3AF">
+            <AppText variant="caption" color={Colors.gray400}>
               No modules were configured for this training.
             </AppText>
           ) : (
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: "#FEF2F2",
+    backgroundColor: Colors.dangerBgSoft,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 4,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: Radius.card,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     padding: 14,
     marginBottom: 16,
     ...Shadows.card,
@@ -177,13 +177,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
     alignItems: "center",
     justifyContent: "center",
   },
   summaryTextColumn: { flex: 1, gap: 2 },
   summaryLabel: { letterSpacing: 0.4 },
-  summaryDivider: { height: 1, backgroundColor: "#F1F5F9", marginVertical: 12 },
+  summaryDivider: { height: 1, backgroundColor: Colors.slate100, marginVertical: 12 },
   statusPill: {
     width: 32,
     height: 32,

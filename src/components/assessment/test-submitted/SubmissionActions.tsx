@@ -27,9 +27,9 @@ export default function SubmissionActions({ onGoToDashboard }: SubmissionActions
 
       <View style={styles.secureNotice}>
         <View style={styles.secureBadge}>
-          <Ionicons name="lock-closed" size={12} color="#10B981" />
+          <Ionicons name="lock-closed" size={12} color={Colors.statusGreen} />
         </View>
-        <AppText style={styles.secureBadgeText} variant="caption" color="#6B7280" weight={FontWeight.medium}>
+        <AppText style={styles.secureBadgeText} variant="caption" color={Colors.gray500} weight={FontWeight.medium}>
           Your data is secure and encrypted
         </AppText>
       </View>
@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     width: "100%",
     minHeight: 44,
     borderRadius: 12,
-    backgroundColor: "#1CB07D",
+    backgroundColor: Colors.successTeal,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

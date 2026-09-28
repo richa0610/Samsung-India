@@ -14,6 +14,7 @@ from app.database.connection import CommonBase, TenantBase
 from app.database.tenant import tenant_manager
 from app.main import app
 from app.models.admin import Admin
+from app.models.admin_access import AccessBase, AdminAccess
 from app.models.common.tenant_registry import Tenant
 from app.models.trainee import Trainee
 
@@ -27,6 +28,7 @@ class MultiTenancyIntegrationTests(unittest.TestCase):
             poolclass=StaticPool,
         )
         CommonBase.metadata.create_all(bind=self.common_engine)
+        AccessBase.metadata.create_all(bind=self.common_engine)
         self.CommonSession = sessionmaker(
             autocommit=False, autoflush=False, bind=self.common_engine
         )
@@ -94,6 +96,7 @@ class MultiTenancyIntegrationTests(unittest.TestCase):
             phone=9991112222,
             email="alice@abc.com",
             status="Active",
+            state="Karnataka",
         )
         session_abc.add(self.trainee_abc)
         session_abc.commit()
@@ -107,6 +110,7 @@ class MultiTenancyIntegrationTests(unittest.TestCase):
             phone=9993334444,
             email="bob@xyz.com",
             status="Active",
+            state="Maharashtra",
         )
         session_xyz.add(self.trainee_xyz)
         session_xyz.commit()
@@ -264,15 +268,19 @@ class MultiTenancyIntegrationTests(unittest.TestCase):
         common_session = self.CommonSession()
         from app.core.security import hash_password
 
-        common_session.add(
-            Admin(
-                adminUid="admin-1",
-                username="demoadmin",
-                password=hash_password("Sup3rSecret!"),
-                name="Demo Admin",
-                role="admin",
-            )
+        admin = Admin(
+            adminUid="admin-1",
+            username="demoadmin",
+            password=hash_password("Sup3rSecret!"),
+            name="Demo Admin",
+            role="admin",
         )
+        common_session.add(admin)
+        common_session.flush()
+        # Login now also requires an admin_access grant for the requested tenant (Phase A/B) -
+        # a super_admin grant keeps this test's actual point (common-DB lookup routing) working
+        # without coupling it to company/zone scoping, which isn't what it's testing.
+        common_session.add(AdminAccess(admin_id=admin.id, role="super_admin", tenant_uid=None, active=1, granted_by="test"))
         common_session.commit()
         common_session.close()
 

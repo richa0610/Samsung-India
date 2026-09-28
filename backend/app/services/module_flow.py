@@ -1,6 +1,6 @@
 import json
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy.orm import Session
 
@@ -14,7 +14,7 @@ from app.core.constants import (
 from app.models.conference import Conference
 from app.models.conference_activity_log import ConferenceActivityLog
 from app.repositories import activity_log_repository, attendance_repository, conference_repository
-from app.utils.date_utils import ist_now, parse_module_start, time_to_minutes
+from app.utils.date_utils import ist_now, parse_module_start, time_to_minutes, utc_now
 
 # sessionConfig key + planned-start-time field for each module, used to order
 # the flow by time.
@@ -250,4 +250,4 @@ def mark_checkout_if_last_module(db: Session, conference: Conference, trainee_ui
     if not attendance or attendance.checkOutTime:
         return
 
-    attendance.checkOutTime = datetime.now()
+    attendance.checkOutTime = utc_now()

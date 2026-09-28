@@ -46,7 +46,7 @@ export default function AudienceBreakdownCard({
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerIconBox}>
-          <Ionicons name="people" size={18} color="#0066FF" />
+          <Ionicons name="people" size={18} color={Colors.brandBlue} />
         </View>
         <AppText style={styles.title}>AUDIENCE BREAKDOWN</AppText>
       </View>
@@ -65,7 +65,7 @@ export default function AudienceBreakdownCard({
             <PersonCheckIcon width={18} height={14} />
           </View>
           <View style={styles.metricTextCol}>
-            <AppText style={[styles.metricLabel, { color: "#10B981" }]}>
+            <AppText style={[styles.metricLabel, { color: Colors.statusGreen }]}>
               PRESENT
             </AppText>
             <AppText style={styles.metricValue}>{present}</AppText>
@@ -94,7 +94,7 @@ export default function AudienceBreakdownCard({
             <PersonCancelIcon width={18} height={14} />
           </View>
           <View style={styles.metricTextCol}>
-            <AppText style={[styles.metricLabel, { color: "#EF4444" }]}>
+            <AppText style={[styles.metricLabel, { color: Colors.red }]}>
               ABSENT
             </AppText>
             <AppText style={styles.metricValue}>{absent}</AppText>
@@ -107,7 +107,7 @@ export default function AudienceBreakdownCard({
             <AssignmentIcon width={16} height={18} />
           </View>
           <View style={styles.metricTextCol}>
-            <AppText style={[styles.metricLabel, { color: "#6B7280" }]}>
+            <AppText style={[styles.metricLabel, { color: Colors.gray500 }]}>
               ASSIGNED
             </AppText>
             <AppText style={styles.metricValue}>{assigned}</AppText>
@@ -121,7 +121,7 @@ export default function AudienceBreakdownCard({
           </View>
           <View style={styles.metricTextCol}>
             <AppText
-              style={[styles.metricLabel, { color: "#6B7280" }]}
+              style={[styles.metricLabel, { color: Colors.gray500 }]}
               numberOfLines={1}
             >
               UNASSIGNED
@@ -136,7 +136,7 @@ export default function AudienceBreakdownCard({
             <AddNotesIcon width={16} height={16} />
           </View>
           <View style={styles.metricTextCol}>
-            <AppText style={[styles.metricLabel, { color: "#6B7280" }]}>
+            <AppText style={[styles.metricLabel, { color: Colors.gray500 }]}>
               FRESH
             </AppText>
             <AppText style={styles.metricValue}>{fresh}</AppText>
@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 12,
     marginHorizontal: 14,
     marginTop: 10,
@@ -168,7 +168,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderWidth: 1.8,
-    borderColor: "#0066FF",
+    borderColor: Colors.brandBlue,
     borderRadius: 4,
     alignItems: "center",
     justifyContent: "center",
@@ -176,14 +176,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 12.5,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     letterSpacing: 0.3,
   },
   totalBox: {
     backgroundColor: "#F0F6FF",
     borderRadius: 14,
     borderWidth: 1.2,
-    borderColor: "#60A5FA",
+    borderColor: Colors.blue400,
     paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
@@ -192,13 +192,13 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#0066FF",
+    color: Colors.brandBlue,
     letterSpacing: 0.5,
   },
   totalValue: {
     fontSize: 26,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     marginTop: 2,
   },
   grid: {
@@ -219,19 +219,19 @@ const styles = StyleSheet.create({
   },
   presentCard: {
     backgroundColor: "#F0FDF4",
-    borderColor: "#10B981",
+    borderColor: Colors.statusGreen,
   },
   notMarkedCard: {
     backgroundColor: "#FEFCE8",
     borderColor: "#FACC15",
   },
   absentCard: {
-    backgroundColor: "#FEF2F2",
+    backgroundColor: Colors.dangerBgSoft,
     borderColor: "#F87171",
   },
   neutralCard: {
     backgroundColor: Colors.gray50,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
   },
   iconBox: {
     width: 32,
@@ -247,10 +247,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#FEF9C3",
   },
   absentIconBox: {
-    backgroundColor: "#FEE2E2",
+    backgroundColor: Colors.dangerBg,
   },
   neutralIconBox: {
-    backgroundColor: "#F3F4F6",
+    backgroundColor: Colors.gray100,
   },
   metricTextCol: {
     flex: 1,
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   metricValue: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     marginTop: 1,
   },
 });

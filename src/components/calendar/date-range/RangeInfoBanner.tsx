@@ -6,8 +6,8 @@ import { Colors } from "@/theme/colors";
 import { formatMonthDay } from "../calendarUtils";
 
 type RangeInfoBannerProps = {
-  selectedStart: Date;
-  selectedEnd: Date;
+  selectedStart: Date | null;
+  selectedEnd: Date | null;
 };
 
 export default function RangeInfoBanner({ selectedStart, selectedEnd }: RangeInfoBannerProps) {
@@ -16,10 +16,14 @@ export default function RangeInfoBanner({ selectedStart, selectedEnd }: RangeInf
       <View style={styles.infoIconCircle}>
         <Ionicons name="information" size={11} color={Colors.white} />
       </View>
-      <AppText style={styles.infoText}>
-        Showing data from <AppText style={styles.infoHighlight}>{formatMonthDay(selectedStart)}</AppText> to{" "}
-        <AppText style={styles.infoHighlight}>{formatMonthDay(selectedEnd)}</AppText>.
-      </AppText>
+      {selectedStart && selectedEnd ? (
+        <AppText style={styles.infoText}>
+          Showing data from <AppText style={styles.infoHighlight}>{formatMonthDay(selectedStart)}</AppText> to{" "}
+          <AppText style={styles.infoHighlight}>{formatMonthDay(selectedEnd)}</AppText>.
+        </AppText>
+      ) : (
+        <AppText style={styles.infoText}>A date left empty defaults to today when you tap Filter.</AppText>
+      )}
     </View>
   );
 }
@@ -27,7 +31,7 @@ export default function RangeInfoBanner({ selectedStart, selectedEnd }: RangeInf
 const styles = StyleSheet.create({
   infoBanner: {
     marginTop: 8,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
     borderRadius: 10,
     paddingVertical: 6,
     paddingHorizontal: 8,
@@ -46,7 +50,7 @@ const styles = StyleSheet.create({
   infoText: {
     flex: 1,
     fontSize: 9.5,
-    color: "#1F2937",
+    color: Colors.gray800,
     lineHeight: 13,
   },
   infoHighlight: {

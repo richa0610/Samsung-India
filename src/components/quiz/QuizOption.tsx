@@ -14,10 +14,10 @@ export type QuizOptionItem = {
 };
 
 export const OPTION_THEMES: Record<string, { color: string; bg: string; border: string }> = {
-  A: { color: "#00A859", bg: "#E8F8EF", border: "#00A859" },
-  B: { color: "#006AFF", bg: "#EAF2FF", border: "#006AFF" },
+  A: { color: Colors.recordedGreen, bg: "#E8F8EF", border: Colors.recordedGreen },
+  B: { color: Colors.mainColour1, bg: "#EAF2FF", border: Colors.mainColour1 },
   C: { color: "#EAB308", bg: "#FEF9C3", border: "#FACC15" },
-  D: { color: "#EF4444", bg: "#FEE2E2", border: "#EF4444" },
+  D: { color: Colors.red, bg: Colors.dangerBg, border: Colors.red },
 };
 
 export type QuizOptionProps = {

@@ -54,7 +54,25 @@ def get_db(
     """Provides a database Session bound strictly to the requester's tenant
     database. Guarantees failure isolation: if the tenant's MySQL server
     goes down, returns HTTP 503 without crashing the server or affecting
-    other tenants."""
+    other tenants.
+
+    Authenticate before resolving the tenant: if a bearer token was presented and doesn't
+    verify, this refuses before ever calling `tenant_manager` - not after. Without this, an
+    invalid token alongside a client-chosen `X-Tenant-ID` still reached `get_tenant_id_from_request`'s
+    header fallback and made this function open (or attempt to open) a connection to whatever
+    tenant the client named, before the real auth dependency (get_current_admin /
+    get_current_trainee, both of which also depend on this) ever got to reject that same token
+    with 401 - a probe: garbage credentials, then read which named tenants exist or are slow to
+    answer from the response. This is only a cheap decode (no lookup, no claims used) - the real
+    auth dependency still does its own full check right after; the point here is only sequencing,
+    a tenant is never touched on a token that was never going to be accepted anyway."""
+    auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        try:
+            jwt.decode(auth_header[len("bearer "):].strip(), settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        except JWTError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
+
     tenant_id = get_tenant_id_from_request(request)
     session = tenant_manager.get_session(tenant_id, common_db)
     try:

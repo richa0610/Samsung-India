@@ -36,8 +36,8 @@ export default function RecentSessionsCard({
           {sessions.map((session, index) => {
           const statusInfo = getSessionStatusInfo(session.conferenceStatus);
           const isLive = statusInfo.label === "Live";
-          const iconColor = isLive ? "#EF4444" : "#10B981";
-          const iconBg = isLive ? "#FEE2E2" : "#ECFDF5";
+          const iconColor = isLive ? Colors.red : Colors.statusGreen;
+          const iconBg = isLive ? Colors.dangerBg : Colors.successBgSoft;
 
           return (
             <View key={session.conferenceUid}>
@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 14,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 8,
     ...Shadows.card,
   },
@@ -118,11 +118,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 11,
     fontWeight: "700",
-    color: "#111827",
+    color: Colors.black,
   },
   viewAllPill: {
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: Colors.gray300,
     borderRadius: 5,
     paddingHorizontal: 5,
     paddingVertical: 1.5,
@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
   },
   viewAllText: {
     fontSize: 8,
-    color: "#4B5563",
+    color: Colors.gray600,
     fontWeight: "500",
   },
   list: {
@@ -138,12 +138,12 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 10,
-    color: "#6B7280",
+    color: Colors.gray500,
     paddingVertical: 8,
   },
   divider: {
     height: 1,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: Colors.gray100,
     marginVertical: 4,
   },
   itemRow: {
@@ -167,11 +167,11 @@ const styles = StyleSheet.create({
   sessionTitle: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#111827",
+    color: Colors.black,
   },
   sessionDateTime: {
     fontSize: 9,
-    color: "#6B7280",
+    color: Colors.gray500,
     marginTop: 1,
   },
   statusBadgeRow: {

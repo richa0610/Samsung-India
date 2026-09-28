@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
-import { AdminFilters, defaultAdminFilters } from "@/api/adminFilters";
+import { AdminAccessScope, fetchAdminAccessScope } from "@/api/admin";
+import { AdminFilters, EMPTY_ADMIN_FILTERS, defaultAdminFilters, monthToDateAdminFilters } from "@/api/adminFilters";
 import { fetchSessionTypes, fetchTrainers, fetchTrainingTypes } from "@/api/training";
 import { REGIONS_BY_ZONE, ZONES } from "@/components/training/add-training/constants";
 import { MonthCard, useMonthYear } from "@/components/calendar/date-range";
@@ -61,39 +62,63 @@ export default function AdminFilterBar({
   const [trainerOptions, setTrainerOptions] = useState<SelectOption[]>([]);
   const [sessionTypeOptions, setSessionTypeOptions] = useState<SelectOption[]>([]);
   const [trainingTypeOptions, setTrainingTypeOptions] = useState<SelectOption[]>([]);
+  // The caller's own admin_access grant (null until it's loaded, or for `dateOnly` bars that
+  // never show zone/region at all) - narrows which zone/region options this account even sees.
+  // Display only: the backend enforces the real boundary regardless of what's picked here.
+  const [accessScope, setAccessScope] = useState<AdminAccessScope | null>(null);
 
   useEffect(() => {
     if (!open || !adminToken) return;
     fetchTrainers(adminToken).then(setTrainerOptions).catch(() => setTrainerOptions([]));
     fetchSessionTypes(adminToken).then(setSessionTypeOptions).catch(() => setSessionTypeOptions([]));
     fetchTrainingTypes(adminToken).then(setTrainingTypeOptions).catch(() => setTrainingTypeOptions([]));
-  }, [open, adminToken]);
+    if (!dateOnly) fetchAdminAccessScope(adminToken).then(setAccessScope).catch(() => setAccessScope(null));
+  }, [open, adminToken, dateOnly]);
 
   const today = useMemo(() => new Date(), []);
-  const todayStart = useMemo(() => new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime(), [today]);
   const startDate = toDate(draft.start);
   const endDate = toDate(draft.end);
   const fromMonthYear = useMonthYear(startDate ?? today);
   const toMonthYear = useMonthYear(endDate ?? today);
 
+  // `null` on either axis (Super Admin, Company Admin, or the scope hasn't loaded yet) means
+  // "not restricted" - keep every zone/region option. A list narrows to just those.
+  const zoneOptions = useMemo(() => {
+    if (!accessScope?.zones) return ZONES;
+    const allowed = new Set(accessScope.zones);
+    return ZONES.filter((zone) => allowed.has(zone.trim().toLowerCase()));
+  }, [accessScope]);
+
   const regionOptions = useMemo(() => {
-    const zones = draft.zones.length ? draft.zones : ZONES;
-    return asOptions(Array.from(new Set(zones.flatMap((zone) => REGIONS_BY_ZONE[zone] ?? []))));
-  }, [draft.zones]);
+    const zones = draft.zones.length ? draft.zones : zoneOptions;
+    let regions = Array.from(new Set(zones.flatMap((zone) => REGIONS_BY_ZONE[zone] ?? [])));
+    if (accessScope?.regions) {
+      const allowed = new Set(accessScope.regions);
+      regions = regions.filter((region) => allowed.has(region.trim().toLowerCase()));
+    }
+    return asOptions(regions);
+  }, [draft.zones, zoneOptions, accessScope]);
 
   const toggle = () => {
-    if (!open) setDraft(applied);
+    if (!open) {
+      // The dashboard shows today by default; opening the panel while that default
+      // is still applied pre-fills the current month (1st through today) instead.
+      const todayText = formatDate(today);
+      const isTodayDefault = scope === "home" && applied.start === todayText && applied.end === todayText;
+      setDraft(isTodayDefault ? { ...applied, start: monthToDateAdminFilters().start } : applied);
+    }
     setPickerFor(null);
     setOpen((value) => !value);
   };
 
   const handleApply = () => {
-    // A half-picked range defaults the missing side to today (From is never after
-    // today and To never before it, so the result is always a valid range).
+    // A half-picked range defaults the missing side to today, and a range picked
+    // the wrong way round (From after To) is swapped so it's always valid.
     const todayText = formatDate(today);
     let { start, end } = draft;
     if (start && !end) end = todayText;
     if (end && !start) start = todayText;
+    if (start > end) [start, end] = [end, start];
     const next = { ...draft, start, end };
     setDraft(next);
     apply(next);
@@ -102,27 +127,45 @@ export default function AdminFilterBar({
 
   const handleClear = () => {
     clear();
-    setDraft(defaultAdminFilters());
+    // Home goes back to today; other scopes reset to fully empty.
+    setDraft(scope === "home" ? defaultAdminFilters() : EMPTY_ADMIN_FILTERS);
     setOpen(false);
   };
 
   const rangeLabel = formatRange(applied.start, applied.end);
+  // Only the dashboard gets the big full-width bar; every other page gets a
+  // smaller, content-hugging version of the same toggle.
+  const compact = scope !== "home";
+
+  // The compact toggle sits directly on the page's own blue banner, so it
+  // needs to be white/light to actually stand out instead of blending in.
+  const compactIconColor = Colors.toggleBlue;
 
   return (
     <View style={styles.wrap}>
-      <Pressable style={styles.toggle} onPress={toggle} accessibilityRole="button" accessibilityLabel="Select Range">
-        <Ionicons name="calendar" size={14} color={Colors.white} />
-        <AppText style={styles.toggleText} color={Colors.white} weight={FontWeight.semiBold}>
+      <Pressable
+        style={[styles.toggle, compact && styles.toggleCompact]}
+        onPress={toggle}
+        accessibilityRole="button"
+        accessibilityLabel="Select Range"
+      >
+        <Ionicons name="calendar" size={compact ? 13 : 16} color={compact ? compactIconColor : Colors.white} />
+        <AppText
+          style={[styles.toggleText, compact && styles.toggleTextCompact]}
+          color={compact ? compactIconColor : Colors.white}
+          weight={FontWeight.semiBold}
+        >
           Select Range
         </AppText>
         {rangeLabel && (
-          <View style={styles.rangeChip}>
-            <AppText style={styles.rangeChipText} weight={FontWeight.bold}>
+          <View style={[styles.rangeChip, compact && styles.rangeChipCompact]}>
+            <AppText style={[styles.rangeChipText, compact && styles.rangeChipTextCompact]} weight={FontWeight.bold}>
               {rangeLabel}
             </AppText>
           </View>
         )}
-        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={14} color={Colors.white} />
+        {!compact && <View style={styles.toggleSpacer} />}
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={compact ? 13 : 16} color={compact ? compactIconColor : Colors.white} />
       </Pressable>
 
       {open && (
@@ -167,7 +210,7 @@ export default function AdminFilterBar({
                 label="Zone:"
                 placeholder="Select"
                 values={draft.zones}
-                options={asOptions(ZONES)}
+                options={asOptions(zoneOptions)}
                 onChange={(zones) => setDraft({ ...draft, zones, regions: [] })}
               />
             </View>
@@ -242,8 +285,6 @@ export default function AdminFilterBar({
                 setDraft({ ...draft, start: "" });
                 setPickerFor(null);
               }}
-              // From can't be after today (or after the To date).
-              isDateDisabled={(date) => date.getTime() > todayStart || (!!endDate && date.getTime() > endDate.getTime())}
             />
           )}
           {pickerFor === "end" && (
@@ -262,8 +303,6 @@ export default function AdminFilterBar({
                 setDraft({ ...draft, end: "" });
                 setPickerFor(null);
               }}
-              // To can't be before today (or before the From date).
-              isDateDisabled={(date) => date.getTime() < todayStart || (!!startDate && date.getTime() < startDate.getTime())}
             />
           )}
             </View>
@@ -275,25 +314,42 @@ export default function AdminFilterBar({
 }
 
 const styles = StyleSheet.create({
-  wrap: { gap: 8, marginBottom: 8 },
+  wrap: { width: "100%", alignSelf: "stretch", gap: 8, marginBottom: 8 },
   toggle: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "stretch",
+    width: "100%",
+    gap: 8,
+    backgroundColor: Colors.toggleBlue,
+    borderRadius: Radius.xl,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  toggleCompact: {
     alignSelf: "flex-start",
-    gap: 6,
-    backgroundColor: "#2F44C5",
+    width: "auto",
+    gap: 5,
+    backgroundColor: Colors.white,
     borderRadius: Radius.lg,
     paddingHorizontal: 10,
     paddingVertical: 6,
+    ...Shadows.card,
   },
-  toggleText: { fontSize: Fonts.overline },
-  rangeChip: { backgroundColor: Colors.white, borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
-  rangeChipText: { fontSize: 10, color: "#2F44C5" },
+  toggleText: { fontSize: Fonts.bodySm },
+  toggleTextCompact: { fontSize: 11 },
+  toggleSpacer: { flex: 1 },
+  rangeChip: { backgroundColor: Colors.white, borderRadius: Radius.pill, paddingHorizontal: 10, paddingVertical: 3 },
+  // The toggle itself is white in compact mode, so this pill needs its own
+  // tint to stay visible against it.
+  rangeChipCompact: { backgroundColor: "#E7EAFB", paddingHorizontal: 7, paddingVertical: 2 },
+  rangeChipText: { fontSize: 11, color: Colors.toggleBlue },
+  rangeChipTextCompact: { fontSize: 9.5 },
   panel: {
     backgroundColor: Colors.white,
     borderRadius: Radius.xxxl,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     paddingHorizontal: 10,
     paddingTop: 10,
     paddingBottom: 6,
@@ -330,7 +386,7 @@ const styles = StyleSheet.create({
   pairCell: { flex: 1 },
   buttonRow: { flexDirection: "row", gap: 8, marginTop: 0, marginBottom: 4 },
   button: { flex: 1, height: 36, borderRadius: Radius.lg, alignItems: "center", justifyContent: "center" },
-  applyButton: { backgroundColor: "#16A34A" },
+  applyButton: { backgroundColor: Colors.success },
   clearButton: { backgroundColor: Colors.gray100, borderWidth: 1, borderColor: Colors.gray200 },
   buttonText: { fontSize: Fonts.overline },
 });

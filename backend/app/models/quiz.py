@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Integer, Numeric, String, Text, text
+from sqlalchemy import Column, DateTime, Index, Integer, Numeric, String, Text, text
 from sqlalchemy.sql import func
 
 from app.database.connection import Base
@@ -113,6 +113,11 @@ class AssessmentResult(Base):
     and device/IP audit columns."""
 
     __tablename__ = "assessment_results"
+
+    # Serves the Attendance List's post-test scores and the dashboard's
+    # participation numbers: Submitted results of a set of trainings, matched to
+    # attendance by (training, trainee).
+    __table_args__ = (Index("ix_results_conf_trainee_status", "conferenceUid", "traineeUid", "status"),)
 
     id = Column(Integer, primary_key=True, index=True)
     resultUid = Column(String(50))

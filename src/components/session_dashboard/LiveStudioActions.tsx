@@ -37,7 +37,7 @@ export default function LiveStudioActions({ state, isPaused, questions, activeQu
           label={isBroadcastingNext ? "LAUNCHING..." : "LAUNCH NEXT"}
           icon={isBroadcastingNext ? undefined : "play"}
           loading={isBroadcastingNext}
-          color="#0066FF"
+          color={Colors.brandBlue}
           disabled={!next || anyBusy}
           onPress={() => next && controls.onBroadcast(next.id)}
         />
@@ -53,7 +53,7 @@ export default function LiveStudioActions({ state, isPaused, questions, activeQu
           }
           icon={isStoppingTimer ? undefined : isPaused ? "play" : "pause"}
           loading={isStoppingTimer}
-          color={isPaused ? "#10B981" : "#EF4444"}
+          color={isPaused ? Colors.statusGreen : Colors.red}
           disabled={!isLive || anyBusy}
           onPress={controls.onStopTimer}
         />
@@ -69,7 +69,7 @@ export default function LiveStudioActions({ state, isPaused, questions, activeQu
           label={isShowingLobby ? "LOADING..." : "LOBBY"}
           icon={isShowingLobby ? undefined : "pause"}
           loading={isShowingLobby}
-          color="#374151"
+          color={Colors.gray700}
           disabled={anyBusy}
           onPress={controls.onLobby}
         />

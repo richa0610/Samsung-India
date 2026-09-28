@@ -32,9 +32,9 @@ export function TrainingDetailsSection({ form }: { form: AddTrainingForm }) {
         <Switch
           value={form.isResidential}
           onValueChange={form.toggleResidential}
-          trackColor={{ false: "#D1D5DB", true: Colors.mainColour1 }}
-          thumbColor={form.isResidential ? Colors.white : "#9CA3AF"}
-          ios_backgroundColor="#D1D5DB"
+          trackColor={{ false: Colors.gray300, true: Colors.mainColour1 }}
+          thumbColor={form.isResidential ? Colors.white : Colors.gray400}
+          ios_backgroundColor={Colors.gray300}
         />
       </Pressable>
 

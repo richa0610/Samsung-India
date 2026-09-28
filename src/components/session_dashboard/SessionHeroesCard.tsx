@@ -13,8 +13,8 @@ type SessionHeroesCardProps = {
 };
 
 const VISUAL: Record<string, { icon: keyof typeof Ionicons.glyphMap; bg: string; color: string }> = {
-  LIVE_QUIZ: { icon: "rocket", bg: "#FEE2E2", color: "#EF4444" },
-  STANDARD_TEST: { icon: "clipboard", bg: "#EFF6FF", color: "#0066FF" },
+  LIVE_QUIZ: { icon: "rocket", bg: Colors.dangerBg, color: Colors.red },
+  STANDARD_TEST: { icon: "clipboard", bg: Colors.blue50, color: Colors.brandBlue },
 };
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 12.5,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     letterSpacing: 0.3,
     marginBottom: 2,
   },
@@ -92,19 +92,19 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 12,
     ...Shadows.card,
   },
-  emptyText: { fontSize: 11, color: "#6B7280", textAlign: "center", paddingVertical: 8 },
+  emptyText: { fontSize: 11, color: Colors.gray500, textAlign: "center", paddingVertical: 8 },
   cardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   leftTitleRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   iconCircle: { width: 38, height: 38, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  heroTitle: { fontSize: 13, fontWeight: "800", color: "#111827" },
+  heroTitle: { fontSize: 13, fontWeight: "800", color: Colors.black },
   badgesRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
-  greyBadge: { backgroundColor: "#F3F4F6", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  greyBadgeText: { fontSize: 8, fontWeight: "600", color: "#6B7280" },
-  darkBadge: { backgroundColor: "#1F2937", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  greyBadge: { backgroundColor: Colors.gray100, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  greyBadgeText: { fontSize: 8, fontWeight: "600", color: Colors.gray500 },
+  darkBadge: { backgroundColor: Colors.gray800, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   darkBadgeText: { fontSize: 8, fontWeight: "700", color: Colors.white },
   metricsRow: {
     flexDirection: "row",
@@ -116,6 +116,6 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   metricItem: { flex: 1, alignItems: "center" },
-  metricLabel: { fontSize: 9, color: "#6B7280", fontWeight: "500" },
-  metricValue: { fontSize: 13.5, fontWeight: "800", color: "#111827", marginTop: 2 },
+  metricLabel: { fontSize: 9, color: Colors.gray500, fontWeight: "500" },
+  metricValue: { fontSize: 13.5, fontWeight: "800", color: Colors.black, marginTop: 2 },
 });

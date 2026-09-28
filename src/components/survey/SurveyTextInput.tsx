@@ -21,7 +21,7 @@ export default function SurveyTextInput({
       <TextInput
         style={styles.input}
         placeholder={placeholder}
-        placeholderTextColor="#9CA3AF"
+        placeholderTextColor={Colors.gray400}
         value={value}
         onChangeText={onChangeText}
         multiline
@@ -34,7 +34,7 @@ export default function SurveyTextInput({
 const styles = StyleSheet.create({
   container: {
     borderWidth: 1.2,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     borderRadius: 12,
     backgroundColor: Colors.white,
     padding: 10,
@@ -42,12 +42,12 @@ const styles = StyleSheet.create({
   },
   containerError: {
     borderColor: Colors.danger,
-    backgroundColor: "#FEF2F2",
+    backgroundColor: Colors.dangerBgSoft,
   },
   input: {
     flex: 1,
     fontSize: 13.5,
-    color: "#1F2937",
+    color: Colors.gray800,
     textAlignVertical: "top",
     lineHeight: 19,
     minHeight: 76,

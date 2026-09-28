@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
+import { Colors } from "@/theme/colors";
 
 export type ProgressRingProps = {
   /** 0-100. Values outside that range are clamped. */
@@ -20,8 +21,8 @@ export default function ProgressRing({
   percentage,
   size = 64,
   strokeWidth = 7,
-  color = "#0066FF",
-  trackColor = "#E5E7EB",
+  color = Colors.brandBlue,
+  trackColor = Colors.gray200,
   children,
 }: ProgressRingProps) {
   const clamped = Math.max(0, Math.min(100, percentage));

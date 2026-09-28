@@ -41,7 +41,7 @@ export default function SessionsListContent({
         </View>
       ) : filteredSessions.length === 0 ? (
         <View style={styles.centered}>
-          <Ionicons name="calendar-outline" size={48} color="#9CA3AF" />
+          <Ionicons name="calendar-outline" size={48} color={Colors.gray400} />
           <AppText style={styles.emptyTitle}>No Sessions Found</AppText>
           <AppText style={styles.emptySubtitle}>
             {activeTab === "completed"
@@ -81,18 +81,18 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 13,
-    color: "#6B7280",
+    color: Colors.gray500,
     fontWeight: "500",
   },
   emptyTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#374151",
+    color: Colors.gray700,
     marginTop: 8,
   },
   emptySubtitle: {
     fontSize: 12.5,
-    color: "#6B7280",
+    color: Colors.gray500,
     textAlign: "center",
     lineHeight: 18,
     paddingHorizontal: 24,

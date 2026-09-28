@@ -1,3 +1,4 @@
+import re
 import json
 
 from sqlalchemy.orm import Session
@@ -15,11 +16,31 @@ from app.schemas.training import (
 )
 
 
-def list_assessment_suites(db: Session) -> list[AssessmentSuiteOut]:
+_SURVEY_WORDS = re.compile(r"survey|feedback", re.I)
+_TEST_WORDS = re.compile(r"\b(test|exam)\b", re.I)
+
+
+def suite_module(suite: AssessmentSuite) -> str:
+    """Which session-flow module a question set belongs to. `assessment_type`
+    alone can't tell: it defaults to "Quiz" for every set (a Post Test set is
+    often stored as "Quiz" too), so the category AND the title are read
+    together - survey/feedback -> survey; the word "test"/"exam" (Post Test,
+    Standard Test) -> standardTest; everything else -> liveQuiz."""
+    text = f"{suite.assessment_type or ''} {suite.examTitle or suite.courseName or ''}"
+    if _SURVEY_WORDS.search(text):
+        return "survey"
+    if _TEST_WORDS.search(text):
+        return "standardTest"
+    return "liveQuiz"
+
+
+def list_assessment_suites(db: Session, module: str | None = None) -> list[AssessmentSuiteOut]:
     """Powers the Category / Select Question Set pickers in the trainer's
     session-flow builder. `assessment_type` doubles as the category
     grouping (e.g. "Quiz", "Survey", "Post Test")."""
     suites = assessment_repository.list_approved_suites(db)
+    if module:
+        suites = [suite for suite in suites if suite_module(suite) == module]
     return [
         AssessmentSuiteOut(
             assessmentSuiteUid=suite.assessmentSuiteUid,

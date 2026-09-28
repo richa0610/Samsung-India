@@ -72,7 +72,7 @@ export default function AdminBottomNav({ activeTab, pendingCount = 0, onSelectTa
   const renderTabs = (highlighted: AdminDashboardTab) =>
     TABS.map((tab) => {
       const isActive = highlighted === tab.key;
-      const color = isActive ? Colors.mainColour1 : "#6B7280";
+      const color = isActive ? Colors.mainColour1 : Colors.gray500;
       return (
         <Pressable
           key={tab.key}
@@ -128,7 +128,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderColor: "#F3F4F6",
+    borderColor: Colors.gray100,
     ...Shadows.raised,
   },
   sheetNav: {
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderColor: "#F3F4F6",
+    borderColor: Colors.gray100,
   },
   tabItem: {
     alignItems: "center",

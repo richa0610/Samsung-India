@@ -31,7 +31,7 @@ export default function DashboardBottomNav({
         <Ionicons
           name={active ? "home" : "home-outline"}
           size={20}
-          color={active ? Colors.mainColour1 : "#6B7280"}
+          color={active ? Colors.mainColour1 : Colors.gray500}
         />
       ),
     },
@@ -42,7 +42,7 @@ export default function DashboardBottomNav({
         <Ionicons
           name={active ? "calendar" : "calendar-outline"}
           size={20}
-          color={active ? Colors.mainColour1 : "#6B7280"}
+          color={active ? Colors.mainColour1 : Colors.gray500}
         />
       ),
     },
@@ -65,7 +65,7 @@ export default function DashboardBottomNav({
         <Ionicons
           name={active ? "person-circle" : "person-circle-outline"}
           size={20}
-          color={active ? Colors.mainColour1 : "#6B7280"}
+          color={active ? Colors.mainColour1 : Colors.gray500}
         />
       ),
     },
@@ -76,7 +76,7 @@ export default function DashboardBottomNav({
         <Ionicons
           name={active ? "grid" : "grid-outline"}
           size={20}
-          color={active ? Colors.mainColour1 : "#6B7280"}
+          color={active ? Colors.mainColour1 : Colors.gray500}
         />
       ),
     },
@@ -106,7 +106,7 @@ export default function DashboardBottomNav({
               style={[
                 styles.tabLabel,
                 tab.isCenter && styles.centerTabLabel,
-                { color: isActive ? Colors.mainColour1 : tab.isCenter ? Colors.mainColour1 : "#6B7280" },
+                { color: isActive ? Colors.mainColour1 : tab.isCenter ? Colors.mainColour1 : Colors.gray500 },
                 isActive && styles.activeTabLabel,
               ]}
             >
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 20,
     paddingVertical: 6,
     borderTopWidth: 1,
-    borderColor: "#F3F4F6",
+    borderColor: Colors.gray100,
     ...Shadows.raised,
   },
   tabItem: {

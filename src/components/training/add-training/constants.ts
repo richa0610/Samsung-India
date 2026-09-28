@@ -44,36 +44,6 @@ export const TRAINER_OPTIONS: SelectOption[] = [
 
 export const UNLOCK_CONDITIONS = ["Automatic", "Manual Broadcast"];
 
-export const DEFAULT_CATEGORY_OPTIONS: SelectOption[] = ["POST TEST", "SAMSUMG S25", "Survey", "Quiz"].map((v) => ({
-  label: v,
-  value: v,
-}));
-
-// Stable, length-capped UID for a placeholder question set. `assessment_results.
-// assessmentSuiteUid` is varchar(50) in the real schema, so the raw
-// `default:<full name>` (up to 52 chars) overflowed it on submit. The Python
-// side (`scripts/seed_default_question_sets.py`) must produce the identical
-// string.
-export const questionSetUid = (name: string) =>
-  `default:${name
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 40)
-    .replace(/-+$/, "")}`;
-
-export const DEFAULT_QUESTION_SET_OPTIONS: Record<string, SelectOption[]> = {
-  "POST TEST": [
-    "S26 Review meeting",
-    "Samsung Test 1",
-    "Samsung Test 2",
-    "MX-Training Offline Post Training For June 26",
-    "Laptop Classroom/Webinar: Post Test June 26",
-    "MX-Training Offline Post Test (July'26)",
-    "Laptop Classroom/Webinar: Post Test July'26",
-  ].map((name) => ({ label: name, value: questionSetUid(name) })),
-};
-
 export type ModuleKey = "standardTest" | "liveQuiz" | "survey";
 export const MODULE_LABELS: Record<ModuleKey, string> = {
   standardTest: "Standard Test",
@@ -90,8 +60,8 @@ export const ATTENDANCE_ICON: keyof typeof Ionicons.glyphMap = "people";
 // buttons (green Attendance, blue Standard Test, amber Live Quiz, yellow
 // Survey) rather than the app's other text+icon chip style.
 export const MODULE_COLORS: Record<ModuleKey, string> = {
-  standardTest: "#2563EB",
-  liveQuiz: "#F59E0B",
+  standardTest: Colors.blueAccent,
+  liveQuiz: Colors.warning,
   survey: "#FACC15",
 };
 export const ATTENDANCE_COLOR = Colors.success;

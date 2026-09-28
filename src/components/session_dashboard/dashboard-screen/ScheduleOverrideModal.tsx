@@ -6,6 +6,7 @@ import AppInput from "@/components/ui/AppInput";
 import AppModal from "@/components/ui/AppModal";
 import AppText from "@/components/ui/AppText";
 import { ScheduleOverridePrompt } from "./useSessionDashboardScreen";
+import { Colors } from "@/theme/colors";
 
 type ScheduleOverrideModalProps = {
   prompt: ScheduleOverridePrompt | null;
@@ -46,7 +47,7 @@ export default function ScheduleOverrideModal({ prompt, onCancel, onSubmit }: Sc
   return (
     <AppModal visible={!!prompt} onClose={onCancel} position="center" contentStyle={styles.sheet}>
       <View style={styles.header}>
-        <Ionicons name="time" size={18} color="#F59E0B" />
+        <Ionicons name="time" size={18} color={Colors.warning} />
         <AppText style={styles.title}>Training schedule override</AppText>
       </View>
       <AppText style={styles.body}>
@@ -60,7 +61,7 @@ export default function ScheduleOverrideModal({ prompt, onCancel, onSubmit }: Sc
       <AppInput
         compact
         label={`Reason for starting ${earlyOrLate}`}
-        labelColor="#F3F4F6"
+        labelColor={Colors.gray100}
         value={reason}
         onChangeText={setReason}
         placeholder="e.g. Venue access delayed, waiting on trainees"
@@ -85,11 +86,11 @@ export default function ScheduleOverrideModal({ prompt, onCancel, onSubmit }: Sc
 const styles = StyleSheet.create({
   sheet: { backgroundColor: "#1F2530", borderRadius: 12, padding: 18, width: "88%" },
   header: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  title: { flex: 1, fontSize: 15, fontWeight: "800", color: "#F3F4F6" },
-  body: { fontSize: 12, color: "#D1D5DB", lineHeight: 18, marginBottom: 14 },
+  title: { flex: 1, fontSize: 15, fontWeight: "800", color: Colors.gray100 },
+  body: { fontSize: 12, color: Colors.gray300, lineHeight: 18, marginBottom: 14 },
   actionsRow: { flexDirection: "row", justifyContent: "flex-end", gap: 22, marginTop: 16 },
-  secondaryText: { fontSize: 13, color: "#9CA3AF", fontWeight: "600" },
-  primaryText: { fontSize: 13, color: "#60A5FA", fontWeight: "800" },
+  secondaryText: { fontSize: 13, color: Colors.gray400, fontWeight: "600" },
+  primaryText: { fontSize: 13, color: Colors.blue400, fontWeight: "800" },
   disabled: { opacity: 0.4 },
   inputReason: {
     minHeight: 44,

@@ -3,11 +3,12 @@ import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { FontWeight } from "@/theme/fontWeight";
+import { Colors } from "@/theme/colors";
 
 export default function SecurityBanner() {
   return (
     <View style={styles.securityBanner}>
-      <Ionicons name="shield-checkmark-outline" size={24} color="#0066FF" />
+      <Ionicons name="shield-checkmark-outline" size={24} color={Colors.brandBlue} />
       <View style={styles.securityTextColumn}>
         <AppText style={styles.securityTitle} weight={FontWeight.bold}>
           Secure & Verified

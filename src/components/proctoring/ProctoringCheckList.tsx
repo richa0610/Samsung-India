@@ -4,6 +4,7 @@ import { StyleSheet, View } from "react-native";
 import ProctoringCheckItem, {
   ProctoringCheckItemData,
 } from "./ProctoringCheckItem";
+import { Colors } from "@/theme/colors";
 
 export const DEFAULT_PROCTORING_CHECKS: ProctoringCheckItemData[] = [
   {
@@ -57,15 +58,15 @@ export default function ProctoringCheckList({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#F3F4F6",
+    borderColor: Colors.gray100,
     paddingHorizontal: 14,
     paddingVertical: 4,
   },
   divider: {
     height: 1,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: Colors.gray100,
   },
 });

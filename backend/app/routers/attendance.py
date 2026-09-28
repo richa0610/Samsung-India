@@ -2,11 +2,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_trainee
-from app.dependencies.database import get_db
+from app.dependencies.database import get_db, get_tenant_id_from_request
 import json
 import math
 import uuid
-from datetime import datetime
 from typing import Optional
 
 from fastapi import (
@@ -36,6 +35,7 @@ from app.schemas.attendance import (
 )
 from app.routers.ws import manager as ws_manager
 from app.services import attendance_service
+from app.utils.date_utils import utc_now
 from app.utils.helpers import (
     distance_meters,
     geofence_enabled,
@@ -45,11 +45,11 @@ from app.utils.helpers import (
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
 
-def _nudge_dashboard(background_tasks: BackgroundTasks, conference_uid: str) -> None:
+def _nudge_dashboard(background_tasks: BackgroundTasks, tenant_id: str, conference_uid: str) -> None:
     """Tell the trainer's Session Dashboard (on the conference's /ws/live room)
     to refetch, so the Participant Master List shows the new Present status
     right away instead of on the next 5s poll."""
-    background_tasks.add_task(ws_manager.send_to_room, conference_uid, {"type": "session"})
+    background_tasks.add_task(ws_manager.send_to_room, tenant_id, conference_uid, {"type": "session"})
 
 
 @router.post("/check-in", response_model=AttendanceOut)
@@ -114,7 +114,7 @@ def check_in(
     # plain (non-secure) check-in on the other branch.
 
     if existing.status != "Present":
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
         existing.status = "Present"
         existing.markedOn = now_str
         existing.trainerUid = existing.trainerUid or (conference.trainerEmployeeId if conference else None)
@@ -128,13 +128,13 @@ def check_in(
                 conferenceUid=payload.conferenceUid,
                 traineeUid=trainee.traineeUid,
                 moduleId=module_id,
-                markedAt=datetime.now(),
+                markedAt=utc_now(),
                 status="Present",
             )
         )
         db.commit()
         db.refresh(existing)
-        _nudge_dashboard(background_tasks, payload.conferenceUid)
+        _nudge_dashboard(background_tasks, get_tenant_id_from_request(request), payload.conferenceUid)
         return AttendanceOut(status=existing.status, markedOn=existing.markedOn)
 
     if not settings.ALLOW_ATTENDANCE_RETEST:
@@ -155,7 +155,7 @@ def check_in(
 
     db.flush()
 
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
     attendance = Attendance(
         conferenceUid=payload.conferenceUid,
         trainerUid=conference.trainerEmployeeId if conference else None,
@@ -178,7 +178,7 @@ def check_in(
         conferenceUid=payload.conferenceUid,
         traineeUid=trainee.traineeUid,
         moduleId=module_id,
-        markedAt=datetime.now(),
+        markedAt=utc_now(),
         status="Present",
         ipAddress=client_ip,
         deviceInfo=user_agent,
@@ -295,7 +295,7 @@ async def check_in_secure(
     filename = f"{uuid.uuid4().hex}.{extension}"
     (photo_dir / filename).write_bytes(contents)
 
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
     # Trainee self-admitting - promote Joined/Pending -> Present (no-op if
     # the trainer already marked them).
     existing.status = "Present"
@@ -321,7 +321,7 @@ async def check_in_secure(
             conferenceUid=conferenceUid,
             traineeUid=trainee.traineeUid,
             moduleId=module_id,
-            markedAt=datetime.now(),
+            markedAt=utc_now(),
             status="Present",
             ipAddress=client_ip,
             deviceInfo=user_agent,
@@ -331,7 +331,7 @@ async def check_in_secure(
 
     db.commit()
     db.refresh(existing)
-    _nudge_dashboard(background_tasks, conferenceUid)
+    _nudge_dashboard(background_tasks, get_tenant_id_from_request(request), conferenceUid)
     return AttendanceOut(status=existing.status, markedOn=existing.markedOn, distanceMeters=distance)
 
 

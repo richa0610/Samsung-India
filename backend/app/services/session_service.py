@@ -28,7 +28,7 @@ from app.schemas.session import (
 )
 from app.services.module_flow import auto_advance_if_due, configured_modules
 from app.services.proctoring_settings_service import get_proctoring_settings
-from app.utils.date_utils import duration, ist_now, parse_module_start
+from app.utils.date_utils import duration, ist_now, parse_module_start, utc_now
 from app.utils.helpers import attendance_is_assigned
 from app.utils.status import title_status
 
@@ -123,7 +123,7 @@ def _select_current_conference(
                 if attended_conf.conferenceStatus in _LIVE_STATUSES and not _session_is_over(attended_conf):
                     return attended_conf, True, _conference_start(attended_conf)
                 # If this conference was attended today, show it so the trainee sees its final state (Completed)
-                now_str = datetime.now().strftime("%Y-%m-%d")
+                now_str = ist_now().strftime("%Y-%m-%d")
                 attended_today = (
                     attended_conf.conferenceDate == now_str
                     or (attended_conf.actualEndedAt and attended_conf.actualEndedAt.strftime("%Y-%m-%d") == now_str)
@@ -181,7 +181,7 @@ def _select_current_conference(
         if trainer_confs:
             conferences = trainer_confs
 
-    now = datetime.now()
+    now = ist_now()
     timed: list[tuple[datetime, Conference]] = []
     undated: list[Conference] = []
     for conference in conferences:
@@ -291,7 +291,7 @@ def join_session(
         # QR join is what activates the row (and puts them on the master list).
         existing.status = "Joined"
         _set_attendance_audience(existing, "ASSIGNED")
-        stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        stamp = utc_now().strftime("%Y-%m-%d %H:%M:%S")
         line = f"[{stamp}] system -> JOINED: activated from assigned roster"
         existing.remarks = f"{line}\n{existing.remarks}" if existing.remarks else line
         attendance_repository.save(db)
@@ -330,13 +330,13 @@ def report_proctoring_lock(
     _, proctoring_max_warnings = get_proctoring_settings(tenant_id)
     attendance.isTheftLocked = 1
     attendance.theftAttemptsLeft = max(0, proctoring_max_warnings - payload.strikeNumber)
-    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    stamp = utc_now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{stamp}] LOCKED strike #{payload.strikeNumber}: {payload.violationType}"
     attendance.theftRemarks = f"{line}\n{attendance.theftRemarks}" if attendance.theftRemarks else line
     attendance_repository.save(db)
 
     background_tasks.add_task(
-        ws_manager.send_to_room, conference.conferenceUid, {"type": "session"}
+        ws_manager.send_to_room, tenant_id, conference.conferenceUid, {"type": "session"}
     )
     return ProctoringLockOut(locked=True)
 
@@ -407,7 +407,7 @@ def get_current_session(
         # 2. The session itself has ended.
         if is_over or conference.conferenceStatus == "Completed":
             return True
-        now_date_str = datetime.now().strftime("%Y-%m-%d")
+        now_date_str = utc_now().strftime("%Y-%m-%d")
         if conference.conferenceEndsOn and str(conference.conferenceEndsOn) < now_date_str:
             return True
         # 3. The trainer has manually advanced the flow past this module.

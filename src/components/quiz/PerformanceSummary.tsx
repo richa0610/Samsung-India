@@ -34,7 +34,7 @@ export default function PerformanceSummary({
         {/* 1. Correct */}
         <View style={styles.item}>
           <View style={[styles.iconCircle, styles.correctCircle]}>
-            <Ionicons name="checkmark" size={18} color="#2563EB" />
+            <Ionicons name="checkmark" size={18} color={Colors.blueAccent} />
           </View>
           <AppText style={styles.itemValue} weight={FontWeight.bold}>
             {correctCount}
@@ -45,7 +45,7 @@ export default function PerformanceSummary({
         {/* 2. Incorrect */}
         <View style={styles.item}>
           <View style={[styles.iconCircle, styles.incorrectCircle]}>
-            <Ionicons name="close" size={18} color="#EF4444" />
+            <Ionicons name="close" size={18} color={Colors.red} />
           </View>
           <AppText style={styles.itemValue} weight={FontWeight.bold}>
             {incorrectCount}
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 11,
-    color: "#111827",
+    color: Colors.black,
     letterSpacing: 0.5,
   },
   itemsRow: {
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#DBEAFE",
   },
   incorrectCircle: {
-    backgroundColor: "#FEE2E2",
+    backgroundColor: Colors.dangerBg,
   },
   accuracyCircle: {
     backgroundColor: "#FEF9C3",
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
   },
   itemValue: {
     fontSize: 17,
-    color: "#111827",
+    color: Colors.black,
   },
   itemLabel: {
     fontSize: 10.5,

@@ -15,8 +15,8 @@ export default function AttendanceSheetField({ fileName, onPick, onClear }: Atte
   if (!fileName) {
     return (
       <Pressable style={styles.uploadBtn} onPress={onPick} accessibilityRole="button">
-        <Ionicons name="cloud-upload-outline" size={18} color="#0066FF" />
-        <AppText color="#0066FF" weight={FontWeight.semiBold} style={styles.uploadText}>
+        <Ionicons name="cloud-upload-outline" size={18} color={Colors.brandBlue} />
+        <AppText color={Colors.brandBlue} weight={FontWeight.semiBold} style={styles.uploadText}>
           Upload Attendance Sheet
         </AppText>
       </Pressable>
@@ -25,12 +25,12 @@ export default function AttendanceSheetField({ fileName, onPick, onClear }: Atte
 
   return (
     <View style={styles.fileRow}>
-      <Ionicons name="document-text-outline" size={16} color="#374151" />
+      <Ionicons name="document-text-outline" size={16} color={Colors.gray700} />
       <AppText style={styles.fileName} numberOfLines={1}>
         {fileName}
       </AppText>
       <Pressable onPress={onClear} hitSlop={8} accessibilityLabel="Remove attendance sheet">
-        <Ionicons name="close-circle" size={18} color="#9CA3AF" />
+        <Ionicons name="close-circle" size={18} color={Colors.gray400} />
       </Pressable>
     </View>
   );
@@ -46,7 +46,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: "#BFDBFE",
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
     marginTop: 12,
   },
   uploadText: { fontSize: 14 },
@@ -58,9 +58,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: Colors.gray300,
     backgroundColor: Colors.white,
     marginTop: 12,
   },
-  fileName: { flex: 1, fontSize: 12, color: "#374151" },
+  fileName: { flex: 1, fontSize: 12, color: Colors.gray700 },
 });

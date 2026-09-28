@@ -34,11 +34,11 @@ function DetailRow({ label, value, icon, isLast }: AccessGrantedDetail & { isLas
     <View style={[styles.detailRow, !isLast && styles.detailBorder]}>
       <View style={styles.detailIcon}>
         {icon === "calendar-outline" || label.toLowerCase().includes("session") || label.toLowerCase().includes("date") ? (
-          <CalendarIcon width={20} height={20} color="#1CB07D" />
+          <CalendarIcon width={20} height={20} color={Colors.successTeal} />
         ) : icon === "time-outline" || label.toLowerCase().includes("time") || label.toLowerCase().includes("checked") ? (
-          <ClockIcon width={20} height={20} color="#1CB07D" />
+          <ClockIcon width={20} height={20} color={Colors.successTeal} />
         ) : icon === "location-outline" || label.toLowerCase().includes("location") ? (
-          <LocationIcon width={18} height={22} color="#1CB07D" />
+          <LocationIcon width={18} height={22} color={Colors.successTeal} />
         ) : (
           <Ionicons name={icon} size={22} color={Colors.success} />
         )}
@@ -47,7 +47,7 @@ function DetailRow({ label, value, icon, isLast }: AccessGrantedDetail & { isLas
         <AppText variant="caption" color={Colors.gray600}>
           {label}
         </AppText>
-        <AppText variant="label" color="#111827" weight={FontWeight.semiBold}>
+        <AppText variant="label" color={Colors.black} weight={FontWeight.semiBold}>
           {value}
         </AppText>
       </View>

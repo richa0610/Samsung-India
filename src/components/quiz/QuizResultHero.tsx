@@ -78,7 +78,7 @@ export default function QuizResultHero({
           <View
             style={[
               styles.iconCircleOuter,
-              { backgroundColor: isCorrect ? "#D4F4E4" : "#FEE2E2" },
+              { backgroundColor: isCorrect ? "#D4F4E4" : Colors.dangerBg },
             ]}
           >
             <View
@@ -175,7 +175,7 @@ const styles = StyleSheet.create({
   particle2: {
     top: 8,
     right: 14,
-    backgroundColor: "#EF4444",
+    backgroundColor: Colors.red,
     transform: [{ rotate: "45deg" }],
   },
   particle3: {
@@ -189,7 +189,7 @@ const styles = StyleSheet.create({
   particle4: {
     bottom: 8,
     right: 8,
-    backgroundColor: "#10B981",
+    backgroundColor: Colors.statusGreen,
     width: 6,
     height: 6,
     borderRadius: 3,
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   particle6: {
     top: 42,
     right: -2,
-    backgroundColor: "#F59E0B",
+    backgroundColor: Colors.warning,
     transform: [{ rotate: "20deg" }],
   },
   heroTitle: {

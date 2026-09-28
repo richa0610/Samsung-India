@@ -4,6 +4,7 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop } from "react-native-svg"
 
 import AppText from "../AppText";
 import { FontWeight } from "@/theme/fontWeight";
+import { Colors } from "@/theme/colors";
 
 type Props = {
   totalMinutes: number;
@@ -58,7 +59,7 @@ const TimeProgress = ({
         {/* Slender Faint Base Track */}
         <Path
           d={arcPath}
-          stroke="#FEE2E2"
+          stroke={Colors.dangerBg}
           strokeWidth={strokeWidth}
           strokeOpacity={0.3}
           fill="none"
@@ -86,25 +87,25 @@ const TimeProgress = ({
               cy={8.5}
               r={7}
               fill="#FF7F7F"
-              stroke="#111827"
+              stroke={Colors.black}
               strokeWidth={1.4}
             />
             {/* 12 o'clock minute hand */}
             <Path
               d="M 8.5 8.5 L 8.5 4.5"
-              stroke="#111827"
+              stroke={Colors.black}
               strokeWidth={1.4}
               strokeLinecap="round"
             />
             {/* 4 o'clock hour hand */}
             <Path
               d="M 8.5 8.5 L 11.2 10.2"
-              stroke="#111827"
+              stroke={Colors.black}
               strokeWidth={1.4}
               strokeLinecap="round"
             />
             {/* Center Pin */}
-            <Circle cx={8.5} cy={8.5} r={0.8} fill="#111827" />
+            <Circle cx={8.5} cy={8.5} r={0.8} fill={Colors.black} />
           </Svg>
         </View>
 

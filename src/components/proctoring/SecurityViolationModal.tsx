@@ -4,6 +4,7 @@ import AppText from "@/components/ui/AppText";
 import { FontWeight } from "@/theme/fontWeight";
 import { createShadow } from "@/theme/shadows";
 import { SecurityViolationType } from "./violations";
+import { Colors } from "@/theme/colors";
 
 export type SecurityViolationModalProps = {
   visible: boolean;
@@ -116,10 +117,10 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: "#EF4444",
+    backgroundColor: Colors.red,
   },
   headingText: {
-    color: "#FFFFFF",
+    color: Colors.white,
     fontSize: 13.5,
     letterSpacing: 0.3,
     flex: 1,
@@ -129,16 +130,16 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   detailText: {
-    color: "#E5E7EB",
+    color: Colors.gray200,
     fontSize: 14,
     lineHeight: 20,
   },
   detailLabel: {
-    color: "#E5E7EB",
+    color: Colors.gray200,
     fontSize: 14,
   },
   warningText: {
-    color: "#D1D5DB",
+    color: Colors.gray300,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 8,
@@ -149,7 +150,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   closeText: {
-    color: "#60A5FA",
+    color: Colors.blue400,
     fontSize: 15,
   },
 });

@@ -58,7 +58,7 @@ export default function DataTableToolbar({
 }: DataTableToolbarProps) {
   const [openMenu, setOpenMenu] = useState<"pageSize" | "columns" | null>(null);
 
-  const pageSizeLabel = pageSize === "all" ? "All rows" : `${pageSize} rows`;
+  const pageSizeLabel = pageSize === "all" ? "Show all rows" : `Show ${pageSize} rows`;
 
   return (
     <View style={styles.container}>

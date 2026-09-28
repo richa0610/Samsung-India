@@ -1,6 +1,6 @@
 import { ReactNode, createContext, useCallback, useContext, useMemo, useState } from "react";
 
-import { AdminFilters, defaultAdminFilters } from "@/api/adminFilters";
+import { AdminFilters, EMPTY_ADMIN_FILTERS, defaultAdminFilters } from "@/api/adminFilters";
 
 /** "home" is the admin dashboard's own filter; "lists" is shared by the Training and
  *  Attendance list pages; "trainee" is the trainee dashboard's date range. Setting
@@ -17,11 +17,17 @@ type AdminFiltersContextValue = {
 
 const AdminFiltersContext = createContext<AdminFiltersContextValue | null>(null);
 
+// Only the dashboard ("home") starts pre-filtered (to today) - the
+// list pages and the trainee dashboard start unfiltered (showing everything)
+// until the user explicitly applies a range.
+const defaultForScope = (scope: AdminFilterScope): AdminFilters =>
+  scope === "home" ? defaultAdminFilters() : EMPTY_ADMIN_FILTERS;
+
 export function AdminFiltersProvider({ children }: { children: ReactNode }) {
   const [filters, setFilters] = useState<ScopedFilters>(() => ({
-    home: defaultAdminFilters(),
-    lists: defaultAdminFilters(),
-    trainee: defaultAdminFilters(),
+    home: defaultForScope("home"),
+    lists: defaultForScope("lists"),
+    trainee: defaultForScope("trainee"),
   }));
 
   const apply = useCallback(
@@ -29,7 +35,7 @@ export function AdminFiltersProvider({ children }: { children: ReactNode }) {
     [],
   );
   const clear = useCallback(
-    (scope: AdminFilterScope) => setFilters((prev) => ({ ...prev, [scope]: defaultAdminFilters() })),
+    (scope: AdminFilterScope) => setFilters((prev) => ({ ...prev, [scope]: defaultForScope(scope) })),
     [],
   );
 

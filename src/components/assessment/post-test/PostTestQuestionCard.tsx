@@ -51,7 +51,7 @@ export default function PostTestQuestionCard({
             </AppText>
           </View>
           <View style={styles.unlimitedTag}>
-            <Ionicons name="infinite" size={13} color="#00A859" />
+            <Ionicons name="infinite" size={13} color={Colors.recordedGreen} />
             <AppText style={styles.unlimitedText} weight={FontWeight.medium}>
               Unlimited
             </AppText>
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderRadius: 20,
     borderWidth: 2,
-    borderColor: "#006AFF",
+    borderColor: Colors.mainColour1,
     overflow: "hidden",
     backgroundColor: Colors.white,
     ...createShadow({ x: 0, y: 4, blur: 12, opacity: 0.08, elevation: 4, color: "#000000" }),
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   questionTag: {
     fontSize: FontSize.tiny,
     lineHeight: LineHeight.overline,
-    color: "#0066FF",
+    color: Colors.brandBlue,
   },
   multiTagWrapper: {
     backgroundColor: "#F1F3F5",
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   multiTag: {
     fontSize: FontSize.tiny,
     lineHeight: LineHeight.overline,
-    color: "#4B5563",
+    color: Colors.gray600,
   },
   unlimitedTag: {
     flexDirection: "row",
@@ -136,7 +136,7 @@ const styles = StyleSheet.create({
   unlimitedText: {
     fontSize: FontSize.tiny,
     lineHeight: LineHeight.overline,
-    color: "#00A859",
+    color: Colors.recordedGreen,
   },
   question: {
     fontSize: 18,

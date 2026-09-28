@@ -52,7 +52,7 @@ export default function AssessmentResultCard({
               cx={size / 2}
               cy={size / 2}
               r={radius}
-              stroke="#F3F4F6"
+              stroke={Colors.gray100}
               strokeWidth={strokeWidth}
               fill="none"
             />
@@ -62,7 +62,7 @@ export default function AssessmentResultCard({
                 cx={size / 2}
                 cy={size / 2}
                 r={radius}
-                stroke="#10B981"
+                stroke={Colors.statusGreen}
                 strokeWidth={strokeWidth}
                 strokeDasharray={`${passLength} ${circumference}`}
                 strokeDashoffset={0}
@@ -98,7 +98,7 @@ export default function AssessmentResultCard({
 
           {/* Pass Rate Badge */}
           <View style={styles.passRateBadge}>
-            <Ionicons name="trending-up" size={13} color="#10B981" />
+            <Ionicons name="trending-up" size={13} color={Colors.statusGreen} />
             <AppText style={styles.passRateText}>Pass Rate : {passRate}%</AppText>
           </View>
         </View>
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 12,
     marginHorizontal: 14,
     marginTop: 10,
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 11.5,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     letterSpacing: 0.3,
   },
   contentRow: {
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   chartCenterText: {
     fontSize: 9.5,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
   },
   metricsColumn: {
     flex: 1,
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
   },
   passBox: {
     flex: 1,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: Colors.successBgSoft,
     borderWidth: 1.2,
     borderColor: "#A7F3D0",
     borderRadius: 10,
@@ -173,17 +173,17 @@ const styles = StyleSheet.create({
   passLabel: {
     fontSize: 8.5,
     fontWeight: "700",
-    color: "#10B981",
+    color: Colors.statusGreen,
   },
   passValue: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     marginTop: 1,
   },
   failBox: {
     flex: 1,
-    backgroundColor: "#FEF2F2",
+    backgroundColor: Colors.dangerBgSoft,
     borderWidth: 1.2,
     borderColor: "#FECACA",
     borderRadius: 10,
@@ -193,12 +193,12 @@ const styles = StyleSheet.create({
   failLabel: {
     fontSize: 8.5,
     fontWeight: "700",
-    color: "#EF4444",
+    color: Colors.red,
   },
   failValue: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     marginTop: 1,
   },
   passRateBadge: {
@@ -206,13 +206,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 5,
-    backgroundColor: "#ECFDF5",
+    backgroundColor: Colors.successBgSoft,
     borderRadius: 8,
     paddingVertical: 5,
   },
   passRateText: {
     fontSize: 10,
     fontWeight: "700",
-    color: "#10B981",
+    color: Colors.statusGreen,
   },
 });

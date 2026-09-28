@@ -39,3 +39,24 @@ def sync_missing_columns(engine: Engine, base) -> None:
                 logger.warning("Schema sync: added missing column %s.%s", table.name, column.name)
             except Exception as exc:
                 logger.error("Schema sync: failed to add %s.%s: %s", table.name, column.name, exc)
+
+
+def sync_missing_indexes(engine: Engine, base) -> None:
+    """Same idea as sync_missing_columns, for indexes: `create_all()` never adds
+    an index to a table that already exists, so an `Index(...)` declared on a
+    model after the table went live would silently never appear. Creates any
+    named index the model declares that the live table lacks. Additive only and
+    per-index best-effort (a failure is logged, never raised)."""
+    inspector = inspect(engine)
+    for table in base.metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            continue
+        existing = {ix["name"] for ix in inspector.get_indexes(table.name)}
+        for index in table.indexes:
+            if not index.name or index.name in existing:
+                continue
+            try:
+                index.create(bind=engine)
+                logger.warning("Schema sync: created index %s on %s", index.name, table.name)
+            except Exception as exc:
+                logger.error("Schema sync: failed to create index %s: %s", index.name, exc)

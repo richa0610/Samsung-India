@@ -4,6 +4,7 @@ import AppText from "@/components/ui/AppText";
 import { AuditLogEntry } from "@/api/training";
 import { useLiveRuntime } from "@/hooks/useLiveRuntime";
 import { formatElapsed } from "./executionFlowUtils";
+import { Colors } from "@/theme/colors";
 
 type AuditLogRowProps = {
   entry: AuditLogEntry;
@@ -67,14 +68,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 6,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: Colors.gray100,
   },
   rowAlt: { backgroundColor: "#FAFAFA" },
   noteRow: { flexDirection: "column", alignItems: "stretch", gap: 2 },
   noteHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   note: { fontSize: 9, color: "#B45309", lineHeight: 13 },
-  moduleName: { fontSize: 9.5, fontWeight: "600", color: "#111827" },
-  by: { fontSize: 8, color: "#9CA3AF", marginTop: 1 },
-  cell: { fontSize: 9, color: "#4B5563" },
-  duration: { fontSize: 9, fontWeight: "700", color: "#2563EB" },
+  moduleName: { fontSize: 9.5, fontWeight: "600", color: Colors.black },
+  by: { fontSize: 8, color: Colors.gray400, marginTop: 1 },
+  cell: { fontSize: 9, color: Colors.gray600 },
+  duration: { fontSize: 9, fontWeight: "700", color: Colors.blueAccent },
 });

@@ -1,20 +1,22 @@
 import { useState } from "react";
 import { ActivityIndicator, Linking, Pressable, StyleSheet, TextInput, View } from "react-native";
-import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 
 import AppButton from "@/components/ui/AppButton";
 import AppCard from "@/components/ui/AppCard";
 import AppInput from "@/components/ui/AppInput";
+import AppModal from "@/components/ui/AppModal";
 import AppText from "@/components/ui/AppText";
+import MediaImage from "@/components/ui/MediaImage";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
+import { useAuth } from "@/hooks/useAuth";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { FontWeight } from "@/theme/fontWeight";
 import { Radius } from "@/theme/radius";
 import { Spacing } from "@/theme/spacing";
 import { digitsOnly } from "@/utils/validation";
-import { downloadAndShare } from "@/utils/downloadMedia";
+import { downloadAndPrint } from "@/utils/downloadMedia";
 import { resolveMediaUrl } from "@/utils/media";
 import { SectionTitle } from "./SectionTitle";
 import { AddTrainingForm } from "./useAddTrainingForm";
@@ -39,17 +41,23 @@ function EvidenceTile({
   path?: string;
   isImage: boolean;
 }) {
+  const { adminToken } = useAuth();
   const url = resolveMediaUrl(path);
   const looksLikeImage = isImage || /\.(jpe?g|png|webp)$/i.test(path ?? "");
   const [downloading, setDownloading] = useState(false);
+  const [previewVisible, setPreviewVisible] = useState(false);
 
   const handleDownload = async () => {
     if (!url || downloading) return;
     setDownloading(true);
     try {
-      await downloadAndShare(url, (path ?? title).split("/").pop() ?? title);
+      await downloadAndPrint(
+        url,
+        (path ?? title).split("/").pop() ?? title,
+        adminToken ? { Authorization: `Bearer ${adminToken}` } : undefined,
+      );
     } catch {
-      // share sheet dismissed or download failed - nothing to surface
+      // print dialog dismissed or download failed - nothing to surface
     } finally {
       setDownloading(false);
     }
@@ -69,8 +77,8 @@ function EvidenceTile({
             <View style={styles.actionRow}>
               <Pressable
                 style={[styles.actionPill, styles.viewPill]}
-                onPress={() => Linking.openURL(url)}
-                accessibilityRole="link"
+                onPress={() => (looksLikeImage ? setPreviewVisible(true) : Linking.openURL(url))}
+                accessibilityRole={looksLikeImage ? "button" : "link"}
                 accessibilityLabel={`View ${title}`}
               >
                 <AppText style={styles.actionText} color={Colors.white} weight={FontWeight.bold}>
@@ -93,13 +101,29 @@ function EvidenceTile({
               </Pressable>
             </View>
           ) : (
-            <AppText style={styles.evidenceMissing} color="#9CA3AF">
+            <AppText style={styles.evidenceMissing} color={Colors.gray400}>
               Not available
             </AppText>
           )}
         </View>
       </View>
-      {url && looksLikeImage && <Image source={{ uri: url }} style={styles.evidenceImage} contentFit="cover" />}
+      {url && looksLikeImage && (
+        <Pressable onPress={() => setPreviewVisible(true)}>
+          <MediaImage path={path} style={styles.evidenceImage} contentFit="cover" />
+        </Pressable>
+      )}
+
+      {url && looksLikeImage && (
+        <AppModal
+          visible={previewVisible}
+          onClose={() => setPreviewVisible(false)}
+          title={title}
+          showCloseButton
+          contentStyle={styles.previewModalContent}
+        >
+          <MediaImage path={path} style={styles.previewImage} contentFit="contain" />
+        </AppModal>
+      )}
     </View>
   );
 }
@@ -116,7 +140,7 @@ export function AdminReviewSections({ form }: { form: AddTrainingForm }) {
           label="Attendance Sheet PAX (Actual)"
           value={form.attendanceSheetPax}
           editable={false}
-          labelColor="#16A34A"
+          labelColor={Colors.success}
         />
         <AppInput
           compact
@@ -187,7 +211,7 @@ const styles = StyleSheet.create({
   card: { padding: 16 },
   evidenceTile: {
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     borderRadius: Radius.xxl,
     padding: 10,
     marginBottom: Spacing.md,
@@ -208,9 +232,11 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: "row", gap: 6, marginTop: 2 },
   actionPill: { borderRadius: 4, paddingHorizontal: 9, paddingVertical: 3, minWidth: 44, alignItems: "center" },
   viewPill: { backgroundColor: "#3B4FE4" },
-  downloadPill: { backgroundColor: "#1F2937" },
+  downloadPill: { backgroundColor: Colors.gray800 },
   actionText: { fontSize: 10 },
-  evidenceImage: { width: "100%", height: 150, borderRadius: Radius.xl, backgroundColor: "#E5E7EB" },
+  evidenceImage: { width: "100%", height: 150, borderRadius: Radius.xl, backgroundColor: Colors.gray200 },
+  previewModalContent: { width: "92%", padding: 0, overflow: "hidden" },
+  previewImage: { width: "100%", height: 420, backgroundColor: Colors.black },
   messageLabel: { fontSize: Fonts.body, marginBottom: Spacing.sm },
   messageInput: {
     minHeight: 110,

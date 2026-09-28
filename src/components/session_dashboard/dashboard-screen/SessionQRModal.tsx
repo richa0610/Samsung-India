@@ -124,14 +124,14 @@ const styles = StyleSheet.create({
     maxWidth: 360,
     alignSelf: "center",
   },
-  title: { fontSize: 16, color: "#111827", marginBottom: 4 },
-  subtitle: { fontSize: 11, color: "#6B7280", marginBottom: 16, textAlign: "center" },
+  title: { fontSize: 16, color: Colors.black, marginBottom: 4 },
+  subtitle: { fontSize: 11, color: Colors.gray500, marginBottom: 16, textAlign: "center" },
   qrBox: {
     padding: 12,
     backgroundColor: Colors.white,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
   },
   shareBtn: {
     marginTop: 18,

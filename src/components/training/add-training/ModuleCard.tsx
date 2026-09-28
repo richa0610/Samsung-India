@@ -29,7 +29,7 @@ export function ModuleCard({ moduleKey: key, form }: { moduleKey: ModuleKey; for
         compact
         placeholder="Select Category..."
         value={moduleState.category ?? ""}
-        options={form.categoryOptions}
+        options={form.categoryOptionsFor(key)}
         onSelect={(option) =>
           form.updateModule(key, { category: option.value, assessmentSuiteUid: undefined, questionCount: "" })
         }
@@ -41,7 +41,7 @@ export function ModuleCard({ moduleKey: key, form }: { moduleKey: ModuleKey; for
             compact
             placeholder={moduleState.category ? "Select Test" : "Select Category First"}
             value={moduleState.assessmentSuiteUid ?? ""}
-            options={form.questionSetOptionsFor(moduleState.category)}
+            options={form.questionSetOptionsFor(key, moduleState.category)}
             onSelect={(option) => {
               const suite = form.assessmentSuites.find((item) => item.assessmentSuiteUid === option.value);
               form.updateModule(key, {

@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 10.5,
-    color: "#006AFF",
+    color: Colors.mainColour1,
   },
   questionText: {
     fontSize: 14.5,

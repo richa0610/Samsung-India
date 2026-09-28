@@ -10,9 +10,12 @@ LogBox.ignoreLogs([
   "out of sync. Reload to reconnect",
 ]);
 
-SplashScreen.preventAutoHideAsync();
+// Native calls made at module load: if the JS runtime is reloaded while one is
+// still in flight, its native promise is destroyed and rejects ("JPromise was
+// destroyed"). Nothing depends on the result, so swallow it.
+SplashScreen.preventAutoHideAsync().catch(() => {});
 
-SystemUI.setBackgroundColorAsync(Colors.background);
+SystemUI.setBackgroundColorAsync(Colors.background).catch(() => {});
 
 export const TRAINER_ROUTES = [
   "/admin_dashboard",

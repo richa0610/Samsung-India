@@ -1,8 +1,9 @@
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.models.conference import Conference
 from app.models.quiz import Assessment, AssessmentResult, AssessmentSuite, Question
 
 
@@ -237,3 +238,38 @@ def list_all_submitted_results(db: Session) -> list[AssessmentResult]:
     """Every Submitted result row, all trainees - the dashboard groups these by
     trainee and keeps only the Standard Test + Live Quiz suites for ranking."""
     return db.query(AssessmentResult).filter(AssessmentResult.status == "Submitted").all()
+
+
+def latest_post_test_results_for_pairs(db: Session, pairs: set[tuple[str, str]]) -> dict[tuple[str, str], object]:
+    """{(conferenceUid, traineeUid): the latest Submitted attempt of that
+    conference's OWN post-test suite} for just the given pairs (one page of the
+    attendance list). Same rule as the Python list: highest attempt number wins,
+    and a result for any other suite - or for a conference with no post-test
+    suite - is ignored."""
+    if not pairs:
+        return {}
+    rows = db.execute(
+        select(
+            AssessmentResult.conferenceUid,
+            AssessmentResult.traineeUid,
+            AssessmentResult.totalScore,
+            AssessmentResult.maxScore,
+            AssessmentResult.percentage,
+        )
+        .join(
+            Conference,
+            and_(
+                Conference.conferenceUid == AssessmentResult.conferenceUid,
+                AssessmentResult.assessmentSuiteUid == Conference.postAssessmentUid,
+            ),
+        )
+        .where(
+            AssessmentResult.status == "Submitted",
+            or_(*[and_(AssessmentResult.conferenceUid == c, AssessmentResult.traineeUid == t) for c, t in pairs]),
+        )
+        .order_by(AssessmentResult.attemptNumber.desc())
+    ).all()
+    latest: dict[tuple[str, str], object] = {}
+    for row in rows:
+        latest.setdefault((row.conferenceUid, row.traineeUid), row)
+    return latest

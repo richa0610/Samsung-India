@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   progressLabel: { fontSize: 9.5 },
-  track: { height: 4, borderRadius: 2, backgroundColor: "#E5E7EB", overflow: "hidden" },
+  track: { height: 4, borderRadius: 2, backgroundColor: Colors.gray200, overflow: "hidden" },
   fill: { height: "100%", borderRadius: 2, backgroundColor: Colors.headerBlue },
   wifiBadge: {
     width: 32,

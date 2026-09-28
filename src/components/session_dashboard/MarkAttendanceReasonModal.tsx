@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import AppModal from "@/components/ui/AppModal";
 import AppText from "@/components/ui/AppText";
 import { ParticipantItem } from "./sessionDashboardTypes";
+import { Colors } from "@/theme/colors";
 
 export type PendingMark = { participant: ParticipantItem; status: "Present" | "Absent" };
 
@@ -37,7 +38,7 @@ export default function MarkAttendanceReasonModal({
   return (
     <AppModal visible={!!pending} onClose={close} position="center" contentStyle={styles.sheet}>
       <View style={styles.header}>
-        <Ionicons name="warning" size={16} color="#F59E0B" />
+        <Ionicons name="warning" size={16} color={Colors.warning} />
         <AppText style={styles.title}>
           MARK {statusLabel} FOR : {pending?.participant.name}
         </AppText>
@@ -50,7 +51,7 @@ export default function MarkAttendanceReasonModal({
         style={styles.input}
         value={reason}
         onChangeText={setReason}
-        placeholderTextColor="#6B7280"
+        placeholderTextColor={Colors.gray500}
         multiline
       />
 
@@ -69,8 +70,8 @@ export default function MarkAttendanceReasonModal({
 const styles = StyleSheet.create({
   sheet: { backgroundColor: "#1F2530", borderRadius: 12, padding: 18, width: "88%" },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  title: { flex: 1, fontSize: 14, fontWeight: "800", color: "#F3F4F6", lineHeight: 19 },
-  label: { fontSize: 12, color: "#D1D5DB", marginTop: 18, marginBottom: 8 },
+  title: { flex: 1, fontSize: 14, fontWeight: "800", color: Colors.gray100, lineHeight: 19 },
+  label: { fontSize: 12, color: Colors.gray300, marginTop: 18, marginBottom: 8 },
   input: {
     backgroundColor: "#343B47",
     borderRadius: 8,
@@ -78,11 +79,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 12,
-    color: "#F3F4F6",
+    color: Colors.gray100,
     textAlignVertical: "top",
   },
   actionsRow: { flexDirection: "row", justifyContent: "flex-end", gap: 20, marginTop: 18 },
-  cancelText: { fontSize: 13, color: "#60A5FA", fontWeight: "600" },
-  okText: { fontSize: 13, color: "#60A5FA", fontWeight: "800" },
+  cancelText: { fontSize: 13, color: Colors.blue400, fontWeight: "600" },
+  okText: { fontSize: 13, color: Colors.blue400, fontWeight: "800" },
   okTextDisabled: { opacity: 0.4 },
 });

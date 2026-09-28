@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { ExecutionFlowItem } from "@/api/training";
 import { useLiveRuntime } from "@/hooks/useLiveRuntime";
 import { formatElapsed, getExecutionStatusPresentation, getModuleVisual } from "./executionFlowUtils";
+import { Colors } from "@/theme/colors";
 
 type ExecutionFlowRowProps = {
   item: ExecutionFlowItem;
@@ -42,7 +43,7 @@ export default function ExecutionFlowRow({
     <View style={styles.row}>
       <View style={styles.rowMain}>
         <View style={[styles.iconWrap, { backgroundColor: visual.bg }]}>
-          <Ionicons name={visual.icon} size={16} color="#FFFFFF" />
+          <Ionicons name={visual.icon} size={16} color={Colors.white} />
         </View>
         <View style={styles.textCol}>
           <AppText style={styles.title}>{item.label}</AppText>
@@ -70,12 +71,12 @@ export default function ExecutionFlowRow({
           >
             {isStarting ? (
               <>
-                <ActivityIndicator size="small" color="#FFFFFF" style={styles.spinner} />
+                <ActivityIndicator size="small" color={Colors.white} style={styles.spinner} />
                 <AppText style={styles.startBtnText}>Starting...</AppText>
               </>
             ) : (
               <>
-                <Ionicons name="play" size={11} color="#FFFFFF" />
+                <Ionicons name="play" size={11} color={Colors.white} />
                 <AppText style={styles.startBtnText}>Start</AppText>
               </>
             )}
@@ -96,12 +97,12 @@ export default function ExecutionFlowRow({
         >
           {isRestarting ? (
             <>
-              <ActivityIndicator size="small" color="#4B5563" style={styles.spinner} />
+              <ActivityIndicator size="small" color={Colors.gray600} style={styles.spinner} />
               <AppText style={styles.actionText}>Restarting...</AppText>
             </>
           ) : (
             <>
-              <Ionicons name="refresh" size={12} color={item.canRestart ? "#4B5563" : "#9CA3AF"} />
+              <Ionicons name="refresh" size={12} color={item.canRestart ? Colors.gray600 : Colors.gray400} />
               <AppText style={[styles.actionText, !item.canRestart && styles.actionTextDisabled]}>Restart</AppText>
             </>
           )}
@@ -111,7 +112,7 @@ export default function ExecutionFlowRow({
       {hasStarted && effectiveStatus === "Running" && (
         <View style={styles.actionRow}>
           <Pressable style={styles.actionBtnOutline} onPress={() => onViewTopPerformers?.(item.moduleKey)}>
-            <Ionicons name="stats-chart" size={12} color="#2563EB" />
+            <Ionicons name="stats-chart" size={12} color={Colors.blueAccent} />
             <AppText style={styles.actionTextBlue}>Top Performers</AppText>
           </Pressable>
           <View style={styles.liveDot}>
@@ -126,18 +127,18 @@ export default function ExecutionFlowRow({
 
 const styles = StyleSheet.create({
   row: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Colors.white,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 10,
     gap: 8,
   },
   rowMain: { flexDirection: "row", alignItems: "center", gap: 10 },
   iconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   textCol: { flex: 1, gap: 2 },
-  title: { fontSize: 12.5, fontWeight: "700", color: "#111827" },
-  subtitle: { fontSize: 9.5, fontWeight: "600", color: "#9CA3AF", letterSpacing: 0.3 },
+  title: { fontSize: 12.5, fontWeight: "700", color: Colors.black },
+  subtitle: { fontSize: 9.5, fontWeight: "600", color: Colors.gray400, letterSpacing: 0.3 },
   statusPill: { alignItems: "center", paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, gap: 2 },
   statusText: { fontSize: 9.5, fontWeight: "700" },
   elapsedText: { fontSize: 9.5, fontWeight: "600" },
@@ -145,14 +146,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#16A34A",
+    backgroundColor: Colors.success,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  startBtnDisabled: { backgroundColor: "#D1D5DB" },
+  startBtnDisabled: { backgroundColor: Colors.gray300 },
   startBtnLoading: { backgroundColor: "#15803D", paddingHorizontal: 8 },
-  startBtnText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
+  startBtnText: { fontSize: 10, fontWeight: "700", color: Colors.white },
   spinner: { transform: [{ scale: 0.7 }], marginHorizontal: -2 },
   actionBtn: {
     flexDirection: "row",
@@ -160,14 +161,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: Colors.gray300,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  actionText: { fontSize: 10, fontWeight: "600", color: "#4B5563" },
-  actionBtnDisabled: { borderColor: "#E5E7EB", opacity: 0.6 },
-  actionTextDisabled: { color: "#9CA3AF" },
+  actionText: { fontSize: 10, fontWeight: "600", color: Colors.gray600 },
+  actionBtnDisabled: { borderColor: Colors.gray200, opacity: 0.6 },
+  actionTextDisabled: { color: Colors.gray400 },
   actionRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   actionBtnOutline: {
     flexDirection: "row",
@@ -179,16 +180,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  actionTextBlue: { fontSize: 10, fontWeight: "600", color: "#2563EB" },
+  actionTextBlue: { fontSize: 10, fontWeight: "600", color: Colors.blueAccent },
   liveDot: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    backgroundColor: "#DC2626",
+    backgroundColor: Colors.danger,
     borderRadius: 8,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
-  liveDotIndicator: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#FFFFFF" },
-  liveDotText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
+  liveDotIndicator: { width: 5, height: 5, borderRadius: 3, backgroundColor: Colors.white },
+  liveDotText: { fontSize: 10, fontWeight: "700", color: Colors.white },
 });

@@ -4,6 +4,7 @@ import AppText from "@/components/ui/AppText";
 import { FontWeight } from "@/theme/fontWeight";
 import { createShadow } from "@/theme/shadows";
 import { SecurityViolationType } from "./violations";
+import { Colors } from "@/theme/colors";
 
 export type ProctoringSoftWarningProps = {
   visible: boolean;
@@ -58,12 +59,12 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: "#F59E0B",
+    borderColor: Colors.warning,
     ...createShadow({ x: 0, y: 6, blur: 14, opacity: 0.45, elevation: 10 }),
   },
   headerRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
-  amberDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#F59E0B" },
-  headingText: { color: "#FFFFFF", fontSize: 12.5, letterSpacing: 0.3 },
-  detailText: { color: "#E5E7EB", fontSize: 13.5, marginBottom: 4 },
-  hintText: { color: "#D1D5DB", fontSize: 12.5 },
+  amberDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: Colors.warning },
+  headingText: { color: Colors.white, fontSize: 12.5, letterSpacing: 0.3 },
+  detailText: { color: Colors.gray200, fontSize: 13.5, marginBottom: 4 },
+  hintText: { color: Colors.gray300, fontSize: 12.5 },
 });

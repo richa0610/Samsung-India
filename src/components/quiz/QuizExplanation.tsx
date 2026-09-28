@@ -70,6 +70,6 @@ const styles = StyleSheet.create({
   bodyText: {
     fontSize: 12,
     lineHeight: 17,
-    color: "#1F2937",
+    color: Colors.gray800,
   },
 });

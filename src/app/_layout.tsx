@@ -1,3 +1,6 @@
+// Must stay first: installs the global filter before any other module runs.
+import "@/utils/ignoreDestroyedPromise";
+
 import { DefaultTheme, ThemeProvider, usePathname } from "expo-router";
 
 import { AnimatedSplashOverlay } from "@/components/animated-icon";

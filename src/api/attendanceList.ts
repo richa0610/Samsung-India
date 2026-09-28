@@ -47,4 +47,70 @@ export function fetchAttendanceList(token: string, org = false, filters?: AdminF
   });
 }
 
+export type AttendanceMode = "all" | "pending" | "confirmed";
+
+export type AttendancePage = {
+  items: AttendanceListItem[];
+  /** Opaque "rows after this one" marker - used to walk every page for export; null on the last page. */
+  nextCursor: string | null;
+  /** All rows matching the mode / filters / search - only sent with page 1. */
+  total: number | null;
+};
+
+/** Server sort keys the paged list understands (see GET /admin/attendance/page). */
+export type AttendanceSortKey =
+  | "markedAt"
+  | "conferenceDate"
+  | "region"
+  | "product"
+  | "session"
+  | "audienceType"
+  | "trainerName"
+  | "trainerHoId"
+  | "participantHoId"
+  | "participantName"
+  | "phone"
+  | "state"
+  | "district"
+  | "reportingManagerOfPromoter"
+  | "attendanceStatus"
+  | "checkIn"
+  | "checkOut"
+  | "attendanceId"
+  | "conferenceId";
+
+/** One page of the admin org-wide attendance list. The server does the mode split,
+ *  filtering, searching, sorting and paging (admin accounts only). */
+export function fetchAttendancePage(
+  token: string,
+  options: {
+    mode: AttendanceMode;
+    filters?: AdminFilters;
+    q?: string;
+    sort?: AttendanceSortKey;
+    dir?: "asc" | "desc";
+    /** 1-based page number. */
+    page?: number;
+    /** "The rows after this one" - used to walk every page for export. */
+    cursor?: string | null;
+    limit?: number;
+    /** Aborts the request when a newer one supersedes it. */
+    signal?: AbortSignal;
+  },
+) {
+  const params = new URLSearchParams();
+  params.set("mode", options.mode);
+  if (options.q?.trim()) params.set("q", options.q.trim());
+  if (options.sort) params.set("sort", options.sort);
+  if (options.dir) params.set("dir", options.dir);
+  if (options.page && options.page > 1) params.set("page", String(options.page));
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.limit) params.set("limit", String(options.limit));
+  for (const [key, value] of adminFilterParams(options.filters)) params.set(key, value);
+  return apiRequest<AttendancePage>(`/admin/attendance/page?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: options.signal,
+  });
+}
+
 export { ApiError } from "./client";

@@ -66,11 +66,11 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.mainColour1,
   },
   cellInRange: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
   },
   text: {
     fontSize: 8.5,
-    color: "#1F2937",
+    color: Colors.gray800,
     fontWeight: "500",
   },
   textSelected: {
@@ -82,10 +82,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   textOutside: {
-    color: "#D1D5DB",
+    color: Colors.gray300,
   },
   textDisabled: {
-    color: "#D1D5DB",
+    color: Colors.gray300,
   },
   textToday: {
     fontWeight: "700",

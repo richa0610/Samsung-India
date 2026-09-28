@@ -7,8 +7,8 @@ import { Colors } from "@/theme/colors";
 import { formatDisplayDate } from "../calendarUtils";
 
 type DateRangeFilterBarProps = {
-  selectedStart: Date;
-  selectedEnd: Date;
+  selectedStart: Date | null;
+  selectedEnd: Date | null;
   onToggleExpand: () => void;
   onFilterPress: () => void;
 };
@@ -18,14 +18,14 @@ export default function DateRangeFilterBar({ selectedStart, selectedEnd, onToggl
     <View style={styles.topFilterBar}>
       <Pressable style={styles.dateBox} onPress={onToggleExpand} accessibilityRole="button" accessibilityLabel="Select Start Date">
         <CalenderIcon width={13} height={13} color={Colors.mainColour1} stroke={Colors.mainColour1} />
-        <AppText style={styles.dateBoxText}>{formatDisplayDate(selectedStart)}</AppText>
+        <AppText style={styles.dateBoxText}>{selectedStart ? formatDisplayDate(selectedStart) : "Select Date"}</AppText>
       </Pressable>
 
-      <Ionicons name="arrow-forward" size={13} color="#9CA3AF" />
+      <Ionicons name="arrow-forward" size={13} color={Colors.gray400} />
 
       <Pressable style={styles.dateBox} onPress={onToggleExpand} accessibilityRole="button" accessibilityLabel="Select End Date">
         <CalenderIcon width={13} height={13} color={Colors.mainColour1} stroke={Colors.mainColour1} />
-        <AppText style={styles.dateBoxText}>{formatDisplayDate(selectedEnd)}</AppText>
+        <AppText style={styles.dateBoxText}>{selectedEnd ? formatDisplayDate(selectedEnd) : "Select Date"}</AppText>
       </Pressable>
 
       <Pressable style={styles.filterButton} onPress={onFilterPress} accessibilityRole="button" accessibilityLabel="Filter">
@@ -51,14 +51,14 @@ const styles = StyleSheet.create({
     gap: 4,
     backgroundColor: Colors.white,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: Colors.gray300,
     borderRadius: 8,
     paddingHorizontal: 4,
     paddingVertical: 6,
   },
   dateBoxText: {
     fontSize: 9.5,
-    color: "#374151",
+    color: Colors.gray700,
     fontWeight: "500",
   },
   filterButton: {

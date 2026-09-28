@@ -5,6 +5,7 @@ import { TrainingQuestionAttempt } from "@/api/session";
 import AppText from "@/components/ui/AppText";
 import { FontWeight } from "@/theme/fontWeight";
 import { Radius } from "@/theme/radius";
+import { Colors } from "@/theme/colors";
 
 type QuestionReviewItemProps = {
   index: number;
@@ -20,7 +21,7 @@ export default function QuestionReviewItem({ index, attempt }: QuestionReviewIte
   return (
     <View style={styles.container}>
       <View style={styles.questionHeader}>
-        <AppText variant="caption" weight={FontWeight.bold} color="#111827" style={styles.questionText}>
+        <AppText variant="caption" weight={FontWeight.bold} color={Colors.black} style={styles.questionText}>
           {index}. {attempt.question}
         </AppText>
         {hasAnswerKey &&
@@ -28,10 +29,10 @@ export default function QuestionReviewItem({ index, attempt }: QuestionReviewIte
             <Ionicons
               name={attempt.isCorrect ? "checkmark-circle" : "close-circle"}
               size={18}
-              color={attempt.isCorrect ? "#059669" : "#DC2626"}
+              color={attempt.isCorrect ? "#059669" : Colors.danger}
             />
           ) : (
-            <Ionicons name="remove-circle-outline" size={18} color="#9CA3AF" />
+            <Ionicons name="remove-circle-outline" size={18} color={Colors.gray400} />
           ))}
       </View>
 
@@ -41,14 +42,14 @@ export default function QuestionReviewItem({ index, attempt }: QuestionReviewIte
           const isCorrectOption = hasAnswerKey && option.id === attempt.correctOptionId;
 
           let style = styles.optionNeutral;
-          let textColor = "#374151";
+          let textColor = Colors.gray700;
           if (hasAnswerKey) {
             if (isSelected && isCorrectOption) {
               style = styles.optionCorrect;
               textColor = "#059669";
             } else if (isSelected && !isCorrectOption) {
               style = styles.optionWrong;
-              textColor = "#DC2626";
+              textColor = Colors.danger;
             } else if (isCorrectOption) {
               style = styles.optionCorrect;
               textColor = "#059669";
@@ -73,7 +74,7 @@ export default function QuestionReviewItem({ index, attempt }: QuestionReviewIte
           );
         })}
         {!attempt.answered && (
-          <AppText variant="tiny" color="#9CA3AF" style={styles.notAnswered}>
+          <AppText variant="tiny" color={Colors.gray400} style={styles.notAnswered}>
             Not answered
           </AppText>
         )}
@@ -86,7 +87,7 @@ const styles = StyleSheet.create({
   container: {
     paddingVertical: 12,
     borderTopWidth: 1,
-    borderTopColor: "#F1F5F9",
+    borderTopColor: Colors.slate100,
   },
   questionHeader: {
     flexDirection: "row",
@@ -107,9 +108,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   optionText: { flex: 1 },
-  optionNeutral: { backgroundColor: "#F9FAFB", borderColor: "#E5E7EB" },
-  optionSelected: { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" },
-  optionCorrect: { backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" },
-  optionWrong: { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
+  optionNeutral: { backgroundColor: Colors.gray50, borderColor: Colors.gray200 },
+  optionSelected: { backgroundColor: Colors.blue50, borderColor: "#BFDBFE" },
+  optionCorrect: { backgroundColor: Colors.successBgSoft, borderColor: "#A7F3D0" },
+  optionWrong: { backgroundColor: Colors.dangerBgSoft, borderColor: "#FECACA" },
   notAnswered: { marginTop: 2 },
 });

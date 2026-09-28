@@ -16,9 +16,9 @@ type SessionDetailsCardProps = {
 
 function getStatusPresentation(status: string): { label: string; bg: string; color: string } {
   const s = status.toLowerCase();
-  if (s === "completed") return { label: "Session Closed", bg: "#111827", color: Colors.white };
+  if (s === "completed") return { label: "Session Closed", bg: Colors.black, color: Colors.white };
   if (s === "ongoing" || s === "live") return { label: "In Progress", bg: "#059669", color: Colors.white };
-  return { label: "Scheduled", bg: "#111827", color: Colors.white };
+  return { label: "Scheduled", bg: Colors.black, color: Colors.white };
 }
 
 export default function SessionDetailsCard({
@@ -55,7 +55,7 @@ export default function SessionDetailsCard({
           <Ionicons
             name={isCollapsed ? "chevron-down" : "chevron-forward"}
             size={14}
-            color="#0066FF"
+            color={Colors.brandBlue}
           />
         </Pressable>
       </View>
@@ -69,7 +69,7 @@ export default function SessionDetailsCard({
                 <Ionicons
                   name="chatbox-outline"
                   size={16}
-                  color="#0066FF"
+                  color={Colors.brandBlue}
                 />
               </View>
               <AppText style={styles.label}>Topic</AppText>
@@ -86,7 +86,7 @@ export default function SessionDetailsCard({
                 <Ionicons
                   name="calendar-outline"
                   size={16}
-                  color="#0066FF"
+                  color={Colors.brandBlue}
                 />
               </View>
               <AppText style={styles.label}>Date</AppText>
@@ -103,7 +103,7 @@ export default function SessionDetailsCard({
                 <Ionicons
                   name="person-outline"
                   size={16}
-                  color="#0066FF"
+                  color={Colors.brandBlue}
                 />
               </View>
               <AppText style={styles.label}>Trainer</AppText>
@@ -119,7 +119,7 @@ export default function SessionDetailsCard({
           <View style={styles.row}>
             <View style={styles.leftCol}>
               <View style={styles.iconBox}>
-                <Ionicons name="shield-checkmark-outline" size={16} color="#0066FF" />
+                <Ionicons name="shield-checkmark-outline" size={16} color={Colors.brandBlue} />
               </View>
               <AppText style={styles.label}>Status</AppText>
             </View>
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     marginHorizontal: 14,
     marginTop: 8,
     overflow: "hidden",
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#EAECF0",
+    borderBottomColor: Colors.borderLight,
   },
   titleRow: {
     flexDirection: "row",
@@ -171,14 +171,14 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
     alignItems: "center",
     justifyContent: "center",
   },
   title: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     letterSpacing: 0.3,
   },
   toggleBtn: {
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     fontSize: 11,
-    color: "#0066FF",
+    color: Colors.brandBlue,
     fontWeight: "700",
   },
   content: {
@@ -211,22 +211,22 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 8,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
     alignItems: "center",
     justifyContent: "center",
   },
   label: {
     fontSize: 12,
-    color: "#111827",
+    color: Colors.black,
     fontWeight: "600",
   },
   value: {
     fontSize: 12,
-    color: "#111827",
+    color: Colors.black,
     fontWeight: "500",
   },
   trainerValue: {
-    color: "#0066FF",
+    color: Colors.brandBlue,
     fontWeight: "700",
   },
   statusPill: {
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: "#EAECF0",
+    backgroundColor: Colors.borderLight,
     marginVertical: 2,
   },
   bottomPillWrapper: {
@@ -250,14 +250,14 @@ const styles = StyleSheet.create({
   runtimePill: {
     backgroundColor: Colors.gray50,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: Colors.gray300,
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 4,
   },
   runtimeText: {
     fontSize: 10,
-    color: "#374151",
+    color: Colors.gray700,
     fontWeight: "600",
   },
 });

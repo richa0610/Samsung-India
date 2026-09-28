@@ -1,14 +1,15 @@
+from types import SimpleNamespace
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 from app.core.constants import PASS_THRESHOLD_PERCENT
-from app.core.exceptions import unauthorized
+from app.core.exceptions import forbidden, unauthorized
 from app.core.media import resolve_trainer_avatar
 from app.core.security import create_access_token, verify_password
 from app.dependencies.filters import ConferenceFilters
-from app.models.attendance import Attendance
-from app.repositories import admin_repository, assessment_repository, conference_repository
+from app.repositories import admin_repository, dashboard_repository
+from app.services.access_service import resolve_scope
 from app.schemas.admin import (
     AdminAuthSession,
     AdminDashboardStatsOut,
@@ -28,6 +29,7 @@ from app.schemas.admin import (
     TrainingTypeStatusCount,
 )
 from app.services.activity_log_service import log_activity
+from app.services.training_service import _audience_class
 from app.utils.status import title_status
 
 
@@ -43,6 +45,13 @@ def login(
     own tenant database - see the DB-per-tenant split in app/database/."""
     admin = admin_repository.get_admin_by_username(common_db, payload.username)
     if admin and admin.password and verify_password(payload.password, admin.password):
+        # Correct credentials alone aren't enough: the account must actually hold an
+        # admin_access grant for the tenant it's trying to log into - reusing the exact same
+        # check that already gates every admin-panel request (access_service.resolve_scope), so
+        # this can never fall out of sync with what a token is later allowed to do. A Super
+        # Admin's global grant passes for any tenant; anyone else needs a grant naming this one.
+        if not resolve_scope(common_db, admin, tenant_id).allowed:
+            raise forbidden("Not authorized for this tenant")
         token = create_access_token(subject=f"admin:{admin.username}", tenant_id=tenant_id, role=admin.role)
         # `logsmaster` is a per-tenant table (see app/models/logs_master.py) -
         # write via `db` (this tenant), never `common_db`, even though the
@@ -87,42 +96,84 @@ def login(
 
 
 def build_admin_dashboard_stats(
-    common_db: Session, db: Session, filters: Optional[ConferenceFilters] = None
+    common_db: Session,
+    db: Session,
+    filters: Optional[ConferenceFilters] = None,
+    admin=None,
+    tenant_id: Optional[str] = None,
 ) -> AdminDashboardStatsOut:
     """Org-wide (every trainer, every conference in this tenant) summary for
     the admin dashboard's four overview cards - unlike the trainer agenda
-    and session-dashboard endpoints, which are all scoped to one trainer."""
-    all_conferences = conference_repository.list_all(db)
-    # A cancelled training is excluded from every number on this dashboard -
-    # its attendance and test results included.
-    cancelled_uids = {c.conferenceUid for c in all_conferences if title_status(c.conferenceStatus) == "Cancelled"}
-    # The admin panel's shared filter (date, trainer, zone, ...) narrows every
-    # number the same way: anything outside it is excluded like a cancelled one.
-    if filters is not None and filters.active:
-        cancelled_uids |= {c.conferenceUid for c in all_conferences if not filters.matches(c)}
-    conferences = [c for c in all_conferences if c.conferenceUid not in cancelled_uids]
-    total = len(conferences)
-    completed = sum(1 for c in conferences if title_status(c.conferenceStatus) == "Completed")
-    pending = total - completed
+    and session-dashboard endpoints, which are all scoped to one trainer.
 
+    Everything is counted in the database (see dashboard_repository): the
+    filter scope is part of each query's WHERE clause, and rows come back as
+    small GROUP BY results, never one row per training.
+
+    Authorization is the caller's admin_access grant (access_service.resolve_scope), the same
+    scope the Training List, Attendance list and Trainee list already use - not the legacy
+    `apply_identity_scope` company/zone columns `filters` used to carry. `admin=None` (only
+    possible from a direct internal call, never through the router) skips the scope condition
+    entirely, the same convention list_trainings_page/list_attendance_page use."""
+    scope = None if admin is None else resolve_scope(common_db, admin, tenant_id)
+    conditions = dashboard_repository.conference_conditions(filters)
+    if scope is not None:
+        conditions += dashboard_repository.access_scope_conditions(scope)
+    # Narrows the partner-agency trainer pool the same way the conference conditions above
+    # narrow trainings - the one company in scope, if the caller is restricted to exactly one
+    # (a Company Admin, Coordinator or Sub-coordinator); unrestricted (None) for a Super Admin
+    # or a direct internal call, same as before this existed.
+    scope_company = None
+    if scope is not None and scope.allowed and not scope.is_super:
+        companies = {rule.company for rule in scope.rules}
+        if len(companies) == 1:
+            (scope_company,) = companies
+    if scope_company is None and filters is not None and filters.company:
+        # `filters.company` is never set by the router anymore (apply_identity_scope no longer
+        # runs here) - this only still matters for a direct internal caller, so this stays
+        # correct rather than just unreachable dead code.
+        scope_company = filters.company
+    # Every aggregate below comes from this ONE database round trip.
+    snapshot = dashboard_repository.dashboard_snapshot(db, conditions, scope_company)
+
+    # The Training and Trainers cards are built from ONE shared list so their
+    # numbers always agree: a training counts once it's Completed, or once an
+    # admin has approved it and it's still to run (Scheduled or Ongoing).
+    # Awaiting-approval / rejected ones have their own "awaiting review"
+    # banner and stay out of these totals. (Approval `status` is separate from
+    # the session's `conferenceStatus`.)
+    total = 0
+    completed = 0
     breakdown_map: dict[str, dict[str, int]] = {}
-    for c in conferences:
-        t_type = (c.trainingType or "").strip() or "Other"
-        raw_status = (c.conferenceStatus or "").strip()
+    counted_by_type: dict[str, int] = {}
+    for raw_type, raw_conf_status, raw_approval, count in snapshot.status_groups:
+        conf_status = title_status(raw_conf_status)
+        is_completed = conf_status == "Completed"
+        is_pending = title_status(raw_approval) == "Approved" and conf_status in ("Scheduled", "Ongoing")
+        if not (is_completed or is_pending):
+            continue
+
+        total += count
+        if is_completed:
+            completed += count
+
+        t_type = (raw_type or "").strip() or "Other"
+        counted_by_type[t_type] = counted_by_type.get(t_type, 0) + count
+
+        raw_status = (raw_conf_status or "").strip()
         status_title = title_status(raw_status)
         if status_title == "Ongoing":
             display_status = "Session Started"
         elif status_title == "Completed":
             display_status = "Session Completed"
-        elif status_title in ("Scheduled", "Approved", "Pending"):
+        elif status_title in ("Scheduled", "Approved", "Pending") or not raw_status:
             display_status = "Session Not Started"
-        elif not raw_status:
-            display_status = "Unknown"
         else:
             display_status = raw_status
 
         breakdown_map.setdefault(t_type, {})
-        breakdown_map[t_type][display_status] = breakdown_map[t_type].get(display_status, 0) + 1
+        breakdown_map[t_type][display_status] = breakdown_map[t_type].get(display_status, 0) + count
+    pending = total - completed
 
     type_breakdown: list[TrainingTypeGroup] = [
         TrainingTypeGroup(
@@ -143,50 +194,64 @@ def build_admin_dashboard_stats(
         typeBreakdown=type_breakdown,
     )
 
-    kept_uids = {c.conferenceUid for c in conferences}
-    filtering = filters is not None and filters.active
-    all_attendances = [
-        att
-        for att in db.query(Attendance).all()
-        if att.conferenceUid not in cancelled_uids and (not filtering or att.conferenceUid in kept_uids)
-    ]
-    present = sum(1 for att in all_attendances if att.status == "Present")
-    absent = sum(1 for att in all_attendances if att.status == "Absent")
-    participants = present + absent
-
-    # Build Audience Type Breakdown
-    conf_by_uid = {c.conferenceUid: c for c in conferences}
+    # `confirmedPax` only ever holds a real number once the trainer has
+    # actually checked out and reported it (training_service.end_training) -
+    # same field the website's Training List shows as "Total Pax (Trainer)".
+    # No `batchSize` fallback: that's just the pre-planned capacity from
+    # when the training was created, not a real headcount, and counting it
+    # for a training nobody has checked out of yet inflates this total with
+    # bookings that haven't happened. Grouped by distinct value, so each
+    # free-text pax value is converted once, not once per training.
     type_pax_map: dict[str, int] = {}
-    type_stats_map: dict[str, dict[str, int]] = {}
-
-    for c in conferences:
-        t_type = (c.trainingType or "").strip() or "Other"
+    for raw_type, raw_pax, count in snapshot.pax_groups:
+        t_type = (raw_type or "").strip() or "Other"
         try:
-            pax_val = int(c.confirmedPax or c.batchSize or 0)
+            pax_val = int(raw_pax or 0)
         except (ValueError, TypeError):
             pax_val = 0
-        type_pax_map[t_type] = type_pax_map.get(t_type, 0) + pax_val
+        type_pax_map[t_type] = type_pax_map.get(t_type, 0) + pax_val * count
 
-    for att in all_attendances:
-        c = conf_by_uid.get(att.conferenceUid)
-        t_type = (c.trainingType or "").strip() or "Other" if c else "Other"
-        type_stats_map.setdefault(t_type, {"present": 0, "unplanned": 0, "unallocated": 0})
-        if att.status == "Present":
-            type_stats_map[t_type]["present"] += 1
-            if att.geofenceBypass or (att.remarks and "unplanned" in str(att.remarks).lower()):
-                type_stats_map[t_type]["unplanned"] += 1
+    # Unplanned(Fresh) comes from the same ASSIGNED/UNASSIGNED/FRESH
+    # classification the single-session dashboard uses (_audience_class,
+    # reading Attendance.sessionMeta written at join_session time) - not a
+    # separate heuristic, so this card can never disagree with the
+    # per-training Audience Breakdown card on who counts as Fresh.
+    # UnAllocated(Ex) is everyone else present (ASSIGNED or UNASSIGNED alike -
+    # "existing" as opposed to "Fresh"), so Present always equals exactly
+    # Unplanned + UnAllocated, with no third unlabeled bucket. Attendance
+    # comes back grouped by (training type, status, audience meta) - a few
+    # dozen rows however many trainees attended.
+    def _blank_stats() -> dict[str, int]:
+        return {"present": 0, "absent": 0, "notMarked": 0, "unplanned": 0, "unallocated": 0}
 
-    for t_type, pax_val in type_pax_map.items():
-        type_stats_map.setdefault(t_type, {"present": 0, "unplanned": 0, "unallocated": 0})
-        pres = type_stats_map[t_type]["present"]
-        type_stats_map[t_type]["unallocated"] = max(pax_val - pres, 0)
-        if type_stats_map[t_type]["unplanned"] == 0 and pax_val > 0 and pres > pax_val:
-            type_stats_map[t_type]["unplanned"] = pres - pax_val
+    type_stats_map: dict[str, dict[str, int]] = {}
+    for raw_type, att_status, session_meta, count in snapshot.attendance_groups:
+        t_type = (raw_type or "").strip() or "Other"
+        stats = type_stats_map.setdefault(t_type, _blank_stats())
+        if att_status == "Present":
+            stats["present"] += count
+            if _audience_class(SimpleNamespace(sessionMeta=session_meta)) == "FRESH":
+                stats["unplanned"] += count
+            else:
+                stats["unallocated"] += count
+        elif att_status == "Absent":
+            stats["absent"] += count
+        else:
+            stats["notMarked"] += count
+
+    for t_type in type_pax_map:
+        type_stats_map.setdefault(t_type, _blank_stats())
+
+    present = sum(s["present"] for s in type_stats_map.values())
+    absent = sum(s["absent"] for s in type_stats_map.values())
+    participants = present + absent
 
     total_pax = sum(type_pax_map.values())
-    global_present = sum(s["present"] for s in type_stats_map.values()) if type_stats_map else present
+    global_present = present
     global_unplanned = sum(s["unplanned"] for s in type_stats_map.values())
     global_unallocated = sum(s["unallocated"] for s in type_stats_map.values())
+    global_absent = absent
+    global_not_marked = sum(s["notMarked"] for s in type_stats_map.values())
 
     audience_breakdown: list[AudienceSection] = []
     if type_pax_map or type_stats_map:
@@ -195,26 +260,46 @@ def build_admin_dashboard_stats(
             pax_items.append(AudienceStatusItem(label=t_type, count=cnt))
         audience_breakdown.append(AudienceSection(title="Pax Count", items=pax_items))
 
+        # Only fields with a nonzero count are shown - an all-empty scope
+        # (e.g. nothing marked yet) collapses to nothing rather than a wall
+        # of zeroes.
+        global_candidates = [
+            ("Present", global_present, "#16A34A"),
+            ("Absent", global_absent, "#DC2626"),
+            ("Not Marked", global_not_marked, "#F59E0B"),
+            ("Unplanned (Fresh)", global_unplanned, "#0EA5E9"),
+            ("UnAllocated (Ex)", global_unallocated, "#64748B"),
+        ]
+        global_items = [
+            AudienceStatusItem(label=label, count=cnt, color=color)
+            for label, cnt, color in global_candidates
+            if cnt > 0
+        ]
         audience_breakdown.append(
             AudienceSection(
                 title="Global Totals",
-                items=[
-                    AudienceStatusItem(label="Present", count=global_present, color="#16A34A"),
-                    AudienceStatusItem(label="Unplanned (Fresh)", count=global_unplanned, color="#0EA5E9"),
-                    AudienceStatusItem(label="UnAllocated (Ex)", count=global_unallocated, color="#64748B"),
-                ],
+                items=global_items,
             )
         )
 
         for t_type, s in sorted(type_stats_map.items()):
-            tot = s["present"] + s["unplanned"] + s["unallocated"]
+            type_candidates = [
+                ("Present", s["present"], "#16A34A"),
+                ("Absent", s["absent"], "#DC2626"),
+                ("Not Marked", s["notMarked"], "#F59E0B"),
+                ("Unplanned (Fresh)", s["unplanned"], "#0EA5E9"),
+                ("UnAllocated (Ex)", s["unallocated"], "#64748B"),
+            ]
             audience_breakdown.append(
                 AudienceSection(
-                    title=f"{t_type} ({tot if tot > 0 else s['present']})",
+                    # The bracket is the Present count. Unplanned (Fresh) and
+                    # UnAllocated (Ex) are already inside Present, so summing
+                    # them again would double count.
+                    title=f"{t_type} ({s['present']})",
                     items=[
-                        AudienceStatusItem(label="Present", count=s["present"], color="#16A34A"),
-                        AudienceStatusItem(label="Unplanned", count=s["unplanned"], color="#0EA5E9"),
-                        AudienceStatusItem(label="UnAllocated", count=s["unallocated"], color="#64748B"),
+                        AudienceStatusItem(label=label, count=cnt, color=color)
+                        for label, cnt, color in type_candidates
+                        if cnt > 0
                     ],
                 )
             )
@@ -229,45 +314,45 @@ def build_admin_dashboard_stats(
     )
 
     # Same merge-and-dedupe-by-username as trainer_service.list_trainers -
-    # a trainer can be seeded into both `admin` and `agencyteam`.
-    trainer_usernames = {t.username for t in admin_repository.list_admin_trainers(common_db) if t.username}
-    trainer_usernames |= {t.username for t in admin_repository.list_agency_trainers(db) if t.username}
-    pool = len(trainer_usernames)
-    ongoing_trainer_usernames = {
-        c.trainerEmployeeId
-        for c in conferences
-        if c.trainerEmployeeId and title_status(c.conferenceStatus) == "Ongoing"
+    # a trainer can be seeded into both `admin` and `agencyteam`. Scoped to
+    # the caller's own company (same as everything else on this dashboard) -
+    # zone can't apply here, since no trainer record has a zone of its own.
+    trainer_usernames = {
+        t.username for t in admin_repository.list_admin_trainers(common_db, company=scope_company) if t.username
     }
-    in_training = len(ongoing_trainer_usernames & trainer_usernames) if trainer_usernames else 0
+    trainer_usernames |= snapshot.agency_trainers
+    pool = len(trainer_usernames)
+    # Trainers with at least one counted training (same list the Training
+    # card uses) are "in training"; everyone else in the pool is idle, so
+    # In Training + Idle always equals the pool.
+    busy_trainer_usernames = snapshot.busy_trainers & trainer_usernames
+    in_training = len(busy_trainer_usernames)
     idle = max(pool - in_training, 0)
 
-    # Status Analysis: "In Training" broken down by training type
-    in_training_by_type: dict[str, int] = {}
-    for c in conferences:
-        if c.trainerEmployeeId and title_status(c.conferenceStatus) == "Ongoing":
-            if not trainer_usernames or c.trainerEmployeeId in trainer_usernames:
-                t_type = (c.trainingType or "").strip() or "Other"
-                in_training_by_type[t_type] = in_training_by_type.get(t_type, 0) + 1
+    # Status Analysis: the same counted trainings, broken down by training
+    # type, so these numbers always add up to the Training card's Planned
+    # total (Completed + Pending). Deliberately NOT limited to the trainer pool
+    # - a training whose trainer isn't in the pool list would otherwise be in
+    # Planned but missing here. Already scoped to this admin's company/zone
+    # because `conferences` is.
+    in_training_by_type = counted_by_type
 
-    distinct_types = {
-        (c.trainingType or "").strip()
-        for c in conferences
-        if (c.trainingType or "").strip()
-    }
-    order_priority = {"webinar": 1, "classroom training": 2, "product training": 3}
-    sorted_types = sorted(distinct_types, key=lambda x: (order_priority.get(x.lower(), 99), x))
+    # Always show the three standard types, even with a 0 count when this
+    # admin's scope has no conferences of that type yet - plus any other
+    # type actually present in the data, appended after them.
+    STANDARD_TYPES = ["Webinar", "Classroom Training", "Product Training"]
+    extra_types = sorted(set(in_training_by_type) - set(STANDARD_TYPES))
+    sorted_types = STANDARD_TYPES + extra_types
 
-    trainer_status_analysis: list[TrainerStatusSection] = []
-    if sorted_types:
-        trainer_status_analysis.append(
-            TrainerStatusSection(
-                title="In Training",
-                items=[
-                    TrainerStatusItem(label=t_type, count=in_training_by_type.get(t_type, 0))
-                    for t_type in sorted_types
-                ],
-            )
+    trainer_status_analysis: list[TrainerStatusSection] = [
+        TrainerStatusSection(
+            title="In Training",
+            items=[
+                TrainerStatusItem(label=t_type, count=in_training_by_type.get(t_type, 0))
+                for t_type in sorted_types
+            ],
         )
+    ]
 
     trainers = TrainerStatsOut(
         pool=pool,
@@ -277,27 +362,19 @@ def build_admin_dashboard_stats(
         statusAnalysis=trainer_status_analysis,
     )
 
-    results = [
-        r
-        for r in assessment_repository.list_all_submitted_results(db)
-        if r.conferenceUid not in cancelled_uids and (not filtering or r.conferenceUid in kept_uids)
-    ]
-    attempts = len(results)
-    passed = sum(1 for r in results if float(r.percentage) >= PASS_THRESHOLD_PERCENT)
+    attempts, passed, percent_total = snapshot.attempts, snapshot.passed, snapshot.percent_total
     fail_count = attempts - passed
-    avg_percent = round(sum(float(r.percentage) for r in results) / attempts, 1) if attempts else 0.0
+    avg_percent = round(percent_total / attempts, 1) if attempts else 0.0
 
     # Build Eligibility & Gaps analysis
-    present_pairs = {
-        (att.conferenceUid, att.traineeUid) for att in all_attendances if att.status == "Present"
-    }
-    submitted_pairs = {
-        (r.conferenceUid, r.traineeUid)
-        for r in results
-        if r.conferenceUid and r.traineeUid
-    }
-    missed_count = len(present_pairs - submitted_pairs) if present_pairs else 0
-    capture_rate = round((attempts / present) * 100) if present else 0
+    present_pair_count, missed_count = snapshot.present_pairs, snapshot.missed_pairs
+    submitted_pair_count = snapshot.submitted_pairs
+    # % of present trainees who submitted at least one assessment - counted
+    # once per trainee (a conference can have Pre-Test/Post-Test/Survey as
+    # separate suites, and a trainee can retake the same one), not once per
+    # submission, so this stays a real 0-100% rate instead of `attempts`
+    # (every submission, suites and retakes both) potentially exceeding it.
+    capture_rate = round((submitted_pair_count / present_pair_count) * 100) if present_pair_count else 0
     pass_rate = round((passed / attempts) * 100) if attempts else 0
 
     eligibility_gaps: list[AssessmentGapSection] = []

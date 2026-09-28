@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from fastapi import BackgroundTasks, UploadFile
 from sqlalchemy.orm import Session
 
@@ -14,6 +12,7 @@ from app.routers.ws import manager as ws_manager
 from app.schemas.attendance import AttendanceOut, CheckInRequest, VerifyLocationOut, VerifyLocationRequest
 from app.services.activity_log_service import log_activity
 from app.services.module_flow import mark_checkout_if_last_module
+from app.utils.date_utils import utc_now
 from app.utils.helpers import distance_meters
 from app.utils.validators import validate_image_upload
 
@@ -32,7 +31,7 @@ def _promote_if_pending(db: Session, existing: Attendance, conference: Conferenc
     rather than being a no-op."""
     if existing.status != "Present":
         existing.status = "Present"
-        existing.markedOn = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        existing.markedOn = utc_now().strftime("%Y-%m-%d %H:%M:%S")
     if conference:
         mark_checkout_if_last_module(db, conference, existing.traineeUid, "ATTENDANCE")
     attendance_repository.save(db)
@@ -42,7 +41,9 @@ def _promote_if_pending(db: Session, existing: Attendance, conference: Conferenc
     return AttendanceOut(status=existing.status, markedOn=existing.markedOn)
 
 
-def check_in(db: Session, trainee: Trainee, payload: CheckInRequest, background_tasks: BackgroundTasks) -> AttendanceOut:
+def check_in(
+    db: Session, trainee: Trainee, payload: CheckInRequest, background_tasks: BackgroundTasks, tenant_id: str = None
+) -> AttendanceOut:
     conference = conference_repository.get_by_uid(db, payload.conferenceUid)
 
     existing = _clear_existing_if_retest_allowed(db, payload.conferenceUid, trainee.traineeUid)
@@ -56,7 +57,7 @@ def check_in(db: Session, trainee: Trainee, payload: CheckInRequest, background_
             trainerUid=conference.trainerEmployeeId if conference else None,
             traineeUid=trainee.traineeUid,
             phone=trainee.phone,
-            markedOn=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            markedOn=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
             status="Present",
         ),
     )
@@ -69,6 +70,7 @@ def check_in(db: Session, trainee: Trainee, payload: CheckInRequest, background_
 
     background_tasks.add_task(
         ws_manager.send_to,
+        tenant_id,
         conference.trainerEmployeeId if conference else None,
         {"type": "attendance_marked", "conferenceUid": payload.conferenceUid, "traineeUid": trainee.traineeUid},
     )
@@ -110,6 +112,7 @@ async def check_in_secure(
     latitude: float,
     longitude: float,
     photo: UploadFile,
+    tenant_id: str = None,
 ) -> AttendanceOut:
     """Geofenced check-in: captures the trainee's location and a face photo
     alongside the usual attendance row. Used instead of `check_in` when the
@@ -149,7 +152,7 @@ async def check_in_secure(
         existing.checkInDistance = check_in_distance
         if existing.status != "Present":
             existing.status = "Present"
-            existing.markedOn = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            existing.markedOn = utc_now().strftime("%Y-%m-%d %H:%M:%S")
         if conference:
             mark_checkout_if_last_module(db, conference, existing.traineeUid, "ATTENDANCE")
         attendance_repository.save(db)
@@ -169,7 +172,7 @@ async def check_in_secure(
             trainerUid=conference.trainerEmployeeId if conference else None,
             traineeUid=trainee.traineeUid,
             phone=trainee.phone,
-            markedOn=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            markedOn=utc_now().strftime("%Y-%m-%d %H:%M:%S"),
             status="Present",
             checkInDistance=check_in_distance,
             checkInPhoto=check_in_photo,
@@ -183,6 +186,7 @@ async def check_in_secure(
 
     background_tasks.add_task(
         ws_manager.send_to,
+        tenant_id,
         conference.trainerEmployeeId if conference else None,
         {"type": "attendance_marked", "conferenceUid": conference_uid, "traineeUid": trainee.traineeUid},
     )

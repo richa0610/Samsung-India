@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
   option: {
     minHeight: 46,
     borderWidth: 1.2,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
   },
   optionSelected: {
-    borderColor: "#006AFF",
+    borderColor: Colors.mainColour1,
     backgroundColor: "#F0F6FF",
   },
   optionPressed: {
@@ -66,27 +66,27 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 11,
     borderWidth: 1.5,
-    borderColor: "#D1D5DB",
+    borderColor: Colors.gray300,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.white,
   },
   radioSelected: {
-    borderColor: "#006AFF",
+    borderColor: Colors.mainColour1,
   },
   radioDot: {
     width: 11,
     height: 11,
     borderRadius: 5.5,
-    backgroundColor: "#006AFF",
+    backgroundColor: Colors.mainColour1,
   },
   optionText: {
     flex: 1,
     fontSize: 13.5,
     lineHeight: 19,
-    color: "#1F2937",
+    color: Colors.gray800,
   },
   optionTextSelected: {
-    color: "#006AFF",
+    color: Colors.mainColour1,
   },
 });

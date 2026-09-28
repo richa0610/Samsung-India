@@ -1,3 +1,4 @@
+import { Colors } from "@/theme/colors";
 type OptionTheme = { color: string; bg: string; border: string };
 
 type OptionBorderParams = {
@@ -8,7 +9,7 @@ type OptionBorderParams = {
 };
 
 export function getOptionBorder({ isResultMode, isCorrect, isYourAnswer, theme }: OptionBorderParams) {
-  const borderColor = isResultMode ? (isCorrect ? "#00A859" : isYourAnswer ? "#EF4444" : "#E5E7EB") : theme.border;
+  const borderColor = isResultMode ? (isCorrect ? Colors.recordedGreen : isYourAnswer ? Colors.red : Colors.gray200) : theme.border;
 
   const borderWidth = isResultMode ? (isCorrect || isYourAnswer ? 1.5 : 1) : 1.5;
 

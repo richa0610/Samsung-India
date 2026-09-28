@@ -1,5 +1,6 @@
 from typing import Optional
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 
 
@@ -30,6 +31,13 @@ class Settings(BaseSettings):
     TENANT_MAX_OVERFLOW: int = 10
     TENANT_POOL_TIMEOUT: int = 10
     TENANT_POOL_RECYCLE: int = 280
+
+    # Set by the test suite (see tests/__init__.py). It switches OFF everything the
+    # app normally does to the database on import / startup (create_all, column and
+    # index sync, keep-alive pings), and Settings refuses to load at all if it is
+    # set while pointing at a non-local database - so a test can never initialise
+    # or alter a real database, whatever .env contains.
+    TESTING: bool = False
 
     SECRET_KEY: str
     ALGORITHM: str
@@ -70,6 +78,17 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+
+    @model_validator(mode="after")
+    def _refuse_remote_database_when_testing(self):
+        if self.TESTING:
+            for host in (self.DB_HOST, self.common_db_host):
+                if host not in ("127.0.0.1", "localhost", "::1"):
+                    raise ValueError(
+                        "TESTING is set but the database host is not local - refusing to start "
+                        "so tests can never touch a real database."
+                    )
+        return self
 
     @property
     def allowed_origins_list(self) -> list[str]:

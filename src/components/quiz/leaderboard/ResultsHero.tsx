@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
   },
   resultsTitle: {
     fontSize: 26,
-    color: "#111827",
+    color: Colors.black,
     marginTop: 6,
   },
   resultsSubtitle: {

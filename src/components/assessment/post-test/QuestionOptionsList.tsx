@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 12,
     borderRadius: 12,
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Colors.white,
     minHeight: 56,
     borderWidth: 1.5,
     borderColor: Colors.slate200,
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
   },
   optionSelected: {
     backgroundColor: "#F0F7FF",
-    borderColor: "#006AFF",
+    borderColor: Colors.mainColour1,
   },
   optionDisabled: { opacity: 0.6 },
   checkbox: {
@@ -64,11 +64,11 @@ const styles = StyleSheet.create({
     borderColor: "#CBD5E1",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Colors.white,
   },
   checkboxSelected: {
-    backgroundColor: "#006AFF",
-    borderColor: "#006AFF",
+    backgroundColor: Colors.mainColour1,
+    borderColor: Colors.mainColour1,
   },
   optionText: {
     fontSize: FontSize.label,

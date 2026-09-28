@@ -29,7 +29,7 @@ export default function GlobalLeaderboardCard({
     <View style={styles.leaderboardCard}>
       <View style={styles.cardHeader}>
         <View style={styles.titleRow}>
-          <Ionicons name="trophy" size={16} color="#F59E0B" />
+          <Ionicons name="trophy" size={16} color={Colors.warning} />
           <AppText style={styles.cardTitle} weight={FontWeight.bold}>
             Global Top 100
           </AppText>

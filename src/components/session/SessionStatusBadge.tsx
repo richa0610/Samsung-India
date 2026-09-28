@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.recordedGreen,
   },
   missedContainer: {
-    backgroundColor: "#FEE2E2",
+    backgroundColor: Colors.dangerBg,
   },
   upcomingContainer: {
     borderWidth: 1.2,
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     color: Colors.headerBlue,
   },
   lockedContainer: {
-    backgroundColor: "#EF4444",
+    backgroundColor: Colors.red,
   },
   lockedText: {
     color: Colors.white,

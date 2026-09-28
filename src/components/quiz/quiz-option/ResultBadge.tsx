@@ -2,6 +2,7 @@ import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { FontWeight } from "@/theme/fontWeight";
+import { Colors } from "@/theme/colors";
 
 type ResultBadgeProps = {
   isCorrect: boolean;
@@ -46,7 +47,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.1,
   },
   yourAnswerBadge: {
-    backgroundColor: "#FEE2E2",
+    backgroundColor: Colors.dangerBg,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -54,7 +55,7 @@ const styles = StyleSheet.create({
   },
   yourAnswerBadgeText: {
     fontSize: 10,
-    color: "#DC2626",
+    color: Colors.danger,
     letterSpacing: 0.1,
   },
 });

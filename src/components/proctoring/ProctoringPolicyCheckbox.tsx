@@ -72,21 +72,21 @@ const styles = StyleSheet.create({
     height: 18,
     borderRadius: 4,
     borderWidth: 1.5,
-    borderColor: "#9CA3AF",
+    borderColor: Colors.gray400,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.white,
   },
   checkboxChecked: {
-    backgroundColor: "#00A859",
-    borderColor: "#00A859",
+    backgroundColor: Colors.recordedGreen,
+    borderColor: Colors.recordedGreen,
   },
   label: {
     fontSize: 11.5,
-    color: "#374151",
+    color: Colors.gray700,
     flex: 1,
   },
   policyLink: {
-    color: "#006AFF",
+    color: Colors.mainColour1,
   },
 });

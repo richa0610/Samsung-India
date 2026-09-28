@@ -80,11 +80,11 @@ export default function LightTimePickerModal({
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={styles.headerTitleRow}>
-              <Ionicons name="time" size={18} color="#0066FF" />
+              <Ionicons name="time" size={18} color={Colors.brandBlue} />
               <AppText style={styles.title}>{title}</AppText>
             </View>
             <Pressable onPress={onClose} hitSlop={8}>
-              <Ionicons name="close" size={20} color="#6B7280" />
+              <Ionicons name="close" size={20} color={Colors.gray500} />
             </Pressable>
           </View>
 
@@ -195,13 +195,13 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   card: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Colors.white,
     borderRadius: 20,
     padding: 18,
     width: "100%",
     maxWidth: 340,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     shadowColor: "#000000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -215,48 +215,48 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   headerTitleRow: { flexDirection: "row", alignItems: "center", gap: 6 },
-  title: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  title: { fontSize: 14, fontWeight: "700", color: Colors.black },
   displayBanner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 12,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
     borderWidth: 1.2,
     borderColor: "#BFDBFE",
     borderRadius: 14,
     paddingVertical: 10,
     marginBottom: 12,
   },
-  displayText: { fontSize: 26, fontWeight: "800", color: "#0066FF", letterSpacing: 1 },
+  displayText: { fontSize: 26, fontWeight: "800", color: Colors.brandBlue, letterSpacing: 1 },
   periodBadge: {
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
   },
-  periodBadgeText: { fontSize: 11, fontWeight: "800", color: "#FFFFFF" },
+  periodBadgeText: { fontSize: 11, fontWeight: "800", color: Colors.white },
   periodRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
   periodBtn: {
     flex: 1,
     paddingVertical: 8,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: Colors.gray100,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
   },
-  periodBtnActive: { backgroundColor: "#0066FF", borderColor: "#0066FF" },
-  periodBtnText: { fontSize: 12, fontWeight: "600", color: "#4B5563" },
-  periodBtnTextActive: { color: "#FFFFFF", fontWeight: "800" },
+  periodBtnActive: { backgroundColor: Colors.brandBlue, borderColor: Colors.brandBlue },
+  periodBtnText: { fontSize: 12, fontWeight: "600", color: Colors.gray600 },
+  periodBtnTextActive: { color: Colors.white, fontWeight: "800" },
   columnsWrap: {
     flexDirection: "row",
     height: 160,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: Colors.gray50,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     padding: 8,
     marginBottom: 16,
   },
@@ -264,11 +264,11 @@ const styles = StyleSheet.create({
   columnHeader: {
     fontSize: 9.5,
     fontWeight: "700",
-    color: "#6B7280",
+    color: Colors.gray500,
     marginBottom: 6,
     letterSpacing: 0.5,
   },
-  columnDivider: { width: 1, backgroundColor: "#E5E7EB", marginVertical: 4 },
+  columnDivider: { width: 1, backgroundColor: Colors.gray200, marginVertical: 4 },
   scrollList: { width: "100%", paddingHorizontal: 6 },
   itemPill: {
     paddingVertical: 6,
@@ -277,26 +277,26 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginVertical: 2,
   },
-  itemPillActive: { backgroundColor: "#0066FF" },
-  itemText: { fontSize: 13, fontWeight: "600", color: "#374151" },
-  itemTextActive: { color: "#FFFFFF", fontWeight: "800" },
+  itemPillActive: { backgroundColor: Colors.brandBlue },
+  itemText: { fontSize: 13, fontWeight: "600", color: Colors.gray700 },
+  itemTextActive: { color: Colors.white, fontWeight: "800" },
   actionsRow: { flexDirection: "row", gap: 10 },
   cancelBtn: {
     flex: 1,
     paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F3F4F6",
+    backgroundColor: Colors.gray100,
     borderRadius: 10,
   },
-  cancelBtnText: { fontSize: 12, fontWeight: "700", color: "#4B5563" },
+  cancelBtnText: { fontSize: 12, fontWeight: "700", color: Colors.gray600 },
   confirmBtn: {
     flex: 1.4,
     paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
     borderRadius: 10,
   },
-  confirmBtnText: { fontSize: 12, fontWeight: "800", color: "#FFFFFF" },
+  confirmBtnText: { fontSize: 12, fontWeight: "800", color: Colors.white },
 });

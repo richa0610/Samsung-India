@@ -13,7 +13,8 @@ type MonthCardProps = {
   monthYear: ReturnType<typeof useMonthYear>;
   selectedStart: Date;
   selectedEnd: Date;
-  summaryDate: Date;
+  /** null = nothing picked (shows "Not set"). */
+  summaryDate: Date | null;
   onSelectDate: (date: Date) => void;
   onClear: () => void;
   isDateDisabled?: (date: Date) => boolean;
@@ -32,11 +33,19 @@ export default function MonthCard({
 }: MonthCardProps) {
   const { month, year, setMonth, setYear, prevMonth, nextMonth } = monthYear;
 
+  // Clear also brings the calendar back to the current month and year.
+  const handleClear = () => {
+    const today = new Date();
+    setMonth(today.getMonth());
+    setYear(today.getFullYear());
+    onClear();
+  };
+
   return (
     <View style={styles.card}>
       <View style={styles.titleRow}>
         <AppText style={styles.cardTitle}>{title}</AppText>
-        <Pressable onPress={onClear} hitSlop={6}>
+        <Pressable onPress={handleClear} hitSlop={6}>
           <AppText style={styles.clearText}>Clear</AppText>
         </Pressable>
       </View>
@@ -61,7 +70,7 @@ export default function MonthCard({
 
       <View style={styles.summaryBadge}>
         <AppText style={styles.summaryLabel}>{summaryLabel}</AppText>
-        <AppText style={styles.summaryValue}>{formatMonthDay(summaryDate)}</AppText>
+        <AppText style={styles.summaryValue}>{summaryDate ? formatMonthDay(summaryDate) : "Not set"}</AppText>
       </View>
     </View>
   );
@@ -73,7 +82,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 4,
   },
   titleRow: {
@@ -85,7 +94,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 9.5,
     fontWeight: "700",
-    color: "#111827",
+    color: Colors.black,
     letterSpacing: 0.5,
   },
   clearText: {
@@ -95,7 +104,7 @@ const styles = StyleSheet.create({
   },
   summaryBadge: {
     marginTop: 6,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
     borderRadius: 6,
     paddingVertical: 3.5,
     paddingHorizontal: 4,
@@ -106,7 +115,7 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 8,
-    color: "#374151",
+    color: Colors.gray700,
   },
   summaryValue: {
     fontSize: 8.5,

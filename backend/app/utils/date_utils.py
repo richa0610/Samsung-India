@@ -15,6 +15,19 @@ def ist_now() -> datetime:
     return datetime.now(timezone.utc).astimezone(IST).replace(tzinfo=None)
 
 
+def utc_now() -> datetime:
+    """Current UTC wall-clock time as a naive datetime - what a bare `datetime.now()` is meant
+    to return everywhere on this stack (see `to_utc_iso`), because it's stored in and compared
+    against naive DB columns alongside MySQL's own `NOW()`, which is UTC on this stack's server.
+    A bare `datetime.now()` only agrees with that when the process's own host clock happens to
+    be set to UTC (true on Render); on a dev machine in another timezone (e.g. IST) it silently
+    returns local wall-clock time instead, throwing off anything computed against a timestamp
+    MySQL wrote - by exactly the host's UTC offset. Use this (like `ist_now()` already does for
+    the IST equivalent) for any "now" that gets stored, or compared against something stored, as
+    one of this stack's naive datetimes."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def utc_naive_to_ist(dt: datetime | None) -> datetime | None:
     """Convert a naive UTC datetime (how timestamps are stored on this stack -
     e.g. `conference.actualStartedAt`) to naive IST wall-clock time, so it can

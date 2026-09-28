@@ -25,7 +25,7 @@ from app.schemas.session import (
 )
 from app.services import session_service
 from app.services.module_flow import live_quiz_suite_uid
-from app.utils.date_utils import ist_now
+from app.utils.date_utils import ist_now, utc_now
 from app.utils.status import title_status
 
 _PERIOD_DAYS = 30
@@ -230,7 +230,7 @@ def build_trainee_dashboard(
     scored = [row for row in result_rows if _counts_as_mark(row)]
     total_score = sum(_num(row.totalScore) for row in scored)
     max_score = sum(_num(row.maxScore) for row in scored)
-    cutoff = datetime.now() - timedelta(days=_PERIOD_DAYS)
+    cutoff = utc_now() - timedelta(days=_PERIOD_DAYS)
     recent = [row for row in scored if row.submittedAt and row.submittedAt >= cutoff]
     older = [row for row in scored if row.submittedAt and row.submittedAt < cutoff]
     recent_avg, older_avg = _avg_percent(recent), _avg_percent(older)

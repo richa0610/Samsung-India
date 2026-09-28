@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { LiveQuizSummaryQuestion } from "@/api/session";
 import AppText from "@/components/ui/AppText";
 import { FontWeight } from "@/theme/fontWeight";
+import { Colors } from "@/theme/colors";
 
 type QuestionStatusGridProps = {
   questions: LiveQuizSummaryQuestion[];
@@ -63,9 +64,9 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.75, transform: [{ scale: 0.96 }] },
   attempted: { backgroundColor: "#E8F8EF", borderColor: "#81D1AD" },
   skipped: { backgroundColor: "#FEF9C3", borderColor: "#FDE047" },
-  expired: { backgroundColor: "#FEE2E2", borderColor: "#FCA5A5" },
+  expired: { backgroundColor: Colors.dangerBg, borderColor: "#FCA5A5" },
   tileText: { fontSize: 18 },
-  attemptedText: { color: "#00A859" },
+  attemptedText: { color: Colors.recordedGreen },
   skippedText: { color: "#D97706" },
-  expiredText: { color: "#EF4444" },
+  expiredText: { color: Colors.red },
 });

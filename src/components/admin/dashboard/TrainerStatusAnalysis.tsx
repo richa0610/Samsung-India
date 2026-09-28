@@ -11,17 +11,14 @@ export type TrainerStatusAnalysisProps = {
 };
 
 export default function TrainerStatusAnalysis({ data }: TrainerStatusAnalysisProps) {
-  const sections = data ?? [];
+  // "Completed" isn't shown, zero-count rows are hidden (and any section left
+  // empty), and with nothing to show the panel renders nothing at all.
+  const sections = (data ?? [])
+    .filter((s) => s.title.trim().toLowerCase() !== "completed")
+    .map((s) => ({ ...s, items: s.items.filter((item) => item.count > 0) }))
+    .filter((s) => s.items.length > 0);
 
-  if (sections.length === 0 || sections.every((s) => s.items.length === 0)) {
-    return (
-      <View style={styles.emptyContainer}>
-        <AppText style={styles.emptyText} color={Colors.gray600}>
-          No status analysis records found
-        </AppText>
-      </View>
-    );
-  }
+  if (sections.length === 0) return null;
 
   return (
     <View style={styles.container}>
@@ -67,7 +64,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     backgroundColor: Colors.white,
     overflow: "hidden",
   },
@@ -75,8 +72,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#F9FAFB",
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.gray50,
     paddingVertical: 18,
     paddingHorizontal: 14,
     alignItems: "center",
@@ -96,12 +93,12 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   headerBar: {
-    backgroundColor: "#E2E8F0",
+    backgroundColor: Colors.slate200,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   headerTitle: {
-    color: "#374151",
+    color: Colors.gray700,
     fontSize: 13.5,
   },
   itemRow: {
@@ -111,7 +108,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: Colors.slate100,
     backgroundColor: Colors.white,
   },
   itemRowLast: {
@@ -119,10 +116,10 @@ const styles = StyleSheet.create({
   },
   itemLabel: {
     fontSize: 13,
-    color: "#4B5563",
+    color: Colors.gray600,
   },
   badge: {
-    backgroundColor: "#F1F5F9",
+    backgroundColor: Colors.slate100,
     borderRadius: 6,
     minWidth: 26,
     height: 22,
@@ -132,6 +129,6 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 12.5,
-    color: "#1F2937",
+    color: Colors.gray800,
   },
 });

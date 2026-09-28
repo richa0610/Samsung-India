@@ -1,0 +1,34 @@
+{
+  "database": "perf_attendance_10k",
+  "seed": 7,
+  "rows": {
+    "conference": 333,
+    "trainee": 2500,
+    "attendance": 10000,
+    "assessment_results": 5970
+  },
+  "load_seconds": 2.7,
+  "attendance_rows_per_second": 3711,
+  "sizes_mb": {
+    "assessment_results": {
+      "approx_rows": 5854,
+      "data": 1.5,
+      "indexes": 1.6
+    },
+    "attendance": {
+      "approx_rows": 9739,
+      "data": 1.5,
+      "indexes": 2.7
+    },
+    "conference": {
+      "approx_rows": 333,
+      "data": 0.1,
+      "indexes": 0.1
+    },
+    "trainee": {
+      "approx_rows": 2455,
+      "data": 0.4,
+      "indexes": 0.6
+    }
+  }
+}

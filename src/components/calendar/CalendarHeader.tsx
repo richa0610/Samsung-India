@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import MonthSelector from "./MonthSelector";
+import { Colors } from "@/theme/colors";
 
 type CalendarHeaderProps = {
   currentMonth: number;
@@ -29,7 +30,7 @@ export default function CalendarHeader({
         accessibilityRole="button"
         accessibilityLabel="Previous month"
       >
-        <Ionicons name="chevron-back" size={12} color="#374151" />
+        <Ionicons name="chevron-back" size={12} color={Colors.gray700} />
       </Pressable>
 
       <MonthSelector
@@ -46,7 +47,7 @@ export default function CalendarHeader({
         accessibilityRole="button"
         accessibilityLabel="Next month"
       >
-        <Ionicons name="chevron-forward" size={12} color="#374151" />
+        <Ionicons name="chevron-forward" size={12} color={Colors.gray700} />
       </Pressable>
     </View>
   );

@@ -126,7 +126,7 @@ export default function SessionDashboardHeader({
               accessibilityRole="button"
               accessibilityLabel="Refresh"
             >
-              <Ionicons name="reload" size={15} color="#0066FF" />
+              <Ionicons name="reload" size={15} color={Colors.brandBlue} />
             </Pressable>
 
             <Pressable
@@ -140,7 +140,7 @@ export default function SessionDashboardHeader({
               <Ionicons
                 name={reportEnabled ? "document-text-outline" : "lock-closed"}
                 size={14}
-                color={reportEnabled ? "#374151" : "#9CA3AF"}
+                color={reportEnabled ? Colors.gray700 : Colors.gray400}
               />
               <AppText style={[styles.reportBtnText, !reportEnabled && styles.reportBtnTextDisabled]}>
                 Report
@@ -207,7 +207,7 @@ export default function SessionDashboardHeader({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
     marginHorizontal: 14,
     paddingHorizontal: 12,
     paddingBottom: 10,
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 28,
     borderRadius: 8,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -315,37 +315,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 5,
     borderWidth: 1.2,
-    borderColor: "#D1D5DB",
+    borderColor: Colors.gray300,
     backgroundColor: Colors.white,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 5,
   },
   reportBtnDisabled: {
-    backgroundColor: "#F3F4F6",
-    borderColor: "#E5E7EB",
+    backgroundColor: Colors.gray100,
+    borderColor: Colors.gray200,
     opacity: 0.7,
   },
   reportBtnText: {
     fontSize: 12,
-    color: "#374151",
+    color: Colors.gray700,
     fontWeight: "700",
   },
   reportBtnTextDisabled: {
-    color: "#9CA3AF",
+    color: Colors.gray400,
   },
   endSessionBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    backgroundColor: "#DC2626",
+    backgroundColor: Colors.danger,
     borderRadius: 8,
     paddingVertical: 6,
     paddingHorizontal: 14,
   },
   sessionClosedBtn: {
-    backgroundColor: "#111827",
+    backgroundColor: Colors.black,
   },
   startSessionBtn: {
     backgroundColor: Colors.success,
@@ -357,16 +357,16 @@ const styles = StyleSheet.create({
     color: "#92400E",
   },
   sessionScheduledBtn: {
-    backgroundColor: "#E2E8F0",
+    backgroundColor: Colors.slate200,
   },
   sessionScheduledBtnText: {
     color: "#475569",
   },
   sessionLoadingBtn: {
-    backgroundColor: "#E5E7EB",
+    backgroundColor: Colors.gray200,
   },
   sessionLoadingBtnText: {
-    color: "#6B7280",
+    color: Colors.gray500,
   },
   whiteStopIcon: {
     alignItems: "center",

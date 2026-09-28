@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRef } from "react";
 import { Pressable, ScrollView, StyleSheet } from "react-native";
 import AppText from "@/components/ui/AppText";
 
@@ -26,6 +27,11 @@ export default function MonthYearPickerPanel({
   onSelectYear,
   onClose,
 }: MonthYearPickerPanelProps) {
+  const listRef = useRef<ScrollView>(null);
+
+  // Bring the selected row into view (a little below the top) when the list opens.
+  const scrollToSelected = (y: number) => listRef.current?.scrollTo({ y: Math.max(y - 120, 0), animated: false });
+
   return (
     // A bottom-sheet AppModal (native Modal underneath) rather than an
     // absolutely-positioned View nested inside the dashboard's outer
@@ -39,13 +45,20 @@ export default function MonthYearPickerPanel({
       showCloseButton
       contentStyle={styles.sheet}
     >
-      <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        ref={listRef}
+        style={styles.modalList}
+        showsVerticalScrollIndicator
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+      >
         {pickerMode === "month" &&
           MONTH_NAMES.map((name, index) => {
             const isSelected = currentMonth === index;
             return (
               <Pressable
                 key={name}
+                onLayout={isSelected ? (e) => scrollToSelected(e.nativeEvent.layout.y) : undefined}
                 style={[styles.modalOption, isSelected && styles.modalOptionSelected]}
                 onPress={() => {
                   onSelectMonth(index);
@@ -64,6 +77,7 @@ export default function MonthYearPickerPanel({
             return (
               <Pressable
                 key={year}
+                onLayout={isSelected ? (e) => scrollToSelected(e.nativeEvent.layout.y) : undefined}
                 style={[styles.modalOption, isSelected && styles.modalOptionSelected]}
                 onPress={() => {
                   onSelectYear(year);
@@ -98,11 +112,11 @@ const styles = StyleSheet.create({
     borderRadius: Radius.sm,
   },
   modalOptionSelected: {
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
   },
   modalOptionText: {
     fontSize: 11,
-    color: "#374151",
+    color: Colors.gray700,
   },
   modalOptionTextSelected: {
     color: Colors.mainColour1,

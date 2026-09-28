@@ -11,17 +11,13 @@ export type TrainingTypeBreakdownProps = {
 };
 
 export default function TrainingTypeBreakdown({ data }: TrainingTypeBreakdownProps) {
-  const groups = data ?? [];
+  // Zero-count rows (and any group left empty by that) are hidden, and with
+  // nothing to show the panel renders nothing at all.
+  const groups = (data ?? [])
+    .map((group) => ({ ...group, statuses: group.statuses.filter((s) => s.count > 0) }))
+    .filter((group) => group.statuses.length > 0);
 
-  if (groups.length === 0) {
-    return (
-      <View style={styles.emptyContainer}>
-        <AppText style={styles.emptyText} color={Colors.gray600}>
-          No training type records found
-        </AppText>
-      </View>
-    );
-  }
+  if (groups.length === 0) return null;
 
   return (
     <View style={styles.container}>
@@ -47,7 +43,7 @@ export default function TrainingTypeBreakdown({ data }: TrainingTypeBreakdownPro
                   sIdx === group.statuses.length - 1 && styles.statusRowLast,
                 ]}
               >
-                <AppText style={styles.statusLabel} color="#4B5563">
+                <AppText style={styles.statusLabel} color={Colors.gray600}>
                   {item.status}
                 </AppText>
                 <View style={styles.badge}>
@@ -69,7 +65,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     backgroundColor: Colors.white,
     overflow: "hidden",
   },
@@ -77,8 +73,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
-    backgroundColor: "#F9FAFB",
+    borderColor: Colors.gray200,
+    backgroundColor: Colors.gray50,
     paddingVertical: 18,
     paddingHorizontal: 14,
     alignItems: "center",
@@ -98,13 +94,13 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   groupHeader: {
-    backgroundColor: "#E2E8F0",
+    backgroundColor: Colors.slate200,
     paddingVertical: 6,
     paddingHorizontal: 12,
   },
   groupTitle: {
     fontSize: 12,
-    color: "#374151",
+    color: Colors.gray700,
   },
   statusRow: {
     flexDirection: "row",
@@ -113,17 +109,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#F1F5F9",
+    borderBottomColor: Colors.slate100,
     backgroundColor: Colors.white,
   },
   statusRowLast: {
-    borderBottomColor: "#E2E8F0",
+    borderBottomColor: Colors.slate200,
   },
   statusLabel: {
     fontSize: 12,
   },
   badge: {
-    backgroundColor: "#F1F5F9",
+    backgroundColor: Colors.slate100,
     borderRadius: 6,
     minWidth: 24,
     height: 22,
@@ -133,6 +129,6 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 12,
-    color: "#1F2937",
+    color: Colors.gray800,
   },
 });

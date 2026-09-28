@@ -34,7 +34,7 @@ export default function ProctoringHeader({
         {/* Center Shield with Camera Icon */}
         <View style={styles.shieldWrapper}>
           <View style={styles.shieldOutline}>
-            <Ionicons name="camera" size={28} color="#00A859" />
+            <Ionicons name="camera" size={28} color={Colors.recordedGreen} />
           </View>
         </View>
 
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     height: 14,
     borderRadius: 7,
     borderWidth: 2,
-    borderColor: "#00A859",
+    borderColor: Colors.recordedGreen,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "#00A859",
+    backgroundColor: Colors.recordedGreen,
   },
   shieldWrapper: {
     alignItems: "center",
@@ -126,12 +126,12 @@ const styles = StyleSheet.create({
     height: 80,
     borderRadius: 24,
     borderWidth: 2.5,
-    borderColor: "#00A859",
+    borderColor: Colors.recordedGreen,
     borderBottomLeftRadius: 36,
     borderBottomRightRadius: 36,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#FFFFFF",
+    backgroundColor: Colors.white,
   },
   title: {
     fontSize: 22,

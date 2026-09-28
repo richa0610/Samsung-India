@@ -68,7 +68,7 @@ export default function ProctoringCameraArea({
 const styles = StyleSheet.create({
   cameraArea: {
     height: 86,
-    backgroundColor: "#1F2937",
+    backgroundColor: Colors.gray800,
     alignItems: "center",
     justifyContent: "center",
     position: "relative",
@@ -107,8 +107,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.success,
     flexWrap: "wrap",
   },
-  footerWarning: { backgroundColor: "#F59E0B" },
-  footerDanger: { backgroundColor: "#DC2626" },
+  footerWarning: { backgroundColor: Colors.warning },
+  footerDanger: { backgroundColor: Colors.danger },
   footerText: {
     color: Colors.white,
     fontSize: 9.5,

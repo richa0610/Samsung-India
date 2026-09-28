@@ -17,6 +17,7 @@ def register(
     payload: TraineeRegister,
     background_tasks: BackgroundTasks,
     ip_address: str | None = None,
+    tenant_id: str | None = None,
 ) -> Trainee:
     existing = trainee_repository.get_by_phone_or_email(db, payload.phone, payload.email)
     if existing:
@@ -24,7 +25,7 @@ def register(
 
     trainee = trainee_repository.create(db, Trainee(**payload.model_dump()))
 
-    background_tasks.add_task(ws_manager.broadcast, {"type": "trainee_created", "traineeUid": trainee.traineeUid})
+    background_tasks.add_task(ws_manager.broadcast, tenant_id, {"type": "trainee_created", "traineeUid": trainee.traineeUid})
 
     log_activity(
         db,

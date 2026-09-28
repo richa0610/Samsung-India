@@ -37,8 +37,8 @@ export default function NoPhotoControls({ capturing, onCapture, disabled }: NoPh
 
       <View style={styles.actionsRow}>
         <View style={styles.disabledRetakeButton}>
-          <Ionicons name="refresh" size={18} color="#9CA3AF" />
-          <AppText color="#9CA3AF" weight={FontWeight.medium} style={styles.buttonText16}>
+          <Ionicons name="refresh" size={18} color={Colors.gray400} />
+          <AppText color={Colors.gray400} weight={FontWeight.medium} style={styles.buttonText16}>
             Retake
           </AppText>
         </View>
@@ -59,7 +59,7 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 48,
     borderRadius: 10,
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     backgroundColor: Colors.white,
     flexDirection: "row",
     alignItems: "center",
@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     borderRadius: 10,
-    backgroundColor: "#10B981",
+    backgroundColor: Colors.statusGreen,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

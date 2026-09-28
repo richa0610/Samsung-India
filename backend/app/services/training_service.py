@@ -21,10 +21,12 @@ from app.repositories import (
     attendance_repository,
     catalog_repository,
     conference_repository,
+    dashboard_repository,
     trainee_repository,
 )
 from app.routers.ws import manager as ws_manager
-from app.utils.date_utils import ist_now, ist_to_iso, parse_module_start, to_utc_iso
+from app.services.access_service import AccessScope, resolve_scope
+from app.utils.date_utils import ist_now, ist_to_iso, parse_module_start, to_utc_iso, utc_now
 from app.utils.helpers import geofence_enabled, within_geofence
 from app.utils.status import title_status
 from app.utils.validators import validate_document_upload, validate_image_upload
@@ -48,6 +50,8 @@ from app.schemas.training import (
     TopPerformer,
     TraineeRow,
     TrainerAgendaResponse,
+    TrainingPageResponse,
+    AttendancePageResponse,
     TrainingAdminUpdate,
     TrainingAgendaItem,
     TrainingCreate,
@@ -76,7 +80,7 @@ def _execution_flow(db: Session, conference: Conference) -> list[ExecutionFlowIt
         logs_by_module.setdefault(log.moduleId, []).append(log)
 
     planned_minutes = module_planned_minutes(conference)
-    now = datetime.now()
+    now = utc_now()
     items: list[ExecutionFlowItem] = []
     for module_key in modules:
         module_logs = logs_by_module.get(module_key, [])
@@ -252,7 +256,7 @@ def _module_active_seconds(db: Session, conference: Conference) -> Optional[int]
     for log in logs:
         logs_by_module.setdefault(log.moduleId, []).append(log)
 
-    now = datetime.now()
+    now = utc_now()
     total_seconds = 0
     for module_key in modules:
         for started, stopped in _pair_runs(logs_by_module.get(module_key, [])):
@@ -300,7 +304,7 @@ def _audit_log(db: Session, conference: Conference) -> list[AuditLogEntry]:
 
     performer_names = _resolve_performer_names(db, {log.performedBy for log in logs if log.performedBy})
 
-    now = datetime.now()
+    now = utc_now()
     entries: list[AuditLogEntry] = []
 
     # Schedule overrides (recorded by start_training when a trainer starts a
@@ -344,7 +348,9 @@ def _audit_log(db: Session, conference: Conference) -> list[AuditLogEntry]:
     return entries
 
 
-def create_training(db: Session, payload: TrainingCreate, background_tasks: BackgroundTasks, admin: Admin) -> TrainingOut:
+def create_training(
+    db: Session, payload: TrainingCreate, background_tasks: BackgroundTasks, admin: Admin, tenant_id: str = None
+) -> TrainingOut:
     session_config = {}
     if payload.isResidential and payload.trainingEndDate:
         session_config["trainingEndDate"] = payload.trainingEndDate
@@ -419,11 +425,13 @@ def create_training(db: Session, payload: TrainingCreate, background_tasks: Back
 
     background_tasks.add_task(
         ws_manager.send_to,
+        tenant_id,
         conference.trainerEmployeeId,
         {"type": "training_created", "conferenceUid": conference.conferenceUid},
     )
     background_tasks.add_task(
         ws_manager.broadcast,
+        tenant_id,
         {"type": "training_created", "conferenceUid": conference.conferenceUid},
     )
 
@@ -434,10 +442,14 @@ def create_training(db: Session, payload: TrainingCreate, background_tasks: Back
     )
 
 
-def get_training_detail(db: Session, conference_uid: str) -> TrainingDetailOut:
+def get_training_detail(
+    db: Session, admin: Admin, conference_uid: str, common_db: Session = None, tenant_id: str = None
+) -> TrainingDetailOut:
     """Full editable detail for one training, pre-filled into the admin's
-    edit form - the read counterpart to `update_training` below."""
-    conference = _find_any_conference(db, conference_uid)
+    edit form - the read counterpart to `update_training` below. Same access grant as operating
+    the session (`_get_owned_conference`): an out-of-scope training looks absent, not merely
+    un-editable."""
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     session_config = json.loads(conference.sessionConfig) if conference.sessionConfig else {}
 
     session_flow = None
@@ -563,8 +575,10 @@ def update_training(
     conference_uid: str,
     payload: TrainingAdminUpdate,
     background_tasks: Optional[BackgroundTasks] = None,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> TrainingOut:
-    conference = _find_any_conference(db, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
 
     if conference.conferenceStatus in _EDITABLE_CONFERENCE_STATUSES:
         _apply_schedule_fields(db, conference, payload)
@@ -598,6 +612,7 @@ def update_training(
     if background_tasks:
         background_tasks.add_task(
             ws_manager.send_to,
+            tenant_id,
             conference.trainerEmployeeId,
             {"type": "training_updated", "conferenceUid": conference.conferenceUid},
         )
@@ -609,28 +624,42 @@ def update_training(
     )
 
 
-def _get_owned_conference(db: Session, admin: Admin, conference_uid: str) -> Conference:
+def _get_owned_conference(
+    db: Session, admin: Admin, conference_uid: str, common_db: Session = None, tenant_id: str = None
+) -> Conference:
+    """Write access to one conference: the trainer it's assigned to, or - per the approved
+    Phase C access grants (`admin_access`, see access_service.resolve_scope) - an admin-table
+    account whose grant covers this conference's company/zone/region: Super Admin any session,
+    Company Admin their company, Coordinator their zone, Sub-coordinator their region. They
+    operate it exactly like the assigned trainer (same approval/schedule/geofence/photo rules);
+    only who is allowed to press the buttons changes.
+    `common_db`/`tenant_id` are only needed for that admin check - a caller that omits them keeps
+    the old trainer-only behaviour (an admin without them is denied, same as before this existed)."""
+    if getattr(admin, "role", None) == "admin":
+        conference = _find_any_conference(db, conference_uid)
+        scope = resolve_scope(common_db, admin, tenant_id) if common_db is not None else None
+        if scope is None or not scope.allows_row(conference.company, conference.zone, conference.region):
+            raise not_found("Training not found")
+        return conference
     conference = conference_repository.get_owned_by_trainer(db, admin.username, conference_uid)
     if not conference:
         raise not_found("Training not found")
     return conference
 
 
-def _get_viewable_conference(db: Session, admin: Admin, conference_uid: str) -> Conference:
-    """Read access: an admin account can open any trainer's session, a trainer
-    only their own. Write actions (start/end/modules/attendance) stay owner-only."""
-    if getattr(admin, "role", None) == "admin":
-        return _find_any_conference(db, conference_uid)
-    return _get_owned_conference(db, admin, conference_uid)
-
-
-def list_all_performers(db: Session, admin: Admin, conference_uid: str) -> list[TopPerformer]:
+def list_all_performers(
+    db: Session, admin: Admin, conference_uid: str, common_db: Session = None, tenant_id: str = None
+) -> list[TopPerformer]:
     """Every trainee ranked on whichever assessment the dashboard's Top
     Performers card is currently tracking - Live Quiz while it's the
     active module, Post Test otherwise (see _build_dashboard's own
     top_performers). Powers the card's "View All" page; unlike the card
-    itself, this isn't capped to 5."""
-    conference = _get_viewable_conference(db, admin, conference_uid)
+    itself, this isn't capped to 5.
+
+    Read access is the same access grant as operating the session (`_get_owned_conference`):
+    the assigned trainer, or an admin-table account whose admin_access grant covers this
+    conference. Reading no longer needs less authorization than running it."""
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
 
     if conference.activeModuleId == "LIVE_QUIZ":
         ranked = live_quiz_service.live_quiz_ranked_results(db, conference)
@@ -749,6 +778,7 @@ def list_trainer_trainings(
     all_sessions: bool,
     org: bool = False,
     filters: Optional[ConferenceFilters] = None,
+    approval: Optional[str] = None,
 ) -> TrainerAgendaResponse:
     """Powers the trainer's Home agenda, and (with `all_sessions=true`) the
     Training List / Pending Training List / Sessions screens that need this
@@ -768,10 +798,12 @@ def list_trainer_trainings(
 
     if org:
         # Admin-only org-wide view: every trainer's trainings, newest first.
-        conferences = sorted(
-            [c for c in conference_repository.list_all(db) if filters is None or filters.matches(c)],
-            key=lambda c: c.timestamp or datetime.min,
-            reverse=True,
+        # Filtered (and the pending / reviewed split applied) in the database,
+        # so only the rows the list actually shows are loaded.
+        conferences = conference_repository.list_filtered(
+            db,
+            dashboard_repository.conference_conditions(filters, include_cancelled=True),
+            approval,
         )
     elif all_sessions:
         conferences = conference_repository.list_all_for_trainer(db, admin.username)
@@ -880,10 +912,90 @@ def list_trainer_trainings(
     )
 
 
-def list_pending_trainings(db: Session) -> list[PendingSessionItem]:
+def list_trainings_page(
+    db: Session,
+    admin: Optional[Admin],
+    filters: Optional[ConferenceFilters],
+    approval: Optional[str],
+    search: Optional[str],
+    sort: str,
+    descending: bool,
+    cursor: Optional[str],
+    limit: int,
+    page: Optional[int] = None,
+    common_db: Optional[Session] = None,
+    tenant_id: Optional[str] = None,
+) -> TrainingPageResponse:
+    """One page (default 50 rows) of the admin org-wide Training / Pending list, restricted to
+    what `admin`'s admin_access grant authorizes: a Super Admin sees every company, a Company
+    Admin their own company, a Coordinator their zone, a Sub-coordinator their region - resolved
+    the same way the session-operation authorization already does (access_service.resolve_scope),
+    never from company/zone/region the client sends. `filters` only narrows further, inside that
+    boundary; it can never widen past it.
+
+    `common_db`/`tenant_id` are what resolve_scope needs. An authenticated request always
+    supplies a real `admin` (require_admin_role never returns None) plus both of these - if one
+    is missing anyway, that's a caller bug, and it fails CLOSED (no access), never open
+    ("everything"). `admin=None` is different: it means there is no principal to check at all,
+    which only happens from a direct internal call (never through the router) - such a caller
+    is explicitly asking to skip authorization, so no scope condition is added.
+
+    Filtering, searching, sorting and paging all happen in the database; only
+    this page's rows are enriched (headcounts, venue and updater names), so the
+    cost per request is the page size, not the size of the tenant."""
+    scope = (
+        None
+        if admin is None
+        else resolve_scope(common_db, admin, tenant_id)
+        if common_db is not None
+        else AccessScope.denied(tenant_id or "", "no scope context")
+    )
+    conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
+    if scope is not None:
+        conditions += dashboard_repository.access_scope_conditions(scope)
+    try:
+        conferences, next_cursor, total = conference_repository.list_page(
+            db,
+            conditions,
+            approval,
+            search,
+            sort,
+            descending,
+            cursor,
+            limit,
+            page,
+        )
+    except (ValueError, KeyError, TypeError):
+        raise bad_request("Invalid page cursor")
+
+    trainee_uids_by_conference = _real_trainee_uids_by_conference(db, [c.conferenceUid for c in conferences])
+    venue_name_by_uid = _venue_names_for(db, conferences)
+    updated_by_name_by_username = _updated_by_names_for(db, conferences)
+    return TrainingPageResponse(
+        items=[
+            _to_agenda_item(
+                conference,
+                len(trainee_uids_by_conference.get(conference.conferenceUid, set())),
+                venue_name_by_uid,
+                updated_by_name_by_username,
+            )
+            for conference in conferences
+        ],
+        nextCursor=next_cursor,
+        total=total,
+    )
+
+
+def list_pending_trainings(
+    db: Session, filters: Optional[ConferenceFilters] = None
+) -> list[PendingSessionItem]:
     """Every trainer's not-yet-reviewed sessions, across all trainers -
-    powers the admin dashboard's Pending Approvals list."""
-    conferences = conference_repository.list_pending(db)
+    powers the admin dashboard's Pending Approvals list. `filters` here
+    normally only carries the caller's mandatory identity scope (company +
+    assigned zone, see data_scope_service) - there's no user-facing filter
+    UI on this screen - but any optional filter is honoured the same way
+    the other admin list views do."""
+    conferences = [c for c in conference_repository.list_pending(db) if filters is None or filters.matches(c)]
     return [
         PendingSessionItem(
             conferenceUid=c.conferenceUid,
@@ -910,8 +1022,10 @@ def approve_training(
     conference_uid: str,
     reason: Optional[str] = None,
     background_tasks: Optional[BackgroundTasks] = None,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> TrainingOut:
-    conference = _find_any_conference(db, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     conference.status = "Approved"
     conference.updatedBy = admin.username
     if reason:
@@ -927,6 +1041,7 @@ def approve_training(
     if background_tasks:
         background_tasks.add_task(
             ws_manager.broadcast,
+            tenant_id,
             {"type": "training_status_changed", "conferenceUid": conference.conferenceUid},
         )
     return TrainingOut(
@@ -942,8 +1057,10 @@ def reject_training(
     conference_uid: str,
     reason: Optional[str] = None,
     background_tasks: Optional[BackgroundTasks] = None,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> TrainingOut:
-    conference = _find_any_conference(db, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     conference.status = "Rejected"
     conference.updatedBy = admin.username
     if reason:
@@ -959,6 +1076,7 @@ def reject_training(
     if background_tasks:
         background_tasks.add_task(
             ws_manager.broadcast,
+            tenant_id,
             {"type": "training_status_changed", "conferenceUid": conference.conferenceUid},
         )
     return TrainingOut(
@@ -1157,8 +1275,10 @@ def _build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut
     )
 
 
-def get_session_dashboard(db: Session, admin: Admin, conference_uid: str) -> SessionDashboardOut:
-    conference = _get_viewable_conference(db, admin, conference_uid)
+def get_session_dashboard(
+    db: Session, admin: Admin, conference_uid: str, common_db: Session = None, tenant_id: str = None
+) -> SessionDashboardOut:
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     return _build_dashboard(db, conference)
 
 
@@ -1190,8 +1310,10 @@ def _report_duration_label(conference: Conference) -> Optional[str]:
     return conference.conferenceTime
 
 
-def get_session_report(db: Session, admin: Admin, conference_uid: str) -> SessionReportOut:
-    conference = _get_viewable_conference(db, admin, conference_uid)
+def get_session_report(
+    db: Session, admin: Admin, conference_uid: str, common_db: Session = None, tenant_id: str = None
+) -> SessionReportOut:
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     # The report is a post-session artifact - only available once the trainer
     # has ended the session (mirrors the disabled "Report" button on the
     # Session Dashboard).
@@ -1399,7 +1521,9 @@ def _resolve_schedule_override(conference: Conference, reason: str | None) -> bo
     return True
 
 
-def check_schedule(db: Session, admin: Admin, conference_uid: str) -> dict:
+def check_schedule(
+    db: Session, admin: Admin, conference_uid: str, common_db: Session = None, tenant_id: str = None
+) -> dict:
     """Read-only pre-check for the Start Session flow: lets the app ask for
     a schedule-override reason right after the trainer taps "Start Session"
     - before the camera even opens - rather than only after they've already
@@ -1408,7 +1532,7 @@ def check_schedule(db: Session, admin: Admin, conference_uid: str) -> dict:
     a plain OK otherwise. Never persists anything (no reason to apply, no
     save) - the authoritative check+persist still happens inside
     start_training itself, so this can't be used to bypass it."""
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     _resolve_schedule_override(conference, None)
     return {"offSchedule": False}
 
@@ -1424,8 +1548,10 @@ async def start_training(
     venue_latitude: float | None = None,
     venue_longitude: float | None = None,
     schedule_override_reason: str | None = None,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> TrainingOut:
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     if conference.conferenceEndsOn is not None:
         raise conflict("This session has already ended")
     if title_status(conference.conferenceStatus) == "Cancelled":
@@ -1460,7 +1586,7 @@ async def start_training(
 
     conference.conferenceStatus = "Ongoing"
     if conference.actualStartedAt is None:
-        conference.actualStartedAt = datetime.now()
+        conference.actualStartedAt = utc_now()
 
     if off_schedule:
         # Mirrored onto the activity log (who/when, alongside the trainer's
@@ -1484,7 +1610,7 @@ async def start_training(
     # runs the flow forward one manual Start at a time (start_module), so
     # `activeModuleId` stays None until they tap Start on the first module.
     conference_repository.save(db, conference)
-    _nudge_session_room(background_tasks, conference_uid)
+    _nudge_session_room(background_tasks, conference_uid, tenant_id)
 
     log_activity(
         db,
@@ -1502,14 +1628,20 @@ async def start_training(
 
 
 def start_module(
-    db: Session, admin: Admin, conference_uid: str, module_key: str, background_tasks: BackgroundTasks
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    module_key: str,
+    background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> TrainingOut:
     """Manually opens one module. The trainer runs the flow forward one
     Start at a time: a module can only be started once the session is live,
     nothing else is running, this module hasn't run yet, and every module
     ahead of it is finished. Powers the per-row Start button on the
     Session Dashboard's Execution Flow."""
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     if conference.conferenceStatus != "Ongoing":
         raise conflict("Session is not currently running")
     if conference.activeModuleId:
@@ -1534,7 +1666,7 @@ def start_module(
         conference.liveQuizState = LIVE_QUIZ_STATE_IDLE
     log_module_action(db, conference.conferenceUid, module_key, "STARTED", admin.username)
     conference_repository.save(db, conference)
-    _nudge_session_room(background_tasks, conference_uid)
+    _nudge_session_room(background_tasks, conference_uid, tenant_id)
 
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
@@ -1544,12 +1676,18 @@ def start_module(
 
 
 def restart_module(
-    db: Session, admin: Admin, conference_uid: str, module_key: str, background_tasks: BackgroundTasks
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    module_key: str,
+    background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> TrainingOut:
     """Re-opens a module that already ran. Only allowed while no other module
     is currently live (the trainer must end the running one first). Powers
     the per-row Restart button on the Session Dashboard's Execution Flow."""
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     if conference.conferenceStatus != "Ongoing":
         raise conflict("Session is not currently running")
     if conference.activeModuleId:
@@ -1571,7 +1709,7 @@ def restart_module(
         conference.liveQuizState = LIVE_QUIZ_STATE_IDLE
     log_module_action(db, conference.conferenceUid, module_key, "STARTED", admin.username)
     conference_repository.save(db, conference)
-    _nudge_session_room(background_tasks, conference_uid)
+    _nudge_session_room(background_tasks, conference_uid, tenant_id)
 
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
@@ -1581,13 +1719,18 @@ def restart_module(
 
 
 def stop_active_module(
-    db: Session, admin: Admin, conference_uid: str, background_tasks: BackgroundTasks
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> TrainingOut:
     """Force-ends whatever module is currently live, without opening the
     next one - the trainer starts that manually. Never ends the session
     itself (only end_training / the red "End Session" button does that).
     Powers the blue Active Module card's End button."""
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     if conference.conferenceStatus != "Ongoing":
         raise conflict("Session is not currently running")
     if not conference.activeModuleId:
@@ -1599,7 +1742,7 @@ def stop_active_module(
     log_module_action(db, conference.conferenceUid, current, "STOPPED", admin.username)
     conference.activeModuleId = None
     conference_repository.save(db, conference)
-    _nudge_session_room(background_tasks, conference_uid)
+    _nudge_session_room(background_tasks, conference_uid, tenant_id)
 
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
@@ -1609,13 +1752,18 @@ def stop_active_module(
 
 
 def advance_module(
-    db: Session, admin: Admin, conference_uid: str, background_tasks: BackgroundTasks
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> TrainingOut:
     """Hands the session off from its current live module to the next one
     in the configured flow (e.g. Attendance -> Survey), closing out the
     current module's Execution Flow entry and opening the next. Powers the
     trainer's "Next Module" control on the Session Dashboard."""
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     if conference.conferenceStatus != "Ongoing":
         raise conflict("Session is not currently running")
 
@@ -1642,7 +1790,7 @@ def advance_module(
         log_module_action(db, conference.conferenceUid, next_module, "STARTED", admin.username)
 
     conference_repository.save(db, conference)
-    _nudge_session_room(background_tasks, conference_uid)
+    _nudge_session_room(background_tasks, conference_uid, tenant_id)
 
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
@@ -1658,10 +1806,15 @@ async def end_training(
     background_tasks: BackgroundTasks,
     photo: UploadFile,
     attendance_sheet: UploadFile,
+    total_pax: int,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> TrainingOut:
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     if conference.conferenceEndsOn is not None:
         raise conflict("This session has already ended")
+    if total_pax < 0:
+        raise bad_request("Total Pax can't be negative")
 
     # Security Check-Out: the trainer captures a face photo and attaches the
     # signed attendance sheet - both required to close the session. Validated
@@ -1691,11 +1844,12 @@ async def end_training(
         log_module_action(db, conference.conferenceUid, conference.activeModuleId, "STOPPED", admin.username)
         conference.activeModuleId = None
 
-    conference.conferenceEndsOn = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    conference.conferenceEndsOn = utc_now().strftime("%Y-%m-%d %H:%M:%S")
     conference.conferenceStatus = "Completed"
-    conference.actualEndedAt = datetime.now()
+    conference.actualEndedAt = utc_now()
+    conference.confirmedPax = str(total_pax)
     conference_repository.save(db, conference)
-    _nudge_session_room(background_tasks, conference_uid)
+    _nudge_session_room(background_tasks, conference_uid, tenant_id)
 
     log_activity(
         db,
@@ -1717,19 +1871,23 @@ def _append_remark_line(existing: str | None, line: str) -> str:
     fields are used as running text logs (see `attendance.theftRemarks`
     COMMENT 'Log of tab switches'). Prepend a timestamped line so the newest
     entry is first."""
-    entry = f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] {line}"
+    entry = f"[{utc_now().strftime('%Y-%m-%d %H:%M:%S')}] {line}"
     return f"{entry}\n{existing}" if existing else entry
 
 
-def _nudge_session_room(background_tasks: BackgroundTasks, conference_uid: str) -> None:
+def _nudge_session_room(background_tasks: BackgroundTasks, conference_uid: str, tenant_id: str = None) -> None:
     """Tell everyone on the conference's `/ws/live` room (the trainees) to
     refetch `/sessions/current`. Fired after any trainer action that changes
     what a trainee sees - starting/stopping a module, marking attendance,
     starting/ending the session - so their screen updates in real time
     instead of waiting for the 10s poll. The payload is a thin nudge; the
-    real state travels over REST."""
-    background_tasks.add_task(ws_manager.send_to_room, conference_uid, {"type": "session"})
-    background_tasks.add_task(ws_manager.broadcast, {"type": "training_status_changed", "conferenceUid": conference_uid})
+    real state travels over REST.
+
+    `tenant_id` scopes both the room and the admin-panel broadcast to the caller's own tenant
+    (see routers/ws.py) - a caller that omits it (only possible from a direct internal call, not
+    through a router) sends no notification at all rather than one with no tenant to route by."""
+    background_tasks.add_task(ws_manager.send_to_room, tenant_id, conference_uid, {"type": "session"})
+    background_tasks.add_task(ws_manager.broadcast, tenant_id, {"type": "training_status_changed", "conferenceUid": conference_uid})
 
 
 def mark_attendance(
@@ -1739,16 +1897,18 @@ def mark_attendance(
     trainee_uid: str,
     payload: AttendanceMarkRequest,
     background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> SessionDashboardOut:
     """Manual Present/Absent from the Trainee Master List - only allowed
     while the session is running. Records who/when/why: sets `status` +
     `updatedBy`, appends a timestamped line to `attendance.remarks`, and
     upserts the `attendance_logs` snapshot for the ATTENDANCE module."""
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     if title_status(conference.conferenceStatus) != "Ongoing":
         raise conflict("Attendance can only be changed while the session is running")
 
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
     log_line = f"{admin.username} -> {payload.status.upper()}: {payload.reason.strip()}"
 
     record = attendance_repository.get_for_conference_and_trainee(db, conference_uid, trainee_uid)
@@ -1785,7 +1945,7 @@ def mark_attendance(
         remarks=f"Marked {trainee_uid} {payload.status} for {conference_uid}: {payload.reason.strip()}",
     )
 
-    _nudge_session_room(background_tasks, conference_uid)
+    _nudge_session_room(background_tasks, conference_uid, tenant_id)
     return _build_dashboard(db, conference)
 
 
@@ -1796,19 +1956,21 @@ def unlock_proctoring(
     trainee_uid: str,
     payload: ProctoringUnlockRequest,
     background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> SessionDashboardOut:
     """Clears a trainee's on-device proctoring lockout from the Participant
     Master List - records who/when/why on `attendance.theftRemarks` +
     `remarks` and resets `isTheftLocked` / `theftAttemptsLeft`. The trainee's
     post-test screen sees the flip via `/sessions/current` and lets them back
     in (session_service.get_current_session)."""
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     record = attendance_repository.get_for_conference_and_trainee(db, conference_uid, trainee_uid)
     if record is None or not record.isTheftLocked:
         raise conflict("This trainee isn't locked")
 
     reason = payload.reason.strip()
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
     record.isTheftLocked = 0
     record.theftAttemptsLeft = 3
     record.theftRemarks = f"[{now_str}] {admin.username} -> UNLOCK: {reason}\n{record.theftRemarks or ''}".rstrip()
@@ -1824,31 +1986,151 @@ def unlock_proctoring(
         remarks=f"Unlocked {trainee_uid} on {conference_uid}: {reason}",
     )
 
-    _nudge_session_room(background_tasks, conference_uid)
+    _nudge_session_room(background_tasks, conference_uid, tenant_id)
     return _build_dashboard(db, conference)
 
 
 def reset_attendance(
-    db: Session, admin: Admin, conference_uid: str, trainee_uid: str, background_tasks: BackgroundTasks
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    trainee_uid: str,
+    background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
 ) -> SessionDashboardOut:
     """Clears a trainee's attendance record entirely - the "..." control
     on the Trainee Master List."""
-    conference = _get_owned_conference(db, admin, conference_uid)
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     attendance_repository.delete_for_conference_and_trainee(db, conference_uid, trainee_uid)
-    _nudge_session_room(background_tasks, conference_uid)
+    _nudge_session_room(background_tasks, conference_uid, tenant_id)
     return _build_dashboard(db, conference)
 
 
+def list_attendance_page(
+    db: Session,
+    admin: Optional[Admin],
+    filters: Optional[ConferenceFilters],
+    mode: str,
+    search: Optional[str],
+    sort: str,
+    descending: bool,
+    cursor: Optional[str],
+    limit: int,
+    page: Optional[int] = None,
+    common_db: Optional[Session] = None,
+    tenant_id: Optional[str] = None,
+) -> AttendancePageResponse:
+    """One page of the admin org-wide attendance list, restricted to what `admin`'s admin_access
+    grant authorizes - the same scope (access_service.resolve_scope), the same SQL condition
+    builder (dashboard_repository.access_scope_conditions) and the same fail-closed convention
+    as list_trainings_page: a missing `common_db`/`tenant_id` on a real request denies rather
+    than widens, and `admin=None` (only possible from a direct internal call, never through the
+    router) skips the scope condition entirely.
+
+    Same rows and same field values as `list_attendance(org=True)` (compared in
+    tests/test_attendance_page.py), but filtering, searching, sorting and paging happen in SQL
+    and only the page's rows are enriched: at most 4 statements per request (page, total - first
+    page only, post-test results, tallies)."""
+    scope = (
+        None
+        if admin is None
+        else resolve_scope(common_db, admin, tenant_id)
+        if common_db is not None
+        else AccessScope.denied(tenant_id or "", "no scope context")
+    )
+    conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
+    if scope is not None:
+        conditions += dashboard_repository.access_scope_conditions(scope)
+    try:
+        rows, next_cursor, total = attendance_repository.list_page(
+            db, conditions, mode, search, sort, descending, cursor, limit, page
+        )
+    except (ValueError, KeyError, TypeError):
+        raise bad_request("Invalid page cursor")
+
+    tallies = attendance_repository.tallies_for_trainees(db, conditions, {r.trainee_uid for r in rows})
+    results = assessment_repository.latest_post_test_results_for_pairs(
+        db, {(r.conference_uid, r.trainee_uid) for r in rows}
+    )
+
+    def stamp(value):
+        return value.strftime("%Y-%m-%d %H:%M:%S") if value else None
+
+    items: list[AttendanceListItemOut] = []
+    for r in rows:
+        result = results.get((r.conference_uid, r.trainee_uid))
+        post_test_score = None
+        post_test_summary = None
+        if result:
+            total_marks = float(result.maxScore)
+            correct = float(result.totalScore)
+            post_test_score = f"{correct:g} / {total_marks:g} ({float(result.percentage):g}%)"
+            post_test_summary = f"Total: {total_marks:g}, Correct: {correct:g}, Wrong: {total_marks - correct:g}"
+
+        tally_total, tally_present, tally_pending = tallies.get(r.trainee_uid, (0, 0, 0))
+        has_trainee = r.trainee_found is not None
+        items.append(
+            AttendanceListItemOut(
+                attendanceId=r.attendance_uid or str(r.id),
+                region=r.region,
+                product=r.training_type,
+                session=r.session_type,
+                audienceType=r.audience,
+                conferenceDate=r.conference_date,
+                trainerName=r.trainer_name,
+                trainerHoId=r.trainer_employee_id,
+                participantHoId=r.trainee_employee_id if has_trainee else None,
+                participantName=r.trainee_name if has_trainee else "Unknown Trainee",
+                phone=str(r.phone) if r.phone else (str(r.trainee_phone) if has_trainee else None),
+                state=r.state,
+                location=", ".join(filter(None, [r.district, r.state])),
+                district=r.district,
+                reportingManagerOfPromoter=r.supervisor_name if has_trainee else None,
+                attendanceStatus=r.status,
+                markedAt=stamp(r.timestamp),
+                checkIn=r.marked_on,
+                checkOut=stamp(r.check_out_time),
+                postTestScore=post_test_score,
+                postTestScoreSummary=post_test_summary,
+                sessionTypeMethod=r.session_type,
+                conferenceId=r.conference_uid,
+                lastUpdates=stamp(r.timestamp),
+                updatedBy=r.updated_by,
+                updationOn=stamp(r.updation_on),
+                marked=r.status == "Present",
+                trainerTrainingsTotal=tally_total,
+                trainerTrainingsPresent=tally_present,
+                trainerTrainingsPending=tally_pending,
+            )
+        )
+    return AttendancePageResponse(items=items, nextCursor=next_cursor, total=total)
+
+
 def list_attendance(
-    db: Session, admin: Admin, org: bool = False, filters: Optional[ConferenceFilters] = None
+    db: Session,
+    admin: Admin,
+    org: bool = False,
+    filters: Optional[ConferenceFilters] = None,
+    common_db: Optional[Session] = None,
+    tenant_id: Optional[str] = None,
 ) -> list[AttendanceListItemOut]:
     """Powers the trainer's Attendance List / Pending Attendance / Confirmed
     Attendance screens (all three fetch this same list and split it
     client-side by `marked`). Scoped to this trainer's own conferences,
     same as list_trainer_trainings - this lives in the trainer's own More
-    menu, not a cross-trainer admin view."""
+    menu, not a cross-trainer admin view.
+
+    `org=True` is the cross-trainer admin view (gated by the router to role="admin" accounts);
+    it applies the caller's admin_access grant the same way list_attendance_page does - see
+    that function's docstring for the common_db/tenant_id fail-closed convention."""
     if org:
-        conferences = [c for c in conference_repository.list_all(db) if filters is None or filters.matches(c)]
+        scope = resolve_scope(common_db, admin, tenant_id) if common_db is not None else AccessScope.denied(tenant_id or "", "no scope context")
+        conferences = [
+            c
+            for c in conference_repository.list_all(db)
+            if (filters is None or filters.matches(c)) and scope.allows_row(c.company, c.zone, c.region)
+        ]
     else:
         conferences = conference_repository.list_all_for_trainer(db, admin.username)
     conference_by_uid = {c.conferenceUid: c for c in conferences}

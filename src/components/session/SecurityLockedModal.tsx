@@ -3,6 +3,7 @@ import { Modal, Pressable, StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { FontWeight } from "@/theme/fontWeight";
 import { createShadow } from "@/theme/shadows";
+import { Colors } from "@/theme/colors";
 
 export type SecurityLockedModalProps = {
   visible: boolean;
@@ -66,7 +67,7 @@ const styles = StyleSheet.create({
     ...createShadow({ x: 0, y: 8, blur: 24, opacity: 0.4, elevation: 10 }),
   },
   title: {
-    color: "#FFFFFF",
+    color: Colors.white,
     fontSize: 16.5,
     letterSpacing: 0.2,
     marginBottom: 20,
@@ -77,7 +78,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   closeText: {
-    color: "#0066FF",
+    color: Colors.brandBlue,
     fontSize: 16,
   },
 });

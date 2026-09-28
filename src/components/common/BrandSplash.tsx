@@ -2,6 +2,7 @@ import { Image } from "expo-image";
 import { StyleSheet, View } from "react-native";
 
 import { SPLASH_LOGO_ASPECT_RATIO, SPLASH_LOGO_WIDTH } from "@/config/splash";
+import { Colors } from "@/theme/colors";
 
 /**
  * Full-screen TOPS branding shown while the app boots (fonts / auth state
@@ -21,6 +22,6 @@ export default function BrandSplash() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFFFFF", alignItems: "center", justifyContent: "center" },
+  container: { flex: 1, backgroundColor: Colors.white, alignItems: "center", justifyContent: "center" },
   logo: { width: SPLASH_LOGO_WIDTH, height: SPLASH_LOGO_WIDTH * SPLASH_LOGO_ASPECT_RATIO },
 });

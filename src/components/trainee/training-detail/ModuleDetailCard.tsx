@@ -38,22 +38,22 @@ export default function ModuleDetailCard({ module, expanded, onToggle }: ModuleD
         accessibilityLabel={hasQuestions ? `${module.name}, tap to ${expanded ? "collapse" : "expand"}` : module.name}
       >
         <View style={styles.iconWrap}>
-          <Ionicons name={MODULE_ICONS[module.key] ?? "layers-outline"} size={17} color="#2563EB" />
+          <Ionicons name={MODULE_ICONS[module.key] ?? "layers-outline"} size={17} color={Colors.blueAccent} />
         </View>
 
         <View style={styles.titleColumn}>
-          <AppText variant="body" weight={FontWeight.bold} color="#111827">
+          <AppText variant="body" weight={FontWeight.bold} color={Colors.black}>
             {module.name}
           </AppText>
           {module.completedAt && (
-            <AppText variant="tiny" color="#6B7280">
+            <AppText variant="tiny" color={Colors.gray500}>
               {module.completedAt}
             </AppText>
           )}
         </View>
 
         {module.score && (
-          <AppText variant="caption" weight={FontWeight.bold} color="#111827" style={styles.scoreText}>
+          <AppText variant="caption" weight={FontWeight.bold} color={Colors.black} style={styles.scoreText}>
             {module.score}
           </AppText>
         )}
@@ -65,12 +65,12 @@ export default function ModuleDetailCard({ module, expanded, onToggle }: ModuleD
           </AppText>
         </View>
 
-        {hasQuestions && <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color="#9CA3AF" />}
+        {hasQuestions && <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={18} color={Colors.gray400} />}
       </Pressable>
 
       {hasQuestions && expanded && (
         <View style={styles.questionsBlock}>
-          <AppText variant="tiny" color="#6B7280" style={styles.summaryLine}>
+          <AppText variant="tiny" color={Colors.gray500} style={styles.summaryLine}>
             {correctCount}/{module.questions.length} correct
           </AppText>
           {module.questions.map((attempt, index) => (
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: Radius.card,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     marginBottom: 12,
     overflow: "hidden",
     ...Shadows.card,
@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 8,
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
     alignItems: "center",
     justifyContent: "center",
   },

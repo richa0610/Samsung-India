@@ -7,6 +7,7 @@ import {
   isBetweenDates,
   isSameDay,
 } from "./calendarUtils";
+import { Colors } from "@/theme/colors";
 
 type CalendarGridProps = {
   year: number;
@@ -78,7 +79,7 @@ const styles = StyleSheet.create({
     width: 18.5,
     textAlign: "center",
     fontSize: 8,
-    color: "#6B7280",
+    color: Colors.gray500,
     fontWeight: "500",
   },
   grid: {

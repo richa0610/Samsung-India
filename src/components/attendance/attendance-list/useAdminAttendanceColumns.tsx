@@ -65,7 +65,6 @@ export function useAdminAttendanceColumns(
     text("sessionTypeMethod", "Session Type Method", 160, (row) => row.sessionTypeMethod),
     text("attendanceId", "Attendance ID", 170, (row) => row.attendanceId),
     text("conferenceId", "Conference ID", 130, (row) => row.conferenceId),
-    text("lastUpdates", "Last Updates", 150, (row) => row.lastUpdates),
     {
       key: "report",
       header: "Report",

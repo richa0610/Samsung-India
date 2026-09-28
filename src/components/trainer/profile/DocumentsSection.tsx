@@ -43,7 +43,7 @@ function AadharFileField({
       <AppText style={styles.label} color={Colors.black}>Aadhar (File)</AppText>
       {filename ? (
         <View style={styles.fileRow}>
-          <Ionicons name="document-text-outline" size={16} color="#374151" />
+          <Ionicons name="document-text-outline" size={16} color={Colors.gray700} />
           <AppText style={styles.fileName} numberOfLines={1}>{filename}</AppText>
           {editable && (
             <Pressable onPress={onPick} disabled={uploading} hitSlop={8}>
@@ -57,11 +57,11 @@ function AadharFileField({
         editable && (
           <Pressable style={styles.uploadBtn} onPress={onPick} disabled={uploading} accessibilityRole="button">
             {uploading ? (
-              <ActivityIndicator size="small" color="#0066FF" />
+              <ActivityIndicator size="small" color={Colors.brandBlue} />
             ) : (
-              <Ionicons name="cloud-upload-outline" size={18} color="#0066FF" />
+              <Ionicons name="cloud-upload-outline" size={18} color={Colors.brandBlue} />
             )}
-            <AppText color="#0066FF" weight={FontWeight.semiBold} style={styles.uploadText}>
+            <AppText color={Colors.brandBlue} weight={FontWeight.semiBold} style={styles.uploadText}>
               {uploading ? "Uploading…" : "Upload Aadhar (JPEG, PNG, PDF or Word)"}
             </AppText>
           </Pressable>
@@ -139,7 +139,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.md,
     borderWidth: 1,
     borderColor: "#BFDBFE",
-    backgroundColor: "#EFF6FF",
+    backgroundColor: Colors.blue50,
   },
   uploadText: { fontSize: 13, flexShrink: 1, textAlign: "center" },
   fileRow: {
@@ -150,10 +150,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: Colors.gray300,
     backgroundColor: Colors.white,
   },
-  fileName: { flex: 1, fontSize: 12, color: "#374151" },
+  fileName: { flex: 1, fontSize: 12, color: Colors.gray700 },
   replaceText: { fontSize: 13 },
   notUploadedText: { fontSize: Fonts.bodySm },
 });

@@ -74,7 +74,7 @@ export default function TrainerLoginScreen() {
             <AppCard style={styles.card}>
               <AuthHeader
                 title={isAdminPortal ? "Admin Login" : "Welcome Back"}
-                subtitle={isAdminPortal ? "Login to access dashboard" : "Authenticate to access your session"}
+                subtitle={isAdminPortal ? "Login to access dashboard" : "Login to Continue"}
               />
 
               <View style={styles.body}>

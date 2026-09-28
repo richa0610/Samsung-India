@@ -50,6 +50,6 @@ const styles = StyleSheet.create({
   },
   legendText: {
     fontSize: 11,
-    color: "#1F2937",
+    color: Colors.gray800,
   },
 });

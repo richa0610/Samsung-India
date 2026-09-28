@@ -90,6 +90,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.body,
     lineHeight: LineHeight.h2,
     textAlign: "center",
-    color: "#111827",
+    color: Colors.black,
   },
 });

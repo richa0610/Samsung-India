@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: Colors.white,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: Colors.gray200,
   },
   headerTitle: { fontSize: 15 },
   stepRow: { flexDirection: "row", alignItems: "center", gap: 14 },

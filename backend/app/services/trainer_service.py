@@ -290,12 +290,14 @@ async def upload_profile_photo(
     contents = await file.read()
     extension = validate_profile_photo_upload(file.content_type, contents, size_error_detail="Image must be 5MB or smaller")
 
-    photo_dir = media_subdir("trainer_photos")
+    # Admin accounts get their own folder; agency trainers stay in trainer_photos.
     is_admin = isinstance(admin, Admin)
+    folder = "admin_profile" if is_admin else "trainer_photos"
+    photo_dir = media_subdir(folder)
     filename = f"{'admin' if is_admin else 'agency'}_{admin.id}.{extension}"
     (photo_dir / filename).write_bytes(contents)
 
-    admin.profilePhoto = f"trainer_photos/{filename}"
+    admin.profilePhoto = f"{folder}/{filename}"
     if is_admin:
         admin_repository.save(common_db, admin)
     else:

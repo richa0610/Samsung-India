@@ -26,6 +26,21 @@ class AdminAuthSession(BaseModel):
     admin: AdminOut
 
 
+class AdminAccessScopeOut(BaseModel):
+    """The caller's own admin_access grant, shaped for the frontend to narrow its filter
+    OPTIONS against - a usability convenience only. It grants nothing by itself: the backend
+    still enforces the real boundary on every request regardless of what this says (see
+    access_service.resolve_scope / access_scope_conditions). `None` means "not restricted on
+    this axis"; a list means "only these" (values are lower-cased/trimmed, the same form
+    ConferenceFilters already sends on the wire)."""
+
+    allowed: bool
+    isSuper: bool
+    role: Optional[str] = None
+    zones: Optional[list[str]] = None
+    regions: Optional[list[str]] = None
+
+
 class TrainingTypeStatusCount(BaseModel):
     status: str
     count: int

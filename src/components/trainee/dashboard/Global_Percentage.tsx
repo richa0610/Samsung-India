@@ -39,7 +39,7 @@ export default function Global_Percentage({
     <View style={styles.container}>
       {/* Left Card: Global Percentage */}
       <View style={styles.globalCard}>
-        <AppText variant="caption" weight={FontWeight.bold} color="#111827" style={styles.cardTitle}>
+        <AppText variant="caption" weight={FontWeight.bold} color={Colors.black} style={styles.cardTitle}>
           Overall Performance
         </AppText>
 
@@ -51,7 +51,7 @@ export default function Global_Percentage({
                 cx={size / 2}
                 cy={size / 2}
                 r={radius}
-                stroke="#E5E7EB"
+                stroke={Colors.gray200}
                 strokeWidth={strokeWidth}
                 fill="none"
               />
@@ -59,7 +59,7 @@ export default function Global_Percentage({
                 cx={size / 2}
                 cy={size / 2}
                 r={radius}
-                stroke="#0066FF"
+                stroke={Colors.brandBlue}
                 strokeWidth={strokeWidth}
                 strokeDasharray={`${circumference} ${circumference}`}
                 strokeDashoffset={strokeDashoffset}
@@ -70,13 +70,13 @@ export default function Global_Percentage({
           </View>
 
           <View style={styles.donutCenter} pointerEvents="none">
-            <AppText variant="h2" weight={FontWeight.bold} color="#111827" style={styles.pctText}>
+            <AppText variant="h2" weight={FontWeight.bold} color={Colors.black} style={styles.pctText}>
               {percentage}%
             </AppText>
-            <AppText variant="tiny" color="#4B5563" weight={FontWeight.medium} style={styles.scoreRatio}>
+            <AppText variant="tiny" color={Colors.gray600} weight={FontWeight.medium} style={styles.scoreRatio}>
               {totalScore} / {maxScore}
             </AppText>
-            <AppText variant="tiny" color="#9CA3AF" style={styles.scoreLabel}>
+            <AppText variant="tiny" color={Colors.gray400} style={styles.scoreLabel}>
               Total Score
             </AppText>
           </View>
@@ -84,13 +84,13 @@ export default function Global_Percentage({
 
         {/* Footer Meta */}
         <View style={styles.footerMeta}>
-          <AppText variant="tiny" color="#6B7280" style={styles.footerCaption}>
+          <AppText variant="tiny" color={Colors.gray500} style={styles.footerCaption}>
             Score from all questions
           </AppText>
           {periodGain != null && periodGain !== 0 && (
             <AppText
               variant="tiny"
-              color={periodGain > 0 ? "#16A34A" : "#DC2626"}
+              color={periodGain > 0 ? Colors.success : Colors.danger}
               weight={FontWeight.bold}
               style={styles.footerGain}
             >
@@ -107,7 +107,7 @@ export default function Global_Percentage({
           <View style={styles.trophyWrap}>
             <Ionicons name="trophy-outline" size={15} color="#7C3AED" />
           </View>
-          <AppText variant="caption" weight={FontWeight.bold} color="#111827" style={styles.cardTitle}>
+          <AppText variant="caption" weight={FontWeight.bold} color={Colors.black} style={styles.cardTitle}>
             Ranking
           </AppText>
         </View>
@@ -115,11 +115,11 @@ export default function Global_Percentage({
         {/* Global Ranking Box */}
         <View style={styles.rankBox}>
           <View style={styles.rankRow}>
-            <View style={[styles.iconCircle, { backgroundColor: "#EFF6FF" }]}>
-              <Ionicons name="globe-outline" size={16} color="#2563EB" />
+            <View style={[styles.iconCircle, { backgroundColor: Colors.blue50 }]}>
+              <Ionicons name="globe-outline" size={16} color={Colors.blueAccent} />
             </View>
             <View style={styles.rankMeta}>
-              <AppText variant="tiny" weight={FontWeight.bold} color="#1F2937" numberOfLines={1}>
+              <AppText variant="tiny" weight={FontWeight.bold} color={Colors.gray800} numberOfLines={1}>
                 Global Ranking
               </AppText>
             </View>
@@ -133,12 +133,12 @@ export default function Global_Percentage({
           {/* Slider */}
           <View style={styles.sliderSection}>
             <View style={styles.sliderTrack}>
-              <View style={[styles.sliderFill, { width: `${globalPercentile}%`, backgroundColor: "#0066FF" }]} />
-              <View style={[styles.sliderThumb, { left: `${globalPercentile}%`, backgroundColor: "#0066FF" }]} />
+              <View style={[styles.sliderFill, { width: `${globalPercentile}%`, backgroundColor: Colors.brandBlue }]} />
+              <View style={[styles.sliderThumb, { left: `${globalPercentile}%`, backgroundColor: Colors.brandBlue }]} />
             </View>
             <View style={styles.sliderLabels}>
-              <AppText variant="tiny" color="#9CA3AF" style={styles.sliderLabelText}>Top 1%</AppText>
-              <AppText variant="tiny" color="#9CA3AF" style={styles.sliderLabelText}>Top 100%</AppText>
+              <AppText variant="tiny" color={Colors.gray400} style={styles.sliderLabelText}>Top 1%</AppText>
+              <AppText variant="tiny" color={Colors.gray400} style={styles.sliderLabelText}>Top 100%</AppText>
             </View>
           </View>
         </View>
@@ -150,7 +150,7 @@ export default function Global_Percentage({
               <Ionicons name="location-outline" size={16} color="#475569" />
             </View>
             <View style={styles.rankMeta}>
-              <AppText variant="tiny" weight={FontWeight.bold} color="#1F2937" numberOfLines={1}>
+              <AppText variant="tiny" weight={FontWeight.bold} color={Colors.gray800} numberOfLines={1}>
                 State Ranking
               </AppText>
             </View>
@@ -168,8 +168,8 @@ export default function Global_Percentage({
               <View style={[styles.sliderThumb, { left: `${statePercentile}%`, backgroundColor: "#7E22CE" }]} />
             </View>
             <View style={styles.sliderLabels}>
-              <AppText variant="tiny" color="#9CA3AF" style={styles.sliderLabelText}>Top 1%</AppText>
-              <AppText variant="tiny" color="#9CA3AF" style={styles.sliderLabelText}>Top 100%</AppText>
+              <AppText variant="tiny" color={Colors.gray400} style={styles.sliderLabelText}>Top 1%</AppText>
+              <AppText variant="tiny" color={Colors.gray400} style={styles.sliderLabelText}>Top 100%</AppText>
             </View>
           </View>
         </View>
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.card,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     alignItems: "center",
     ...Shadows.card,
   },
@@ -201,7 +201,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.card,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     gap: 8,
     ...Shadows.card,
   },
@@ -258,7 +258,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#F1F5F9",
+    borderColor: Colors.slate100,
     padding: 8,
     gap: 6,
   },
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
   },
   sliderTrack: {
     height: 4,
-    backgroundColor: "#E2E8F0",
+    backgroundColor: Colors.slate200,
     borderRadius: 2,
     position: "relative",
     justifyContent: "center",

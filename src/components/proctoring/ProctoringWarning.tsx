@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import AppText from "@/components/ui/AppText";
 import { FontWeight } from "@/theme/fontWeight";
+import { Colors } from "@/theme/colors";
 
 export type ProctoringWarningProps = {
   title?: string;
@@ -55,11 +56,11 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 13.5,
-    color: "#111827",
+    color: Colors.black,
   },
   message: {
     fontSize: 11,
     lineHeight: 16,
-    color: "#4B5563",
+    color: Colors.gray600,
   },
 });

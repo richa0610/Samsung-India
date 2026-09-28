@@ -1,4 +1,5 @@
 import { TrainingAgendaItem } from "@/api/training";
+import { Colors } from "@/theme/colors";
 
 export type SessionTab = "all" | "today" | "completed";
 
@@ -145,12 +146,12 @@ export function getSessionStatusConfig(
   if (normalized === "ongoing" || normalized === "live" || normalized === "live now") {
     return {
       label: "LIVE NOW",
-      dotColor: "#EF4444",
-      badgeBg: "#FEE2E2",
-      badgeTextColor: "#EF4444",
+      dotColor: Colors.red,
+      badgeBg: Colors.dangerBg,
+      badgeTextColor: Colors.red,
       borderColor: "#FCA5A5",
       buttonType: "live",
-      buttonBg: "#0066FF",
+      buttonBg: Colors.brandBlue,
       buttonText: "LIVE",
     };
   }
@@ -175,7 +176,7 @@ export function getSessionStatusConfig(
     badgeTextColor: "#B45309",
     borderColor: "#FDE68A",
     buttonType: "launch",
-    buttonBg: "#0066FF",
+    buttonBg: Colors.brandBlue,
     buttonText: "LAUNCH",
   };
 }

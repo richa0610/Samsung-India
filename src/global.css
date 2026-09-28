@@ -5,6 +5,25 @@
 }
 
 :root {
+  --color-danger: #DC2626; /* keep in sync with Colors.danger in src/theme/colors.ts */
+  --color-toggle-blue: #2F44C5; /* Colors.toggleBlue */
+  --color-gray500: #6B7280;
+  --color-gray700: #374151;
+  --color-gray800: #1F2937;
+  --color-gray300: #D1D5DB;
+  --color-brand-blue: #0066FF;
+  --color-blue-accent: #2563EB;
+  --color-red: #EF4444;
+  --color-warning: #F59E0B;
+  --color-blue50: #EFF6FF;
+  --color-border-light: #EAECF0;
+  --color-danger-bg: #FEE2E2;
+  --color-slate100: #F1F5F9;
+  --color-danger-bg-soft: #FEF2F2;
+  --color-success-bg-soft: #ECFDF5;
+  --color-blue400: #60A5FA;
+  --color-success-teal: #1CB07D;
+  --color-success: #16A34A; /* keep in sync with Colors.success in src/theme/colors.ts */
   --font-display: 'Poppins', sans-serif;
   --font-sans: 'Poppins', sans-serif;
   --font-mono:

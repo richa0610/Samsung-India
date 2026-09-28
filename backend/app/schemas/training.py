@@ -283,6 +283,26 @@ class TrainingAgendaItem(BaseModel):
     traineeCount: int = 0
 
 
+class AttendancePageResponse(BaseModel):
+    """GET /admin/attendance/page - one page of the admin attendance list.
+    `nextCursor` is null on the last page; `total` (all rows matching the mode /
+    filters / search) is only sent with the first page."""
+
+    items: list[AttendanceListItemOut]
+    nextCursor: Optional[str] = None
+    total: Optional[int] = None
+
+
+class TrainingPageResponse(BaseModel):
+    """GET /admin/trainings/page - one page of the admin Training / Pending
+    list. `nextCursor` is null on the last page; `total` (all rows matching the
+    filter / search) is only sent with the first page."""
+
+    items: list[TrainingAgendaItem]
+    nextCursor: Optional[str] = None
+    total: Optional[int] = None
+
+
 class TrainerAgendaResponse(BaseModel):
     """GET /admin/trainings - the session list plus the dashboard's summary
     stats, all computed server-side so the frontend just displays them

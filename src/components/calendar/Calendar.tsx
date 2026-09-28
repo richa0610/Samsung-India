@@ -14,10 +14,15 @@ type CalendarProps = {
   onApply: (range: DateRange, preset: DatePreset) => void;
 };
 
+// Stands in for "no date picked" where a calendar grid needs a Date to compare
+// against - far enough in the past that nothing on screen is highlighted.
+const NO_DATE = new Date(0);
+
 export default function Calendar({ range, preset = "custom", defaultExpanded = false, onApply }: CalendarProps) {
   const [isExpanded, setIsExpanded] = useState<boolean>(defaultExpanded);
-  const [selectedStart, setSelectedStart] = useState<Date>(range.start);
-  const [selectedEnd, setSelectedEnd] = useState<Date>(range.end);
+  // null = that side was cleared and has no date picked.
+  const [selectedStart, setSelectedStart] = useState<Date | null>(range.start);
+  const [selectedEnd, setSelectedEnd] = useState<Date | null>(range.end);
   const [activePreset, setActivePreset] = useState<DatePreset>(preset);
 
   const fromMonthYear = useMonthYear(range.start);
@@ -27,56 +32,45 @@ export default function Calendar({ range, preset = "custom", defaultExpanded = f
     setIsExpanded((prev) => !prev);
   };
 
-  // From must always be strictly before To - each calendar only ever
-  // highlights its own single date (not both), and the To calendar disables
-  // any date on or before the currently selected From date (and vice versa)
-  // so an invalid or equal-day range can't be picked in the first place.
-  const nextDay = (date: Date) =>
-    new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
-
-  const isFromDateDisabled = (date: Date) => date.getTime() >= selectedEnd.getTime();
-  const isToDateDisabled = (date: Date) => date.getTime() <= selectedStart.getTime();
-
+  // Neither calendar restricts which date (or year) can be picked.
   // Picking a date only updates the local From/To selection - it does not
   // refresh the dashboard. The dashboard only re-fetches when the trainer
   // taps "Filter" (see `handleFilterPress`), so choosing From then To
-  // doesn't trigger two separate loads with a half-picked range.
+  // doesn't trigger two separate loads with a half-picked range. If the two
+  // dates would end up the wrong way round, the other side follows.
   const handleSelectStartDate = (date: Date) => {
     const newStart = startOfDay(date);
     setSelectedStart(newStart);
     setActivePreset("custom");
-
-    if (newStart.getTime() >= selectedEnd.getTime()) {
-      setSelectedEnd(nextDay(newStart));
-    }
+    if (selectedEnd && newStart.getTime() > selectedEnd.getTime()) setSelectedEnd(newStart);
   };
 
   const handleSelectEndDate = (date: Date) => {
     const newEnd = startOfDay(date);
-    if (newEnd.getTime() <= selectedStart.getTime()) {
-      // The grid already disables these dates - defensive no-op only.
-      return;
-    }
     setSelectedEnd(newEnd);
+    setActivePreset("custom");
+    if (selectedStart && selectedStart.getTime() > newEnd.getTime()) setSelectedStart(newEnd);
+  };
+
+  // "Clear" empties just that one calendar's date.
+  const handleClearStart = () => {
+    setSelectedStart(null);
+    setActivePreset("custom");
+  };
+  const handleClearEnd = () => {
+    setSelectedEnd(null);
     setActivePreset("custom");
   };
 
-  // "Clear" resets just that one calendar's date back to today, independent
-  // of the other calendar - not a true deselect, since the backend query
-  // and the From<To invariant both require a valid date on each side.
-  const handleClearStart = () => handleSelectStartDate(new Date());
-  const handleClearEnd = () => {
-    const today = startOfDay(new Date());
-    if (today.getTime() > selectedStart.getTime()) {
-      handleSelectEndDate(today);
-    } else {
-      setSelectedEnd(nextDay(selectedStart));
-      setActivePreset("custom");
-    }
-  };
-
   const handleFilterPress = () => {
-    onApply({ start: selectedStart, end: selectedEnd }, activePreset);
+    // A side left empty defaults to today (the backend needs both ends).
+    const today = startOfDay(new Date());
+    let start = selectedStart ?? today;
+    let end = selectedEnd ?? today;
+    if (start.getTime() > end.getTime()) [start, end] = [end, start];
+    setSelectedStart(start);
+    setSelectedEnd(end);
+    onApply({ start, end }, selectedStart || selectedEnd ? activePreset : "today");
     setIsExpanded((prev) => !prev);
   };
 
@@ -98,12 +92,11 @@ export default function Calendar({ range, preset = "custom", defaultExpanded = f
               title="FROM :"
               summaryLabel="From Date"
               monthYear={fromMonthYear}
-              selectedStart={selectedStart}
-              selectedEnd={selectedStart}
+              selectedStart={selectedStart ?? NO_DATE}
+              selectedEnd={selectedStart ?? NO_DATE}
               summaryDate={selectedStart}
               onSelectDate={handleSelectStartDate}
               onClear={handleClearStart}
-              isDateDisabled={isFromDateDisabled}
             />
 
             <View style={styles.arrowContainer}>
@@ -114,12 +107,11 @@ export default function Calendar({ range, preset = "custom", defaultExpanded = f
               title="TO :"
               summaryLabel="To Date"
               monthYear={toMonthYear}
-              selectedStart={selectedEnd}
-              selectedEnd={selectedEnd}
+              selectedStart={selectedEnd ?? NO_DATE}
+              selectedEnd={selectedEnd ?? NO_DATE}
               summaryDate={selectedEnd}
               onSelectDate={handleSelectEndDate}
               onClear={handleClearEnd}
-              isDateDisabled={isToDateDisabled}
             />
           </View>
 
@@ -135,7 +127,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 10,
     marginHorizontal: 10,
     ...Shadows.card,
@@ -145,7 +137,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: "#EAECF0",
+    backgroundColor: Colors.borderLight,
     marginTop: 8,
     marginBottom: 6,
     marginHorizontal: 2,

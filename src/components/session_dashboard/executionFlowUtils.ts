@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 
 import { ExecutionFlowStatus } from "@/api/training";
+import { Colors } from "@/theme/colors";
 
 export type ModuleVisual = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -9,13 +10,13 @@ export type ModuleVisual = {
 };
 
 const MODULE_VISUALS: Record<string, ModuleVisual> = {
-  ATTENDANCE: { icon: "people", bg: "#16A34A", categoryLabel: "ATTENDANCE" },
-  LIVE_QUIZ: { icon: "rocket", bg: "#2563EB", categoryLabel: "QUIZ" },
-  STANDARD_TEST: { icon: "clipboard", bg: "#374151", categoryLabel: "TEST" },
+  ATTENDANCE: { icon: "people", bg: Colors.success, categoryLabel: "ATTENDANCE" },
+  LIVE_QUIZ: { icon: "rocket", bg: Colors.blueAccent, categoryLabel: "QUIZ" },
+  STANDARD_TEST: { icon: "clipboard", bg: Colors.gray700, categoryLabel: "TEST" },
   SURVEY: { icon: "chatbubble-ellipses", bg: "#D97706", categoryLabel: "SURVEY" },
 };
 
-const FALLBACK_VISUAL: ModuleVisual = { icon: "layers", bg: "#6B7280", categoryLabel: "MODULE" };
+const FALLBACK_VISUAL: ModuleVisual = { icon: "layers", bg: Colors.gray500, categoryLabel: "MODULE" };
 
 export function getModuleVisual(moduleKey: string): ModuleVisual {
   return MODULE_VISUALS[moduleKey] ?? FALLBACK_VISUAL;
@@ -29,7 +30,7 @@ export type StatusPresentation = {
 
 export function getExecutionStatusPresentation(status: ExecutionFlowStatus): StatusPresentation {
   if (status === "Completed") return { label: "Executed", bg: "#D1FAE5", color: "#059669" };
-  if (status === "Running") return { label: "Running", bg: "#FEE2E2", color: "#DC2626" };
+  if (status === "Running") return { label: "Running", bg: Colors.dangerBg, color: Colors.danger };
   return { label: "Pending", bg: "#FEF3C7", color: "#B45309" };
 }
 

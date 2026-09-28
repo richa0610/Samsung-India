@@ -43,7 +43,7 @@ export default function ExecutionFlowCard({
           <Ionicons
             name="swap-horizontal-outline"
             size={14}
-            color={activeTab === "flow" ? "#2563EB" : "#6B7280"}
+            color={activeTab === "flow" ? Colors.blueAccent : Colors.gray500}
           />
           <AppText style={[styles.tabText, activeTab === "flow" && styles.tabTextActive]}>
             EXECUTION FLOW
@@ -57,7 +57,7 @@ export default function ExecutionFlowCard({
           <Ionicons
             name="shield-checkmark-outline"
             size={14}
-            color={activeTab === "logs" ? "#2563EB" : "#6B7280"}
+            color={activeTab === "logs" ? Colors.blueAccent : Colors.gray500}
           />
           <AppText style={[styles.tabText, activeTab === "logs" && styles.tabTextActive]}>
             Audit Logs
@@ -87,7 +87,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 12,
     marginHorizontal: 14,
     marginTop: 10,
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   tabsHeader: {
     flexDirection: "row",
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: Colors.gray200,
     paddingBottom: 4,
     marginBottom: 8,
   },
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: "transparent",
   },
-  tabActive: { borderBottomColor: "#2563EB" },
-  tabText: { fontSize: 11, fontWeight: "600", color: "#6B7280" },
-  tabTextActive: { color: "#2563EB", fontWeight: "700" },
+  tabActive: { borderBottomColor: Colors.blueAccent },
+  tabText: { fontSize: 11, fontWeight: "600", color: Colors.gray500 },
+  tabTextActive: { color: Colors.blueAccent, fontWeight: "700" },
 });

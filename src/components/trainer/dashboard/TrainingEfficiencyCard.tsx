@@ -41,7 +41,7 @@ export default function TrainingEfficiencyCard({
               cx={size / 2}
               cy={size / 2}
               r={radius}
-              stroke="#0066FF"
+              stroke={Colors.brandBlue}
               strokeWidth={strokeWidth}
               strokeDasharray={`${blueDash} ${circumference}`}
               strokeDashoffset={0}
@@ -112,7 +112,7 @@ export default function TrainingEfficiencyCard({
           <View style={[styles.statItem, { marginTop: 12 }]}>
             <View style={styles.statHeader}>
               <View style={styles.statLabelRow}>
-                <View style={[styles.dot, { backgroundColor: "#0066FF" }]} />
+                <View style={[styles.dot, { backgroundColor: Colors.brandBlue }]} />
                 <AppText style={styles.statLabel}>Pending</AppText>
               </View>
             </View>
@@ -130,7 +130,7 @@ export default function TrainingEfficiencyCard({
                   styles.progressBarFill,
                   {
                     width: `${pendingPercent}%`,
-                    backgroundColor: "#0066FF",
+                    backgroundColor: Colors.brandBlue,
                   },
                 ]}
               />
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 15,
     marginHorizontal: 10,
     marginTop: 10,
@@ -185,17 +185,17 @@ const styles = StyleSheet.create({
   centerValue: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
   },
   centerLabel: {
     fontSize: 9,
     fontWeight: "600",
-    color: "#111827",
+    color: Colors.black,
   },
   verticalDivider: {
     width: 2,
     height: 80,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: Colors.gray200,
     marginHorizontal: 15,
   },
   statsColumn: {
@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#111827",
+    color: Colors.black,
   },
   valueRow: {
     marginTop: 2,
@@ -240,16 +240,16 @@ const styles = StyleSheet.create({
   pendingValue: {
     fontSize: 14,
     fontWeight: "700",
-    color: "#0066FF",
+    color: Colors.brandBlue,
   },
   pendingPercentText: {
     fontSize: 11,
     fontWeight: "500",
-    color: "#0066FF",
+    color: Colors.brandBlue,
   },
   progressBarTrack: {
     height: 5,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: Colors.gray100,
     borderRadius: 2.5,
     overflow: "hidden",
   },

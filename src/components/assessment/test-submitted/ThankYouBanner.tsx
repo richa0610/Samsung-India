@@ -2,6 +2,7 @@ import { StyleSheet, View } from "react-native";
 
 import SmileIcon from "@/assets/images/svg/smile.svg";
 import AppText from "@/components/ui/AppText";
+import { Colors } from "@/theme/colors";
 
 type ThankYouBannerProps = {
   thankYouText: string;
@@ -17,7 +18,7 @@ export default function ThankYouBanner({ thankYouText }: ThankYouBannerProps) {
         <AppText variant="label" style={styles.thankYouText}>
           Thank you!
         </AppText>
-        <AppText variant="tiny" color="#374151" style={styles.thankYouSubtext}>
+        <AppText variant="tiny" color={Colors.gray700} style={styles.thankYouSubtext}>
           {thankYouText}
         </AppText>
       </View>
@@ -44,7 +45,7 @@ const styles = StyleSheet.create({
     borderRadius: "50%",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1CB07D",
+    backgroundColor: Colors.successTeal,
   },
   thankYouTextWrap: {
     flex: 1,
@@ -52,7 +53,7 @@ const styles = StyleSheet.create({
   },
   thankYouText: {
     fontSize: 13.5,
-    color: "#1CB07D",
+    color: Colors.successTeal,
   },
   thankYouSubtext: {
     fontSize: 11,

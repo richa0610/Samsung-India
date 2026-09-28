@@ -94,5 +94,5 @@ const styles = StyleSheet.create({
   heroTitle: { fontSize: 22 },
   heroSubtitle: { fontSize: 12, marginTop: 3, opacity: 0.9 },
   body: { padding: 16 },
-  divider: { height: 1, backgroundColor: "#E5E7EB", marginTop: 18, marginBottom: 16 },
+  divider: { height: 1, backgroundColor: Colors.gray200, marginTop: 18, marginBottom: 16 },
 });

@@ -75,14 +75,14 @@ const styles = StyleSheet.create({
   button: {
     height: 50,
     borderRadius: 12,
-    backgroundColor: "#006AFF",
+    backgroundColor: Colors.mainColour1,
     alignItems: "center",
     justifyContent: "center",
     ...createShadow({
       x: 0,
       y: 4,
       blur: 10,
-      color: "#006AFF",
+      color: Colors.mainColour1,
       opacity: 0.25,
       elevation: 4,
     }),

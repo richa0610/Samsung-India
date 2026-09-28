@@ -80,7 +80,7 @@ export default function SessionCard({
 
         {/* Location */}
         <View style={styles.locationRow}>
-          <Ionicons name="location" size={13} color="#EF4444" />
+          <Ionicons name="location" size={13} color={Colors.red} />
           <AppText style={styles.locationText} numberOfLines={1}>
             {item.trainingHub || item.state || "New Delhi"}
           </AppText>
@@ -126,25 +126,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRightWidth: 1,
-    borderRightColor: "#F3F4F6",
+    borderRightColor: Colors.gray100,
     paddingRight: 8,
   },
   dayNumber: {
     fontSize: 18,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     lineHeight: 22,
   },
   monthText: {
     fontSize: 9.5,
     fontWeight: "600",
-    color: "#6B7280",
+    color: Colors.gray500,
     letterSpacing: 0.3,
   },
   timeText: {
     fontSize: 10.5,
     fontWeight: "700",
-    color: "#0066FF",
+    color: Colors.brandBlue,
     marginTop: 2,
   },
   detailsColumn: {
@@ -179,12 +179,12 @@ const styles = StyleSheet.create({
   confUidText: {
     fontSize: 9,
     fontWeight: "500",
-    color: "#9CA3AF",
+    color: Colors.gray400,
   },
   title: {
     fontSize: 13.5,
     fontWeight: "700",
-    color: "#111827",
+    color: Colors.black,
     marginTop: 4,
   },
   locationRow: {
@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontSize: 11,
-    color: "#4B5563",
+    color: Colors.gray600,
     fontWeight: "500",
   },
   actionColumn: {
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   },
   batchSizeText: {
     fontSize: 9,
-    color: "#6B7280",
+    color: Colors.gray500,
     marginTop: 4,
     fontWeight: "500",
   },

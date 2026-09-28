@@ -117,18 +117,18 @@ export default function SessionsHeader({
         <View style={styles.searchCard}>
           <AppText style={styles.searchLabel}>Search Sessions</AppText>
           <View style={styles.searchInputRow}>
-            <Ionicons name="search" size={16} color="#9CA3AF" />
+            <Ionicons name="search" size={16} color={Colors.gray400} />
             <TextInput
               style={styles.searchInput}
               placeholder="Search by session, name, type, trainer"
-              placeholderTextColor="#9CA3AF"
+              placeholderTextColor={Colors.gray400}
               value={searchText}
               onChangeText={handleTextChange}
               autoFocus
             />
             {searchText.length > 0 && (
               <Pressable onPress={() => handleTextChange("")} hitSlop={6}>
-                <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+                <Ionicons name="close-circle" size={16} color={Colors.gray400} />
               </Pressable>
             )}
           </View>
@@ -281,7 +281,7 @@ const styles = StyleSheet.create({
   searchLabel: {
     fontSize: 10.5,
     fontWeight: "700",
-    color: "#9CA3AF",
+    color: Colors.gray400,
     letterSpacing: 0.6,
     textTransform: "uppercase",
     marginBottom: 8,
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 8,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     borderRadius: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -299,7 +299,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 13,
-    color: "#111827",
+    color: Colors.black,
     padding: 0,
   },
   tabSegmentContainer: {

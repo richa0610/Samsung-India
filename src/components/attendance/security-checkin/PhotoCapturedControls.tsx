@@ -23,13 +23,13 @@ export default function PhotoCapturedControls({ onRetake, onProceed }: PhotoCapt
             Ensure good lighting, look straight at the camera and remove anything that covers your face.
           </AppText>
         </View>
-        <Ionicons name="chevron-forward" size={16} color="#374151" />
+        <Ionicons name="chevron-forward" size={16} color={Colors.gray700} />
       </View>
 
       <View style={styles.actionsRow}>
         <Pressable style={styles.enabledRetakeButton} onPress={onRetake} accessibilityRole="button" accessibilityLabel="Retake Photo">
-          <Ionicons name="refresh" size={18} color="#374151" />
-          <AppText color="#374151" weight={FontWeight.semiBold} style={styles.buttonText16}>
+          <Ionicons name="refresh" size={18} color={Colors.gray700} />
+          <AppText color={Colors.gray700} weight={FontWeight.semiBold} style={styles.buttonText16}>
             Retake
           </AppText>
         </Pressable>
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: "#10B981",
+    backgroundColor: Colors.statusGreen,
   },
   tipsTextColumn: {
     flex: 1,
@@ -68,11 +68,11 @@ const styles = StyleSheet.create({
   },
   tipsTitle: {
     fontSize: 12,
-    color: "#111827",
+    color: Colors.black,
   },
   tipsSubtitle: {
     fontSize: 10,
-    color: "#4B5563",
+    color: Colors.gray600,
     lineHeight: 14,
   },
   actionsRow: {
@@ -88,7 +88,7 @@ const styles = StyleSheet.create({
     height: 46,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#374151",
+    borderColor: Colors.gray700,
     backgroundColor: Colors.white,
     flexDirection: "row",
     alignItems: "center",

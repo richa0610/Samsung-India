@@ -28,26 +28,26 @@ export default function TraineeMetricsGrid({
     {
       title: "Total Trainings",
       value: totalTrainings,
-      valueColor: "#2563EB",
+      valueColor: Colors.blueAccent,
       iconName: "school" as const,
-      iconColor: "#2563EB",
-      iconBg: "#EFF6FF",
+      iconColor: Colors.blueAccent,
+      iconBg: Colors.blue50,
     },
     {
       title: "Present",
       value: presentCount,
-      valueColor: "#16A34A",
+      valueColor: Colors.success,
       iconName: "calendar-outline" as const,
-      iconColor: "#16A34A",
-      iconBg: "#ECFDF5",
+      iconColor: Colors.success,
+      iconBg: Colors.successBgSoft,
     },
     {
       title: "Absent",
       value: absentCount,
-      valueColor: "#DC2626",
+      valueColor: Colors.danger,
       iconName: "person-remove-outline" as const,
-      iconColor: "#DC2626",
-      iconBg: "#FEF2F2",
+      iconColor: Colors.danger,
+      iconBg: Colors.dangerBgSoft,
     },
     {
       title: "Scheduled",
@@ -96,7 +96,7 @@ export default function TraineeMetricsGrid({
           </AppText>
           <AppText
             variant="tiny"
-            color="#4B5563"
+            color={Colors.gray600}
             weight={FontWeight.medium}
             style={styles.title}
             numberOfLines={1}
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     ...Shadows.card,
   },
   iconCircle: {

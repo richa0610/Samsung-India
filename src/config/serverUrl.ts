@@ -11,8 +11,9 @@ import { File, Paths } from "expo-file-system";
  */
 
 const DEFAULT_HOST = "192.168.29.95";
-export const DEFAULT_API_URL =
-  process.env.EXPO_PUBLIC_API_URL || `http://${DEFAULT_HOST}:8000`;
+export const DEFAULT_API_URL = process.env.EXPO_PUBLIC_API_URL
+  ? normalize(process.env.EXPO_PUBLIC_API_URL)
+  : `http://${DEFAULT_HOST}:8000`;
 
 const FILE_NAME = "server-url.txt";
 
@@ -36,7 +37,7 @@ try {
   const f = storeFile();
   if (f?.exists) {
     const v = f.textSync().trim();
-    if (v) currentUrl = v;
+    if (v) currentUrl = normalize(v);
   }
 } catch {
   // keep the default

@@ -21,21 +21,21 @@ export default function QuickActionsCard({
     {
       title: "Create New Training",
       iconName: "add-circle" as const,
-      color: "#0066FF",
-      bg: "#EFF6FF",
+      color: Colors.brandBlue,
+      bg: Colors.blue50,
       onPress: onCreateTraining,
     },
     {
       title: "Training List",
       iconName: "clipboard" as const,
-      color: "#10B981",
-      bg: "#ECFDF5",
+      color: Colors.statusGreen,
+      bg: Colors.successBgSoft,
       onPress: onTrainingList,
     },
     {
       title: "View Reports",
       iconName: "document-text" as const,
-      color: "#F59E0B",
+      color: Colors.warning,
       bg: "#FFFBEB",
       onPress: onViewReports,
     },
@@ -79,14 +79,14 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 14,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 8,
     ...Shadows.card,
   },
   headerTitle: {
     fontSize: 10.5,
     fontWeight: "700",
-    color: "#111827",
+    color: Colors.black,
     marginBottom: 6,
   },
   actionsList: {
@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#1F2937",
+    color: Colors.gray800,
     flex: 1,
   },
 });

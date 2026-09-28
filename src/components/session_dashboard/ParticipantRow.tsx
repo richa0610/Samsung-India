@@ -18,9 +18,9 @@ type ParticipantRowProps = {
 };
 
 const STATUS_COLORS: Record<ParticipantItem["status"], { bg: string; border: string; text: string }> = {
-  PRESENT: { bg: "#ECFDF5", border: "#A7F3D0", text: "#10B981" },
+  PRESENT: { bg: Colors.successBgSoft, border: "#A7F3D0", text: Colors.statusGreen },
   PENDING: { bg: "#FFFBEB", border: "#FDE68A", text: "#D97706" },
-  ABSENT: { bg: "#FEF2F2", border: "#FECACA", text: "#EF4444" },
+  ABSENT: { bg: Colors.dangerBgSoft, border: "#FECACA", text: Colors.red },
 };
 
 export default function ParticipantRow({
@@ -50,12 +50,12 @@ export default function ParticipantRow({
             styles.typePill,
             {
               backgroundColor: isAssigned ? "#FFFBEB" : Colors.gray50,
-              borderColor: isAssigned ? "#FDE68A" : "#D1D5DB",
+              borderColor: isAssigned ? "#FDE68A" : Colors.gray300,
             },
           ]}
         >
           <AppText
-            style={[styles.typePillText, { color: isAssigned ? "#D97706" : "#6B7280" }]}
+            style={[styles.typePillText, { color: isAssigned ? "#D97706" : Colors.gray500 }]}
             numberOfLines={1}
           >
             {item.attendeeType}
@@ -77,7 +77,7 @@ export default function ParticipantRow({
       <View style={[styles.controlsWrap, { flex: 0.9 }]}>
         {isLocked && (
           <Pressable style={styles.lockedPill} onPress={onShowSuspicious} hitSlop={3}>
-            <Ionicons name="lock-closed" size={9} color="#EF4444" />
+            <Ionicons name="lock-closed" size={9} color={Colors.red} />
             <AppText style={styles.lockedPillText}>
               LOCKED ({item.proctoring!.flags}/{item.proctoring!.maxFlags})
             </AppText>
@@ -95,7 +95,7 @@ export default function ParticipantRow({
             hitSlop={2}
             style={[styles.iconBtn, styles.iconBtnSuccess, !canEdit && styles.iconBtnDisabled]}
           >
-            <Ionicons name="checkmark" size={11} color={canEdit ? "#10B981" : "#9CA3AF"} />
+            <Ionicons name="checkmark" size={11} color={canEdit ? Colors.statusGreen : Colors.gray400} />
           </Pressable>
           <Pressable
             onPress={onReject}
@@ -103,7 +103,7 @@ export default function ParticipantRow({
             hitSlop={2}
             style={[styles.iconBtn, styles.iconBtnDanger, !canEdit && styles.iconBtnDisabled]}
           >
-            <Ionicons name="close" size={11} color={canEdit ? "#EF4444" : "#9CA3AF"} />
+            <Ionicons name="close" size={11} color={canEdit ? Colors.red : Colors.gray400} />
           </Pressable>
         </View>
       </View>
@@ -118,21 +118,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 4,
     borderBottomWidth: 1,
-    borderBottomColor: "#F3F4F6",
+    borderBottomColor: Colors.gray100,
   },
   rowAlt: { backgroundColor: "#FAFAFA" },
   detailsCol: { gap: 1 },
-  name: { fontSize: 8.5, fontWeight: "700", color: "#111827" },
-  empId: { fontSize: 7, color: "#0066FF", fontWeight: "600" },
-  phone: { fontSize: 7, color: "#6B7280" },
+  name: { fontSize: 8.5, fontWeight: "700", color: Colors.black },
+  empId: { fontSize: 7, color: Colors.brandBlue, fontWeight: "600" },
+  phone: { fontSize: 7, color: Colors.gray500 },
   centerCol: { alignItems: "center", paddingHorizontal: 2 },
   typePill: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 3, paddingVertical: 1.5, maxWidth: "100%" },
   typePillText: { fontSize: 6, fontWeight: "700" },
   statusPill: { borderWidth: 1, borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1.5 },
   statusPillText: { fontSize: 6.5, fontWeight: "700" },
   inOutCol: { alignItems: "center", gap: 1 },
-  inText: { fontSize: 6.5, color: "#10B981", fontWeight: "600" },
-  outText: { fontSize: 6.5, color: "#EF4444", fontWeight: "600" },
+  inText: { fontSize: 6.5, color: Colors.statusGreen, fontWeight: "600" },
+  outText: { fontSize: 6.5, color: Colors.red, fontWeight: "600" },
   controlsWrap: { alignItems: "flex-end", gap: 3 },
   controlsRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 1 },
   lockedPill: {
@@ -141,25 +141,25 @@ const styles = StyleSheet.create({
     gap: 3,
     borderWidth: 1,
     borderColor: "#FECACA",
-    backgroundColor: "#FEF2F2",
+    backgroundColor: Colors.dangerBgSoft,
     borderRadius: 5,
     paddingHorizontal: 1,
     paddingVertical: 2,
     marginRight: -1,
   },
-  lockedPillText: { fontSize: 6, fontWeight: "800", color: "#EF4444" },
+  lockedPillText: { fontSize: 6, fontWeight: "800", color: Colors.red },
   iconBtn: {
     width: 17,
     height: 17,
     borderRadius: 4,
     borderWidth: 1,
-    borderColor: "#E5E7EB",
+    borderColor: Colors.gray200,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.white,
   },
-  iconBtnSuccess: { backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" },
-  iconBtnDanger: { backgroundColor: "#FEF2F2", borderColor: "#FECACA" },
+  iconBtnSuccess: { backgroundColor: Colors.successBgSoft, borderColor: "#A7F3D0" },
+  iconBtnDanger: { backgroundColor: Colors.dangerBgSoft, borderColor: "#FECACA" },
   iconBtnWarning: { backgroundColor: "#FEF3C7", borderColor: "#FDE68A" },
-  iconBtnDisabled: { backgroundColor: "#F3F4F6", borderColor: "#E5E7EB", opacity: 0.6 },
+  iconBtnDisabled: { backgroundColor: Colors.gray100, borderColor: Colors.gray200, opacity: 0.6 },
 });

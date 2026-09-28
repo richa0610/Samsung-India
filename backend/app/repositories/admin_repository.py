@@ -29,8 +29,11 @@ def get_agency_by_username_and_role(db: Session, username: str, role: str) -> Ag
     return db.query(AgencyTeam).filter(AgencyTeam.username == username, AgencyTeam.role == role).first()
 
 
-def list_admin_trainers(db: Session) -> list[Admin]:
-    return db.query(Admin).filter(Admin.role == "trainer").all()
+def list_admin_trainers(db: Session, company: str | None = None) -> list[Admin]:
+    query = db.query(Admin).filter(Admin.role == "trainer")
+    if company:
+        query = query.filter(func.lower(Admin.company) == company.strip().lower())
+    return query.all()
 
 
 def list_agency_trainers(db: Session, company: str | None = None) -> list[AgencyTeam]:

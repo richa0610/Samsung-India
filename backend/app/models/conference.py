@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, DateTime, Integer, Numeric, String, Text, text
+from sqlalchemy import BigInteger, Column, DateTime, Index, Integer, Numeric, String, Text, text
 from sqlalchemy.sql import func
 
 from app.database.connection import Base
@@ -10,6 +10,19 @@ class Conference(Base):
     "Add New Training" registration form currently use."""
 
     __tablename__ = "conference"
+
+    # Indexes for the admin Training / Pending lists and dashboard, which filter
+    # and sort on these columns. (Existing databases get them from
+    # database/schema_sync.py at startup; new ones from create_all().)
+    __table_args__ = (
+        Index("ix_conference_date", "conferenceDate"),
+        Index("ix_conference_timestamp", "timestamp"),
+        Index("ix_conference_status", "conferenceStatus"),
+        Index("ix_conference_approval", "status"),
+        Index("ix_conference_company", "company"),
+        Index("ix_conference_zone", "zone"),
+        Index("ix_conference_trainer", "trainerEmployeeId"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     conferenceUid = Column(String(100), unique=True)

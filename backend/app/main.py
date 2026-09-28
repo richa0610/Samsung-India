@@ -3,6 +3,7 @@ import logging
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
@@ -11,7 +12,7 @@ from app.core.config import settings
 from app.core.media import MEDIA_ROOT
 from app.database.common import common_engine
 from app.database.connection import CommonBase, TenantBase
-from app.database.schema_sync import sync_missing_columns
+from app.database.schema_sync import sync_missing_columns, sync_missing_indexes
 from app.database.tenant import tenant_manager
 
 # Import all models
@@ -29,25 +30,29 @@ from app.routers.ws import router as ws_router
 
 logger = logging.getLogger("main")
 
-# 1. Initialize Common DB schema (admin, system_modules, tenants, etc.)
-try:
-    CommonBase.metadata.create_all(bind=common_engine)
-    # create_all() only creates missing TABLES - a column added to a model
-    # after its table already exists elsewhere (e.g. Tenant.
-    # live_proctoring_enabled, added after `tenants` already existed on a
-    # live deployment) never appears there on its own. This stack has no
-    # migration framework, so this best-effort additive sync is it.
-    sync_missing_columns(common_engine, CommonBase)
-except Exception as e:
-    logger.warning("Could not automatically create Common DB tables on startup: %s", e)
+# Startup DB initialisation. Skipped entirely under TESTING (see core/config.py):
+# importing this module in a test must never run DDL against a real database.
+if not settings.TESTING:
+    # 1. Initialize Common DB schema (admin, system_modules, tenants, etc.)
+    try:
+        CommonBase.metadata.create_all(bind=common_engine)
+        # create_all() only creates missing TABLES - a column added to a model
+        # after its table already exists elsewhere (e.g. Tenant.
+        # live_proctoring_enabled, added after `tenants` already existed on a
+        # live deployment) never appears there on its own. This stack has no
+        # migration framework, so this best-effort additive sync is it.
+        sync_missing_columns(common_engine, CommonBase)
+    except Exception as e:
+        logger.warning("Could not automatically create Common DB tables on startup: %s", e)
 
-# 2. Initialize default tenant schema
-try:
-    default_engine = tenant_manager.get_engine(settings.DEFAULT_TENANT_ID)
-    TenantBase.metadata.create_all(bind=default_engine)
-    sync_missing_columns(default_engine, TenantBase)
-except Exception as e:
-    logger.warning("Could not automatically create default tenant tables on startup: %s", e)
+    # 2. Initialize default tenant schema
+    try:
+        default_engine = tenant_manager.get_engine(settings.DEFAULT_TENANT_ID)
+        TenantBase.metadata.create_all(bind=default_engine)
+        sync_missing_columns(default_engine, TenantBase)
+        sync_missing_indexes(default_engine, TenantBase)
+    except Exception as e:
+        logger.warning("Could not automatically create default tenant tables on startup: %s", e)
 
 app = FastAPI(
     title="Samsung India API (Multi-Tenant)",
@@ -127,6 +132,8 @@ async def _db_keepalive_loop() -> None:
 @app.on_event("startup")
 async def on_startup():
     global _keepalive_task
+    if settings.TESTING:
+        return
     _keepalive_task = asyncio.create_task(_db_keepalive_loop())
 
 
@@ -149,6 +156,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class _ApiGZipMiddleware(GZipMiddleware):
+    """gzip for API JSON (the admin lists are large and compress ~5-10x), but
+    not for /media: those are already-compressed photos / PDFs, so compressing
+    them again only burns CPU."""
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope.get("path", "").startswith("/media"):
+            await self.app(scope, receive, send)
+            return
+        await super().__call__(scope, receive, send)
+
+
+app.add_middleware(_ApiGZipMiddleware, minimum_size=1024)
 
 app.include_router(trainee_router)
 app.include_router(session_router)

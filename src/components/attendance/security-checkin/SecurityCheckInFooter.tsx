@@ -4,6 +4,7 @@ import { StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 import { Breakpoints } from "@/theme/breakpoints";
 import { FontWeight } from "@/theme/fontWeight";
+import { Colors } from "@/theme/colors";
 
 type SecurityCheckInFooterProps = {
   hasPhoto: boolean;
@@ -14,7 +15,7 @@ export default function SecurityCheckInFooter({ hasPhoto }: SecurityCheckInFoote
     return (
       <View style={styles.blueAlertBanner}>
         <View style={styles.blueShieldIconWrap}>
-          <Ionicons name="shield-checkmark" size={18} color="#0066FF" />
+          <Ionicons name="shield-checkmark" size={18} color={Colors.brandBlue} />
         </View>
         <View style={styles.alertTextColumn}>
           <AppText style={styles.alertTitle} weight={FontWeight.semiBold}>
@@ -22,7 +23,7 @@ export default function SecurityCheckInFooter({ hasPhoto }: SecurityCheckInFoote
           </AppText>
           <AppText style={styles.alertSubtitle}>Good lighting helps verification.</AppText>
         </View>
-        <Ionicons name="chevron-forward" size={18} color="#374151" />
+        <Ionicons name="chevron-forward" size={18} color={Colors.gray700} />
       </View>
     );
   }
@@ -93,6 +94,6 @@ const styles = StyleSheet.create({
   },
   encryptionText: {
     fontSize: 12,
-    color: "#4B5563",
+    color: Colors.gray600,
   },
 });

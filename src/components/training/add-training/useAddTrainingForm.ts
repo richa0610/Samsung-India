@@ -25,8 +25,6 @@ import {
   updateTraining,
 } from "@/api/training";
 import {
-  DEFAULT_CATEGORY_OPTIONS,
-  DEFAULT_QUESTION_SET_OPTIONS,
   MODULE_LABELS,
   ModuleKey,
 } from "./constants";
@@ -143,7 +141,17 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const [assessmentSuites, setAssessmentSuites] = useState<AssessmentSuiteOut[]>([]);
+  // Question sets per module - each list is fetched already filtered by the server.
+  const [suitesByModule, setSuitesByModule] = useState<Record<ModuleKey, AssessmentSuiteOut[]>>({
+    standardTest: [],
+    liveQuiz: [],
+    survey: [],
+  });
+  const assessmentSuites = useMemo(() => {
+    const byUid = new Map<string, AssessmentSuiteOut>();
+    Object.values(suitesByModule).flat().forEach((suite) => byUid.set(suite.assessmentSuiteUid, suite));
+    return Array.from(byUid.values());
+  }, [suitesByModule]);
   const [trainerOptions, setTrainerOptions] = useState<SelectOption[]>([]);
   const [checklistOptions, setChecklistOptions] = useState<SelectOption[]>([]);
   const [venueOptions, setVenueOptions] = useState<SelectOption[]>([]);
@@ -162,9 +170,11 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
 
   useEffect(() => {
     if (!adminToken) return;
-    fetchAssessmentSuites(adminToken)
-      .then(setAssessmentSuites)
-      .catch(() => setAssessmentSuites([]));
+    (["standardTest", "liveQuiz", "survey"] as ModuleKey[]).forEach((key) => {
+      fetchAssessmentSuites(adminToken, key)
+        .then((suites) => setSuitesByModule((prev) => ({ ...prev, [key]: suites })))
+        .catch(() => setSuitesByModule((prev) => ({ ...prev, [key]: [] })));
+    });
     fetchTrainers(adminToken)
       .then(setTrainerOptions)
       .catch(() => setTrainerOptions([]));
@@ -338,21 +348,17 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `editing` is a fresh object each render; its conferenceUid is the real trigger
   }, [editing?.conferenceUid, adminToken]);
 
-  const categoryOptions: SelectOption[] = useMemo(() => {
+  // Only real, approved question sets, already filtered per module by the server.
+  const categoryOptionsFor = (key: ModuleKey): SelectOption[] => {
     const merged = new Map<string, SelectOption>();
-    DEFAULT_CATEGORY_OPTIONS.forEach((option) => merged.set(option.value, option));
-    assessmentSuites.forEach((suite) => merged.set(suite.category, { label: suite.category, value: suite.category }));
-    return Array.from(merged.values());
-  }, [assessmentSuites]);
-
-  const questionSetOptionsFor = (category?: string): SelectOption[] => {
-    const merged = new Map<string, SelectOption>();
-    (DEFAULT_QUESTION_SET_OPTIONS[category ?? ""] ?? []).forEach((option) => merged.set(option.value, option));
-    assessmentSuites
-      .filter((suite) => suite.category === category)
-      .forEach((suite) => merged.set(suite.assessmentSuiteUid, { label: suite.name, value: suite.assessmentSuiteUid }));
+    suitesByModule[key].forEach((suite) => merged.set(suite.category, { label: suite.category, value: suite.category }));
     return Array.from(merged.values());
   };
+
+  const questionSetOptionsFor = (key: ModuleKey, category?: string): SelectOption[] =>
+    suitesByModule[key]
+      .filter((suite) => suite.category === category)
+      .map((suite) => ({ label: suite.name, value: suite.assessmentSuiteUid }));
 
   const selectedState = useMemo(() => STATES.find((item) => item.value === stateValue), [stateValue]);
 
@@ -601,7 +607,7 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
 
     modules, toggleModule, updateModule,
     orderedFlowItems,
-    categoryOptions, questionSetOptionsFor, assessmentSuites,
+    categoryOptionsFor, questionSetOptionsFor, assessmentSuites,
     checklistOptions,
 
     checklist, setChecklist,

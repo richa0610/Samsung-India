@@ -34,7 +34,7 @@ export default function SessionRuntimeCard({
       <View style={styles.runtimeCard}>
         <View style={styles.runtimeLeft}>
           <View style={styles.runtimeHeader}>
-            <Ionicons name="time-outline" size={16} color="#0066FF" />
+            <Ionicons name="time-outline" size={16} color={Colors.brandBlue} />
             <AppText style={styles.runtimeTitle}>ACTUAL SESSION RUNTIME</AppText>
           </View>
           <AppText style={styles.runtimeValue}>{actualRuntime}</AppText>
@@ -51,7 +51,7 @@ export default function SessionRuntimeCard({
                 cx={donutSize / 2}
                 cy={donutSize / 2}
                 r={radius}
-                stroke="#EFF6FF"
+                stroke={Colors.blue50}
                 strokeWidth={strokeWidth}
                 fill="none"
               />
@@ -59,7 +59,7 @@ export default function SessionRuntimeCard({
                 cx={donutSize / 2}
                 cy={donutSize / 2}
                 r={radius}
-                stroke="#0066FF"
+                stroke={Colors.brandBlue}
                 strokeWidth={strokeWidth}
                 strokeDasharray={`${circumference} ${circumference}`}
                 strokeDashoffset={strokeDashoffset}
@@ -90,7 +90,7 @@ export default function SessionRuntimeCard({
           <Ionicons
             name="checkbox-outline"
             size={17}
-            color="#10B981"
+            color={Colors.statusGreen}
           />
           <AppText style={styles.completionTitle}>MODULE COMPLETION</AppText>
         </View>
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 12,
     ...Shadows.card,
   },
@@ -138,13 +138,13 @@ const styles = StyleSheet.create({
   runtimeTitle: {
     fontSize: 9.5,
     fontWeight: "800",
-    color: "#4B5563",
+    color: Colors.gray600,
     letterSpacing: 0.3,
   },
   runtimeValue: {
     fontSize: 16,
     fontWeight: "800",
-    color: "#111827",
+    color: Colors.black,
     marginVertical: 3,
   },
   assignedConsumedRow: {
@@ -154,7 +154,7 @@ const styles = StyleSheet.create({
   },
   subTimeText: {
     fontSize: 9,
-    color: "#6B7280",
+    color: Colors.gray500,
     fontWeight: "500",
   },
   runtimeRight: {
@@ -176,32 +176,32 @@ const styles = StyleSheet.create({
   donutPercentText: {
     fontSize: 11,
     fontWeight: "800",
-    color: "#0066FF",
+    color: Colors.brandBlue,
   },
   timeUsedLabel: {
     fontSize: 7.5,
-    color: "#6B7280",
+    color: Colors.gray500,
     fontWeight: "700",
     marginTop: 3,
   },
   timeProgressBar: {
     width: "100%",
     height: 4.5,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: Colors.gray100,
     borderRadius: 2.5,
     marginTop: 2,
     overflow: "hidden",
   },
   timeProgressFill: {
     height: "100%",
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
     borderRadius: 2.5,
   },
   completionCard: {
     backgroundColor: Colors.white,
     borderRadius: 16,
     borderWidth: 1.2,
-    borderColor: "#EAECF0",
+    borderColor: Colors.borderLight,
     padding: 12,
     ...Shadows.card,
   },
@@ -213,26 +213,26 @@ const styles = StyleSheet.create({
   completionTitle: {
     fontSize: 9.5,
     fontWeight: "800",
-    color: "#4B5563",
+    color: Colors.gray600,
     letterSpacing: 0.3,
   },
   completionPercent: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#10B981",
+    color: Colors.statusGreen,
     marginTop: 3,
   },
   completionProgressBar: {
     width: "100%",
     height: 5,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: Colors.gray100,
     borderRadius: 2.5,
     marginTop: 4,
     overflow: "hidden",
   },
   completionProgressFill: {
     height: "100%",
-    backgroundColor: "#10B981",
+    backgroundColor: Colors.statusGreen,
     borderRadius: 2.5,
   },
 });

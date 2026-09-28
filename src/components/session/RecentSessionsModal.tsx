@@ -88,7 +88,7 @@ export default function RecentSessionsModal({ visible, onClose, token }: Props) 
                   </View>
                 )}
                 {item.score && (
-                  <View style={[styles.badge, { backgroundColor: item.passed ? "#DCFCE7" : "#FEE2E2" }]}>
+                  <View style={[styles.badge, { backgroundColor: item.passed ? "#DCFCE7" : Colors.dangerBg }]}>
                     <AppText style={[styles.badgeText, { color: item.passed ? Colors.success : Colors.danger }]}>
                       {item.score}
                     </AppText>

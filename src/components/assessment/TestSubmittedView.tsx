@@ -43,7 +43,7 @@ export default function TestSubmittedView({
             <AppText variant="h2" weight={FontWeight.medium} align="center" style={styles.title}>
               {title}
             </AppText>
-            <AppText variant="caption" color="#6B7280" align="center" style={styles.subtitle}>
+            <AppText variant="caption" color={Colors.gray500} align="center" style={styles.subtitle}>
               {"Your assessment has been submitted\nand recorded successfully."}
             </AppText>
           </View>
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 21,
     marginTop: 6,
-    color: "#111827",
+    color: Colors.black,
     letterSpacing: -0.3,
   },
   subtitle: {

@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   },
   applyFilterButton: {
     height: 44,
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
     borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",

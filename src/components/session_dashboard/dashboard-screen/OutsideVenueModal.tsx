@@ -6,6 +6,7 @@ import AppInput from "@/components/ui/AppInput";
 import AppModal from "@/components/ui/AppModal";
 import AppText from "@/components/ui/AppText";
 import { OutsideVenuePrompt } from "./useSessionDashboardScreen";
+import { Colors } from "@/theme/colors";
 
 type OutsideVenueModalProps = {
   prompt: OutsideVenuePrompt | null;
@@ -51,7 +52,7 @@ export default function OutsideVenueModal({ prompt, onCancel, onSave }: OutsideV
   return (
     <AppModal visible={!!prompt} onClose={onCancel} position="center" contentStyle={styles.sheet}>
       <View style={styles.header}>
-        <Ionicons name="location" size={18} color="#F59E0B" />
+        <Ionicons name="location" size={18} color={Colors.warning} />
         <AppText style={styles.title}>You&apos;re not at the venue</AppText>
       </View>
       {locked ? (
@@ -85,11 +86,11 @@ export default function OutsideVenueModal({ prompt, onCancel, onSave }: OutsideV
         </View>
       ) : (
         <>
-          <AppInput compact label="Latitude" labelColor="#F3F4F6" value={lat} onChangeText={setLat} keyboardType="numbers-and-punctuation" placeholder="e.g. 28.5721" />
-          <AppInput compact label="Longitude" labelColor="#F3F4F6" value={lng} onChangeText={setLng} keyboardType="numbers-and-punctuation" placeholder="e.g. 77.3210" />
+          <AppInput compact label="Latitude" labelColor={Colors.gray100} value={lat} onChangeText={setLat} keyboardType="numbers-and-punctuation" placeholder="e.g. 28.5721" />
+          <AppInput compact label="Longitude" labelColor={Colors.gray100} value={lng} onChangeText={setLng} keyboardType="numbers-and-punctuation" placeholder="e.g. 77.3210" />
           {prompt?.trainerCoords && (
             <Pressable style={styles.useLocation} onPress={useMyLocation} hitSlop={6}>
-              <Ionicons name="navigate" size={13} color="#2563EB" />
+              <Ionicons name="navigate" size={13} color={Colors.blueAccent} />
               <AppText style={styles.useLocationText}>Use my current location</AppText>
             </Pressable>
           )}
@@ -112,12 +113,12 @@ export default function OutsideVenueModal({ prompt, onCancel, onSave }: OutsideV
 const styles = StyleSheet.create({
   sheet: { backgroundColor: "#1F2530", borderRadius: 12, padding: 18, width: "88%" },
   header: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
-  title: { flex: 1, fontSize: 15, fontWeight: "800", color: "#F3F4F6" },
-  body: { fontSize: 12, color: "#D1D5DB", lineHeight: 18, marginBottom: 16 },
+  title: { flex: 1, fontSize: 15, fontWeight: "800", color: Colors.gray100 },
+  body: { fontSize: 12, color: Colors.gray300, lineHeight: 18, marginBottom: 16 },
   actionsRow: { flexDirection: "row", justifyContent: "flex-end", gap: 22, marginTop: 16 },
-  secondaryText: { fontSize: 13, color: "#9CA3AF", fontWeight: "600" },
-  primaryText: { fontSize: 13, color: "#60A5FA", fontWeight: "800" },
+  secondaryText: { fontSize: 13, color: Colors.gray400, fontWeight: "600" },
+  primaryText: { fontSize: 13, color: Colors.blue400, fontWeight: "800" },
   disabled: { opacity: 0.4 },
   useLocation: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
-  useLocationText: { fontSize: 12, color: "#60A5FA", fontWeight: "600" },
+  useLocationText: { fontSize: 12, color: Colors.blue400, fontWeight: "600" },
 });

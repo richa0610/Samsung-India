@@ -51,7 +51,7 @@ export function buildSubmissionRows({
       label: "Total Questions",
       value: String(questions.length),
       icon: "help-circle",
-      iconColor: "#F59E0B",
+      iconColor: Colors.warning,
       iconBg: "#FFF3D6",
     },
     {

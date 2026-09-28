@@ -1,19 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 
 import AppText from "@/components/ui/AppText";
+import MediaImage from "@/components/ui/MediaImage";
 import ScreenBanner from "@/components/ui/ScreenBanner";
 import { Colors } from "@/theme/colors";
 import { FontWeight } from "@/theme/fontWeight";
 import { Shadows } from "@/theme/shadows";
-import { resolveMediaUrl } from "@/utils/media";
 
 type AdminDashboardHeaderProps = {
   adminName?: string;
   companyId?: string | null;
   avatarUrl?: string | null;
+  /** Tapping the avatar - the admin picks a new profile photo. */
   onOpenProfile?: () => void;
+  uploadingPhoto?: boolean;
   onLogout: () => void;
 };
 
@@ -29,10 +31,9 @@ export default function AdminDashboardHeader({
   companyId,
   avatarUrl,
   onOpenProfile,
+  uploadingPhoto = false,
   onLogout,
 }: AdminDashboardHeaderProps) {
-  const resolvedAvatarUri = resolveMediaUrl(avatarUrl);
-
   return (
     <ScreenBanner backgroundColor={Colors.mainColour1} style={styles.banner}>
       <View style={styles.decorLarge} pointerEvents="none" />
@@ -44,17 +45,36 @@ export default function AdminDashboardHeader({
             onPress={onOpenProfile}
             hitSlop={6}
             accessibilityRole="button"
-            accessibilityLabel="Account settings"
+            accessibilityLabel="Change profile photo"
           >
-            <Image
-              source={
-                resolvedAvatarUri
-                  ? { uri: resolvedAvatarUri }
-                  : require("@/assets/images/Icons/face_icon.png")
-              }
-              style={styles.avatarImage}
-              contentFit="cover"
-            />
+            {avatarUrl ? (
+              <MediaImage
+                path={avatarUrl}
+                style={styles.avatarImage}
+                contentFit="cover"
+                fallback={
+                  <Image
+                    source={require("@/assets/images/Icons/face_icon.png")}
+                    style={styles.avatarImage}
+                    contentFit="cover"
+                  />
+                }
+              />
+            ) : (
+              <Image
+                source={require("@/assets/images/Icons/face_icon.png")}
+                style={styles.avatarImage}
+                contentFit="cover"
+              />
+            )}
+            {uploadingPhoto && (
+              <View style={styles.uploadOverlay}>
+                <ActivityIndicator color={Colors.white} />
+              </View>
+            )}
+            <View style={styles.cameraBadge}>
+              <Ionicons name="camera" size={11} color={Colors.mainColour1} />
+            </View>
             <View style={styles.avatarOnlineBadge} />
           </Pressable>
 
@@ -157,6 +177,25 @@ const styles = StyleSheet.create({
     backgroundColor: "#DCEBFE",
     borderWidth: 2.5,
     borderColor: "rgba(255,255,255,0.85)",
+  },
+  uploadOverlay: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: 30,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cameraBadge: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: Colors.white,
+    alignItems: "center",
+    justifyContent: "center",
+    ...Shadows.card,
   },
   avatarOnlineBadge: {
     position: "absolute",

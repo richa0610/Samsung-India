@@ -23,6 +23,10 @@ class ConferenceFilters:
     regions: list[str] = field(default_factory=list)
     session_types: list[str] = field(default_factory=list)
     training_types: list[str] = field(default_factory=list)
+    # Mandatory identity scope (the caller's own `company`) - set server-side
+    # by data_scope_service.apply_identity_scope, never from a query param, so
+    # it can't be widened by anything the client sends. None = unrestricted.
+    company: Optional[str] = None
 
     @property
     def active(self) -> bool:
@@ -53,6 +57,8 @@ class ConferenceFilters:
         if self.session_types and norm(conference.sessionType) not in self.session_types:
             return False
         if self.training_types and norm(conference.trainingType) not in self.training_types:
+            return False
+        if self.company and norm(conference.company) != norm(self.company):
             return False
         return True
 

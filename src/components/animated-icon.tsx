@@ -6,6 +6,7 @@ import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
 import { SPLASH_LOGO_ASPECT_RATIO, SPLASH_LOGO_WIDTH } from '@/config/splash';
+import { Colors } from "@/theme/colors";
 
 const INITIAL_SCALE_FACTOR = Dimensions.get('screen').height / 90;
 const DURATION = 600;
@@ -61,9 +62,11 @@ export function AnimatedSplashOverlay() {
       onLayout={() => {
         // Hide the OS splash, then hold the TOPS branding a beat before the
         // fade-out so it actually registers instead of flashing past.
-        SplashScreen.hideAsync().finally(() => {
-          setTimeout(() => setAnimate(true), BRAND_HOLD_MS);
-        });
+        SplashScreen.hideAsync()
+          .catch(() => {})
+          .finally(() => {
+            setTimeout(() => setAnimate(true), BRAND_HOLD_MS);
+          });
       }}
       style={styles.splashOverlay}>
       {image}
@@ -152,7 +155,7 @@ const styles = StyleSheet.create({
   },
   splashOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: Colors.white,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,

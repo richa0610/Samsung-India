@@ -52,13 +52,13 @@ export default function ProfileHeader({ trainee, uploading, sessionPillLabel, on
         </View>
 
         <Pressable style={styles.powerButton} onPress={onLogout} accessibilityRole="button" accessibilityLabel="Logout">
-          <Ionicons name="power" size={24} color="#0066FF" />
+          <Ionicons name="power" size={24} color={Colors.brandBlue} />
         </Pressable>
       </View>
 
       <View style={styles.sessionPill}>
-        <Calendar width={13} height={13} color="#0066FF" />
-        <AppText style={styles.sessionPillText} color="#0066FF" weight={FontWeight.bold}>
+        <Calendar width={13} height={13} color={Colors.brandBlue} />
+        <AppText style={styles.sessionPillText} color={Colors.brandBlue} weight={FontWeight.bold}>
           {sessionPillLabel}
         </AppText>
       </View>
@@ -68,7 +68,7 @@ export default function ProfileHeader({ trainee, uploading, sessionPillLabel, on
 
 const styles = StyleSheet.create({
   header: {
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 22,
@@ -92,7 +92,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     backgroundColor: "#22C55E",
     borderWidth: 2,
-    borderColor: "#0066FF",
+    borderColor: Colors.brandBlue,
   },
   uploadingOverlay: {
     position: "absolute",

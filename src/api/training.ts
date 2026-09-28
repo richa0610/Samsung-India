@@ -253,15 +253,78 @@ export function createTraining(token: string, payload: TrainingCreatePayload) {
   });
 }
 
+export type TrainingPage = {
+  items: TrainingAgendaItem[];
+  /** Opaque marker for "the rows after this page"; null on the last page. */
+  nextCursor: string | null;
+  /** All rows matching the filter / search - only sent with page 1. */
+  total: number | null;
+};
+
+/** Server sort keys the paged list understands (see GET /admin/trainings/page). */
+export type TrainingSortKey =
+  | "timestamp"
+  | "conferenceDate"
+  | "conferenceTime"
+  | "conferenceUid"
+  | "trainerName"
+  | "zone"
+  | "sessionType"
+  | "trainingType"
+  | "trainingHub"
+  | "state"
+  | "district"
+  | "conferenceStatus";
+
+/** One page (default 50) of the admin org-wide Training / Pending list. The
+ *  server does the filtering, searching, sorting and paging. */
+export function fetchTrainingsPage(
+  token: string,
+  options: {
+    approval: "pending" | "reviewed";
+    filters?: AdminFilters;
+    q?: string;
+    sort?: TrainingSortKey;
+    dir?: "asc" | "desc";
+    /** "The rows after this one" - used to walk every page for export. */
+    cursor?: string | null;
+    /** 1-based page number - jump straight to a numbered page. */
+    page?: number;
+    limit?: number;
+  },
+) {
+  const params = new URLSearchParams();
+  params.set("approval", options.approval);
+  if (options.page && options.page > 1) params.set("page", String(options.page));
+  if (options.q?.trim()) params.set("q", options.q.trim());
+  if (options.sort) params.set("sort", options.sort);
+  if (options.dir) params.set("dir", options.dir);
+  if (options.cursor) params.set("cursor", options.cursor);
+  if (options.limit) params.set("limit", String(options.limit));
+  for (const [key, value] of adminFilterParams(options.filters)) params.set(key, value);
+  return apiRequest<TrainingPage>(`/admin/trainings/page?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export function fetchTrainerAgenda(
   token: string,
-  range?: { start?: string; end?: string; all?: boolean; org?: boolean; filters?: AdminFilters },
+  range?: {
+    start?: string;
+    end?: string;
+    all?: boolean;
+    org?: boolean;
+    /** Org view only: "pending" = awaiting review, "reviewed" = approved or rejected (filtered on the server). */
+    approval?: "pending" | "reviewed";
+    filters?: AdminFilters;
+  },
 ) {
   const params = new URLSearchParams();
   if (range?.start) params.set("start", range.start);
   if (range?.end) params.set("end", range.end);
   if (range?.all) params.set("all_sessions", "true");
   if (range?.org) params.set("org", "true");
+  if (range?.org && range.approval) params.set("approval", range.approval);
   for (const [key, value] of adminFilterParams(range?.filters)) params.set(key, value);
   const query = params.toString();
   return apiRequest<TrainerAgendaResponse>(`/admin/trainings${query ? `?${query}` : ""}`, {
@@ -373,6 +436,7 @@ export function endTraining(
   conferenceUid: string,
   photo: UploadFile,
   attendanceSheet: UploadFile,
+  totalPax: number,
 ) {
   const formData = new FormData();
   formData.append("photo", { uri: photo.uri, name: photo.name, type: photo.type } as unknown as Blob);
@@ -380,6 +444,7 @@ export function endTraining(
     "attendanceSheet",
     { uri: attendanceSheet.uri, name: attendanceSheet.name, type: attendanceSheet.type } as unknown as Blob,
   );
+  formData.append("totalPax", String(totalPax));
   return apiUpload<TrainingOut>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/end`, formData, token);
 }
 
@@ -491,8 +556,13 @@ export function unlockProctoring(
   );
 }
 
-export function fetchAssessmentSuites(token: string) {
-  return apiRequest<AssessmentSuiteOut[]>("/admin/assessment-suites", {
+export type AssessmentSuiteModule = "standardTest" | "liveQuiz" | "survey";
+
+/** Approved question sets; with `module`, only the ones that module can use
+ *  (filtered server-side on `assessmentsuite.assessment_type`). */
+export function fetchAssessmentSuites(token: string, module?: AssessmentSuiteModule) {
+  const query = module ? `?module=${module}` : "";
+  return apiRequest<AssessmentSuiteOut[]>(`/admin/assessment-suites${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

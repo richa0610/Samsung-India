@@ -10,7 +10,6 @@ scores are computed once, when the quiz finishes.
 
 import json
 import time
-from datetime import datetime
 from typing import Optional
 
 from fastapi import BackgroundTasks
@@ -34,7 +33,9 @@ from app.repositories import (
     conference_repository,
     trainee_repository,
 )
+from app.services.access_service import resolve_scope
 from app.routers.ws import manager as ws_manager
+from app.utils.date_utils import utc_now
 from app.schemas.session import (
     LiveAnswerRequest,
     LiveAnswerResult,
@@ -175,10 +176,22 @@ def build_live_studio(db: Session, conference: Conference) -> Optional[LiveStudi
 
 # --- Trainer: broadcast console actions -------------------------------------
 
-def _owned_live_conference(db: Session, admin: Admin, conference_uid: str) -> Conference:
-    conference = conference_repository.get_owned_by_trainer(db, admin.username, conference_uid)
-    if not conference:
-        raise not_found("Training not found")
+def _owned_live_conference(
+    db: Session, admin: Admin, conference_uid: str, common_db: Session = None, tenant_id: str = None
+) -> Conference:
+    """Same access rule as training_service._get_owned_conference: the assigned trainer, or
+    (per the Phase C access grants) an admin-table account whose scope covers this conference."""
+    if getattr(admin, "role", None) == "admin":
+        conference = conference_repository.get_by_uid(db, conference_uid)
+        if not conference:
+            raise not_found("Training not found")
+        scope = resolve_scope(common_db, admin, tenant_id) if common_db is not None else None
+        if scope is None or not scope.allows_row(conference.company, conference.zone, conference.region):
+            raise not_found("Training not found")
+    else:
+        conference = conference_repository.get_owned_by_trainer(db, admin.username, conference_uid)
+        if not conference:
+            raise not_found("Training not found")
     if conference.conferenceStatus != "Ongoing":
         raise conflict("Session is not currently running")
     if conference.activeModuleId != "LIVE_QUIZ":
@@ -186,21 +199,27 @@ def _owned_live_conference(db: Session, admin: Admin, conference_uid: str) -> Co
     return conference
 
 
-def _nudge(background_tasks: BackgroundTasks, conference_uid: str) -> None:
-    background_tasks.add_task(ws_manager.send_to_room, conference_uid, {"type": "live_quiz"})
+def _nudge(background_tasks: BackgroundTasks, conference_uid: str, tenant_id: str = None) -> None:
+    background_tasks.add_task(ws_manager.send_to_room, tenant_id, conference_uid, {"type": "live_quiz"})
 
 
-def _dashboard(db: Session, admin: Admin, conference_uid: str):
+def _dashboard(db: Session, admin: Admin, conference_uid: str, common_db: Session = None, tenant_id: str = None):
     # Lazy import - training_service imports this module at load time.
     from app.services import training_service
 
-    return training_service.get_session_dashboard(db, admin, conference_uid)
+    return training_service.get_session_dashboard(db, admin, conference_uid, common_db, tenant_id)
 
 
 def broadcast_question(
-    db: Session, admin: Admin, conference_uid: str, question_id: int, background_tasks: BackgroundTasks
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    question_id: int,
+    background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
 ):
-    conference = _owned_live_conference(db, admin, conference_uid)
+    conference = _owned_live_conference(db, admin, conference_uid, common_db, tenant_id)
     suite_uid = live_quiz_suite_uid(conference)
     question = assessment_repository.get_question(db, question_id)
     if not question or question.assessmentSuiteUid != suite_uid:
@@ -213,17 +232,24 @@ def broadcast_question(
     # over from whatever question was live before it.
     conference.liveTimerRemainingMs = None
     conference_repository.save(db, conference)
-    _nudge(background_tasks, conference_uid)
-    return _dashboard(db, admin, conference_uid)
+    _nudge(background_tasks, conference_uid, tenant_id)
+    return _dashboard(db, admin, conference_uid, common_db, tenant_id)
 
 
-def stop_timer(db: Session, admin: Admin, conference_uid: str, background_tasks: BackgroundTasks):
+def stop_timer(
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
+):
     """Toggles the current question's clock between running and paused -
     this is the trainer's Stop Timer / Play Timer button. Pausing freezes
     the countdown at whatever time is left (never dropping it to 0);
     pressing it again resumes from exactly that point rather than
     restarting the question."""
-    conference = _owned_live_conference(db, admin, conference_uid)
+    conference = _owned_live_conference(db, admin, conference_uid, common_db, tenant_id)
     if conference.liveQuizState != LIVE_QUIZ_STATE_QUESTION_LIVE:
         raise conflict("No question is currently live")
 
@@ -237,37 +263,66 @@ def stop_timer(db: Session, admin: Admin, conference_uid: str, background_tasks:
         conference.liveTimerRemainingMs = max(0, (conference.liveTimerEndsAt or _now_ms()) - _now_ms())
 
     conference_repository.save(db, conference)
-    _nudge(background_tasks, conference_uid)
-    return _dashboard(db, admin, conference_uid)
+    _nudge(background_tasks, conference_uid, tenant_id)
+    return _dashboard(db, admin, conference_uid, common_db, tenant_id)
 
 
-def show_leaderboard(db: Session, admin: Admin, conference_uid: str, background_tasks: BackgroundTasks):
-    conference = _owned_live_conference(db, admin, conference_uid)
+def show_leaderboard(
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
+):
+    conference = _owned_live_conference(db, admin, conference_uid, common_db, tenant_id)
     conference.liveQuizState = LIVE_QUIZ_STATE_LEADERBOARD
     conference.liveQuestionId = None
     conference.liveTimerRemainingMs = None
     conference_repository.save(db, conference)
-    _nudge(background_tasks, conference_uid)
-    return _dashboard(db, admin, conference_uid)
+    _nudge(background_tasks, conference_uid, tenant_id)
+    return _dashboard(db, admin, conference_uid, common_db, tenant_id)
 
 
-def show_lobby(db: Session, admin: Admin, conference_uid: str, background_tasks: BackgroundTasks):
-    conference = _owned_live_conference(db, admin, conference_uid)
+def show_lobby(
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
+):
+    conference = _owned_live_conference(db, admin, conference_uid, common_db, tenant_id)
     conference.liveQuizState = LIVE_QUIZ_STATE_IDLE
     conference.liveQuestionId = None
     conference.liveTimerRemainingMs = None
     conference_repository.save(db, conference)
-    _nudge(background_tasks, conference_uid)
-    return _dashboard(db, admin, conference_uid)
+    _nudge(background_tasks, conference_uid, tenant_id)
+    return _dashboard(db, admin, conference_uid, common_db, tenant_id)
 
 
-def finish(db: Session, admin: Admin, conference_uid: str, background_tasks: BackgroundTasks):
-    conference = conference_repository.get_owned_by_trainer(db, admin.username, conference_uid)
-    if not conference:
-        raise not_found("Training not found")
+def finish(
+    db: Session,
+    admin: Admin,
+    conference_uid: str,
+    background_tasks: BackgroundTasks,
+    common_db: Session = None,
+    tenant_id: str = None,
+):
+    if getattr(admin, "role", None) == "admin":
+        conference = conference_repository.get_by_uid(db, conference_uid)
+        if not conference:
+            raise not_found("Training not found")
+        scope = resolve_scope(common_db, admin, tenant_id) if common_db is not None else None
+        if scope is None or not scope.allows_row(conference.company, conference.zone, conference.region):
+            raise not_found("Training not found")
+    else:
+        conference = conference_repository.get_owned_by_trainer(db, admin.username, conference_uid)
+        if not conference:
+            raise not_found("Training not found")
     finish_quiz(db, conference)
-    _nudge(background_tasks, conference_uid)
-    return _dashboard(db, admin, conference_uid)
+    _nudge(background_tasks, conference_uid, tenant_id)
+    return _dashboard(db, admin, conference_uid, common_db, tenant_id)
 
 
 # --- Scoring -------------------------------------------------------------------
@@ -288,7 +343,7 @@ def _write_trainee_result(db: Session, conference_uid: str, suite_uid: str, trai
             continue
     total, max_score, percentage, _ = score_answers(questions, picks)
     response_ms = _sum_response_ms(answer_rows)
-    now = datetime.now()
+    now = utc_now()
     assessment_repository.add_result(
         db,
         AssessmentResult(
@@ -376,7 +431,7 @@ def get_live_quiz_view(db: Session, trainee: Trainee, conference_uid: str) -> Li
 
 
 def submit_live_answer(
-    db: Session, trainee: Trainee, payload: LiveAnswerRequest, background_tasks: BackgroundTasks
+    db: Session, trainee: Trainee, payload: LiveAnswerRequest, background_tasks: BackgroundTasks, tenant_id: str = None
 ) -> LiveAnswerResult:
     conference = conference_repository.get_by_uid(db, payload.conferenceUid)
     if not conference:
@@ -404,7 +459,7 @@ def submit_live_answer(
         selected_option=payload.selectedOption,
         response_ms=response_ms,
     )
-    _nudge(background_tasks, payload.conferenceUid)
+    _nudge(background_tasks, payload.conferenceUid, tenant_id)
 
     correct_option = (question.correct_answer or None) if question else None
     return LiveAnswerResult(

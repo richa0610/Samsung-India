@@ -31,7 +31,7 @@ export default function AuditLogTable({ entries }: AuditLogTableProps) {
 }
 
 const styles = StyleSheet.create({
-  empty: { fontSize: 12, color: "#6B7280", textAlign: "center", paddingVertical: 16 },
+  empty: { fontSize: 12, color: Colors.gray500, textAlign: "center", paddingVertical: 16 },
   table: { borderRadius: 8, overflow: "hidden" },
   headerRow: {
     flexDirection: "row",
@@ -40,5 +40,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     borderRadius: 6,
   },
-  th: { fontSize: 8.5, fontWeight: "700", color: "#4B5563", letterSpacing: 0.2 },
+  th: { fontSize: 8.5, fontWeight: "700", color: Colors.gray600, letterSpacing: 0.2 },
 });

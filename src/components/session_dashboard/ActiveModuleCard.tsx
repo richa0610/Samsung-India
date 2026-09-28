@@ -60,7 +60,7 @@ export default function ActiveModuleCard({
         accessibilityRole="button"
         accessibilityLabel={buttonLabel}
       >
-        <Ionicons name="power" size={16} color="#0066FF" />
+        <Ionicons name="power" size={16} color={Colors.brandBlue} />
         <AppText style={styles.primaryBtnText} numberOfLines={2}>{buttonLabel}</AppText>
       </Pressable>
     </View>
@@ -69,7 +69,7 @@ export default function ActiveModuleCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
     borderRadius: 18,
     padding: 14,
     marginHorizontal: 14,
@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
   },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#EF4444" },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.red },
   liveText: { fontSize: 8.5, fontWeight: "700", color: Colors.white, letterSpacing: 0.3 },
   timerPill: {
     backgroundColor: "rgba(255, 255, 255, 0.2)",
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     fontSize: 12,
     fontWeight: "800",
-    color: "#0066FF",
+    color: Colors.brandBlue,
     letterSpacing: 0.3,
     textAlign: "center",
     flexShrink: 1,

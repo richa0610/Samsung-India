@@ -31,7 +31,12 @@ export function useTrainerAgendaList(filterPendingOnly = false, org = false) {
         // Both callers (Training List, Pending Training List) want this
         // trainer's complete history, not the agenda endpoint's default
         // today-only scope - see all_sessions on GET /admin/trainings.
-        const data = await fetchTrainerAgenda(adminToken, { all: true, org, filters: org ? applied : undefined });
+        const data = await fetchTrainerAgenda(adminToken, {
+          all: true,
+          org,
+          approval: org ? (filterPendingOnly ? "pending" : "reviewed") : undefined,
+          filters: org ? applied : undefined,
+        });
         // Org-wide (admin) "other" list = everything already reviewed
         // (approved or rejected); a trainer's own list is approved only.
         setItems(

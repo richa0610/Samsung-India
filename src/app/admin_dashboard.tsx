@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -18,6 +18,7 @@ import {
 import AdminFilterBar from "@/components/admin/AdminFilterBar";
 import AppText from "@/components/ui/AppText";
 import { useAdminDashboard } from "@/hooks/useAdminDashboard";
+import { useAdminPhotoUpload } from "@/hooks/useAdminPhotoUpload";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { FontWeight } from "@/theme/fontWeight";
@@ -26,11 +27,25 @@ const ACTIVE_TAB: AdminDashboardTab = "home";
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
-  const { admin, pending, stats, refreshing, error, refresh, handleLogout } = useAdminDashboard();
+  const { admin, pending, stats, loading, refreshing, error, refresh, handleLogout } = useAdminDashboard();
+  const { pickAndUpload, uploading } = useAdminPhotoUpload();
   const [showTrainingTypes, setShowTrainingTypes] = useState(false);
   const [showAudienceTypes, setShowAudienceTypes] = useState(false);
   const [showTrainerStatus, setShowTrainerStatus] = useState(false);
   const [showAssessmentGaps, setShowAssessmentGaps] = useState(false);
+
+  // The Audience ring shows Unplanned (Fresh)'s share of participants, not
+  // presentPercent - "Global Totals" is the same section View Type Breakdown
+  // renders, so this can never disagree with the number shown there.
+  const globalAudienceTotals = stats?.audience.typeBreakdown?.find(
+    (section) => section.title === "Global Totals",
+  );
+  const unplannedCount =
+    globalAudienceTotals?.items.find((item) => item.label === "Unplanned (Fresh)")?.count ?? 0;
+  const unplannedPercent =
+    stats && stats.audience.participants > 0
+      ? Math.round((unplannedCount / stats.audience.participants) * 100)
+      : 0;
 
   return (
     <>
@@ -51,6 +66,8 @@ export default function AdminDashboardScreen() {
             adminName={admin?.name}
             companyId={admin?.offerId || admin?.username || "OFF26005"}
             avatarUrl={admin?.profilePicture}
+            onOpenProfile={pickAndUpload}
+            uploadingPhoto={uploading}
             onLogout={handleLogout}
           />
 
@@ -69,10 +86,10 @@ export default function AdminDashboardScreen() {
                 <Ionicons name="time" size={20} color="#B45309" />
               </View>
               <View style={styles.alertText}>
-                <AppText weight={FontWeight.bold} color="#111827" style={styles.alertTitle}>
+                <AppText weight={FontWeight.bold} color={Colors.black} style={styles.alertTitle}>
                   {pending.length} training{pending.length === 1 ? "" : "s"} awaiting review
                 </AppText>
-                <AppText color="#6B7280" style={styles.alertSub}>
+                <AppText color={Colors.gray500} style={styles.alertSub}>
                   Tap to approve, reject or edit
                 </AppText>
               </View>
@@ -80,8 +97,15 @@ export default function AdminDashboardScreen() {
             </Pressable>
           )}
 
+          {loading && !stats && (
+            <View style={styles.loadingBlock}>
+              <ActivityIndicator color={Colors.mainColour1} />
+              <AppText variant="caption" color={Colors.gray600}>Loading dashboard...</AppText>
+            </View>
+          )}
+
           {stats && (
-            <AppText variant="tiny" weight={FontWeight.bold} color="#6B7280" style={styles.sectionLabel}>
+            <AppText variant="tiny" weight={FontWeight.bold} color={Colors.gray500} style={styles.sectionLabel}>
               OVERVIEW
             </AppText>
           )}
@@ -97,12 +121,12 @@ export default function AdminDashboardScreen() {
                 bigLabel="Planned"
                 ringPercentage={stats.training.ratePercent}
                 ringValue={stats.training.planned}
-                ringColor="#16A34A"
+                ringColor={Colors.success}
                 ringTrackColor="#7C3AED"
                 subItems={[
-                  { label: "Completed", value: String(stats.training.completed), color: "#16A34A" },
+                  { label: "Completed", value: String(stats.training.completed), color: Colors.success },
                   { label: "Pending", value: String(stats.training.pending), color: "#7C3AED" },
-                  { label: "Rate", value: `${stats.training.ratePercent}%`, color: "#16A34A" },
+                  { label: "Rate", value: `${stats.training.ratePercent}%`, color: Colors.success },
                 ]}
                 linkLabel="View All Types"
                 onPressLink={() => setShowTrainingTypes((prev) => !prev)}
@@ -112,23 +136,24 @@ export default function AdminDashboardScreen() {
               <AdminStatCard
                 title="Audience"
                 icon="people"
-                accent="#16A34A"
+                accent={Colors.success}
                 badgeLabel="Pax"
                 bigNumber={stats.audience.participants}
                 bigLabel="Participants"
-                ringPercentage={stats.audience.presentPercent}
+                ringPercentage={unplannedPercent}
                 ringValue={stats.audience.participants}
-                ringColor="#16A34A"
+                ringColor="#0EA5E9"
+                ringTrackColor={Colors.success}
                 subItems={[
                   {
                     label: "Present",
                     value: `${stats.audience.present} (${stats.audience.presentPercent}%)`,
-                    color: "#16A34A",
+                    color: Colors.success,
                   },
                   {
                     label: "Absent",
                     value: `${stats.audience.absent} (${stats.audience.absentPercent}%)`,
-                    color: "#DC2626",
+                    color: Colors.danger,
                   },
                 ]}
                 linkLabel="View Type Breakdown"
@@ -145,10 +170,11 @@ export default function AdminDashboardScreen() {
                 bigLabel="Pool"
                 ringPercentage={stats.trainers.utilizationPercent}
                 ringValue={stats.trainers.pool}
-                ringColor="#0EA5E9"
+                ringColor={Colors.mainColour1}
+                ringTrackColor="#68e8de"
                 subItems={[
                   { label: "In Training", value: String(stats.trainers.inTraining), color: Colors.mainColour1 },
-                  { label: "Idle", value: String(stats.trainers.idle), color: "#DC2626" },
+                  { label: "Idle", value: String(stats.trainers.idle), color: "#68e8de" },
                   { label: "Util.", value: `${stats.trainers.utilizationPercent}%` },
                 ]}
                 linkLabel="Status Analysis"
@@ -159,7 +185,7 @@ export default function AdminDashboardScreen() {
               <AdminStatCard
                 title="Assessment"
                 icon="document-text"
-                accent="#F59E0B"
+                accent={Colors.warning}
                 badgeLabel="Tests"
                 bigNumber={stats.assessment.attempts}
                 bigLabel="Attempts"
@@ -169,10 +195,10 @@ export default function AdminDashboardScreen() {
                     : 0
                 }
                 ringValue={stats.assessment.attempts}
-                ringColor="#DC2626"
+                ringColor={Colors.danger}
                 subItems={[
-                  { label: "Pass", value: String(stats.assessment.passCount), color: "#16A34A" },
-                  { label: "Fail", value: String(stats.assessment.failCount), color: "#DC2626" },
+                  { label: "Pass", value: String(stats.assessment.passCount), color: Colors.success },
+                  { label: "Fail", value: String(stats.assessment.failCount), color: Colors.danger },
                   { label: "Avg", value: `${stats.assessment.avgPercent}%`, color: Colors.mainColour1 },
                 ]}
                 linkLabel="Eligibility & Gaps"
@@ -216,7 +242,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFBEB",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: "#e3b80f",
   },
   alertIcon: {
     width: 38,
@@ -229,6 +255,7 @@ const styles = StyleSheet.create({
   alertText: { flex: 1, gap: 1 },
   alertTitle: { fontSize: Fonts.bodySm },
   alertSub: { fontSize: Fonts.overline },
+  loadingBlock: { alignItems: "center", gap: 8, paddingVertical: 48 },
   errorContainer: { paddingHorizontal: 16, paddingTop: 14 },
   errorText: {
     color: Colors.danger,

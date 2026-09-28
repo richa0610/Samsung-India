@@ -3,6 +3,7 @@ import AppText from "@/components/ui/AppText";
 
 import { ExecutionFlowItem } from "@/api/training";
 import ExecutionFlowRow from "./ExecutionFlowRow";
+import { Colors } from "@/theme/colors";
 
 type ExecutionFlowModuleListProps = {
   modules: ExecutionFlowItem[];
@@ -48,5 +49,5 @@ export default function ExecutionFlowModuleList({
 
 const styles = StyleSheet.create({
   list: { gap: 10 },
-  empty: { fontSize: 12, color: "#6B7280", textAlign: "center", paddingVertical: 16 },
+  empty: { fontSize: 12, color: Colors.gray500, textAlign: "center", paddingVertical: 16 },
 });

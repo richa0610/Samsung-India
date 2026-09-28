@@ -3,15 +3,16 @@ import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
 import { FontWeight } from "@/theme/typography";
+import { Colors } from "@/theme/colors";
 
 export default function LockedViolationCard() {
   return (
     <View style={styles.lockedBanner}>
       <View style={styles.lockedIconWrap}>
-        <Ionicons name="lock-closed" size={16} color="#EF4444" />
+        <Ionicons name="lock-closed" size={16} color={Colors.red} />
       </View>
       <View style={styles.lockedTextColumn}>
-        <AppText variant="caption" color="#EF4444" weight={FontWeight.bold}>
+        <AppText variant="caption" color={Colors.red} weight={FontWeight.bold}>
           Security Violation
         </AppText>
         <AppText variant="overline" color="#B91C1C">
@@ -27,7 +28,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    backgroundColor: "#FEE2E2",
+    backgroundColor: Colors.dangerBg,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,

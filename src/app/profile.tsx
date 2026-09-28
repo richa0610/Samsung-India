@@ -6,6 +6,7 @@ import EditProfileSheet from "@/components/common/EditProfileSheet";
 import TraineeBottomNavigation from "@/components/session/TraineeBottomNavigation";
 import { DetailsCard, ProfileHeader, SecurityBanner, useProfile } from "@/components/trainee/profile";
 import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
+import { Colors } from "@/theme/colors";
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
@@ -63,7 +64,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#0066FF",
+    backgroundColor: Colors.brandBlue,
   },
   scrollContent: {
     flexGrow: 1,

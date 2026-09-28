@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingBottom: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: Colors.gray200,
   },
   statCol: {
     alignItems: "center",
@@ -73,6 +73,6 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 32,
-    backgroundColor: "#E5E7EB",
+    backgroundColor: Colors.gray200,
   },
 });

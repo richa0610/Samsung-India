@@ -27,7 +27,9 @@ router = APIRouter(prefix="/trainees", tags=["trainees"])
 def register_trainee(
     payload: TraineeRegister, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)
 ):
-    return trainee_service.register(db, payload, background_tasks, ip_address=client_ip(request))
+    return trainee_service.register(
+        db, payload, background_tasks, ip_address=client_ip(request), tenant_id=get_tenant_id_from_request(request)
+    )
 
 
 @router.post(

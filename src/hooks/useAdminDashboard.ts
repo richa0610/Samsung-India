@@ -36,26 +36,24 @@ export function useAdminDashboard() {
         setLoading(true);
       }
       setError(null);
+      const fail = (err: unknown) =>
+        setError(err instanceof ApiError ? err.message : "Couldn't load the admin dashboard.");
+
+      // The two requests are independent, so each result is shown the moment it
+      // arrives - the stat cards no longer wait for the (separate) pending-review
+      // list, or the other way round.
+      const pendingTask = fetchPendingTrainings(adminToken).then(setPending).catch(fail);
       try {
-        const [pendingList, statsResult] = await Promise.all([
-          fetchPendingTrainings(adminToken),
-          fetchAdminDashboardStats(adminToken, applied),
-        ]);
-        setPending(pendingList);
-        setStats(statsResult);
+        // A normal open may use the server's 30-second cache; a pull-to-refresh or a
+        // live "training changed" event (both call load(true)) always gets fresh numbers.
+        setStats(await fetchAdminDashboardStats(adminToken, applied, { fresh: isRefresh }));
       } catch (err) {
-        setError(
-          err instanceof ApiError
-            ? err.message
-            : "Couldn't load the admin dashboard.",
-        );
+        fail(err);
       } finally {
-        if (isRefresh) {
-          setRefreshing(false);
-        } else {
-          setLoading(false);
-        }
+        if (!isRefresh) setLoading(false);
       }
+      await pendingTask;
+      if (isRefresh) setRefreshing(false);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `appliedKey` is `applied`, serialised so an equal filter doesn't refetch
     [adminToken, appliedKey],

@@ -101,10 +101,31 @@ export type AdminDashboardStats = {
   };
 };
 
-export function fetchAdminDashboardStats(token: string, filters?: AdminFilters) {
+/** `fresh` skips the server's 30-second cache - for pull-to-refresh and live "something changed" updates. */
+export function fetchAdminDashboardStats(token: string, filters?: AdminFilters, options?: { fresh?: boolean }) {
   const params = new URLSearchParams(adminFilterParams(filters));
+  if (options?.fresh) params.set("fresh", "true");
   const query = params.toString();
   return apiRequest<AdminDashboardStats>(`/admin/dashboard/stats${query ? `?${query}` : ""}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/** The caller's own admin_access grant - which zones/regions their account is authorized for,
+ *  so the Training/Attendance filter panel can hide the rest. Display only: `null` means "not
+ *  restricted on that axis", a list means "only these" (already lower-cased/trimmed, the same
+ *  form the filter query params use). It grants nothing by itself - every request that actually
+ *  reads or changes a training is still checked server-side regardless of what this returns. */
+export type AdminAccessScope = {
+  allowed: boolean;
+  isSuper: boolean;
+  role: string | null;
+  zones: string[] | null;
+  regions: string[] | null;
+};
+
+export function fetchAdminAccessScope(token: string) {
+  return apiRequest<AdminAccessScope>("/admin/access/scope", {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
