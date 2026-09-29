@@ -141,7 +141,7 @@ async def check_in_secure(
     distance = distance_meters(latitude, longitude, venue_lat, venue_lng)
     check_in_distance = f"{distance:.0f}" if distance is not None else None
 
-    photo_dir = media_subdir(f"attendance_photos/{conference_uid}")
+    photo_dir = media_subdir(f"attendance_photos/{conference_uid}", tenant_id)
     filename = f"{trainee.traineeUid}.{extension}"
     (photo_dir / filename).write_bytes(contents)
     check_in_photo = f"attendance_photos/{conference_uid}/{filename}"

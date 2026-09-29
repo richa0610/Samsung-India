@@ -10,9 +10,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
+from app.core.secret_box import SecretUnavailable, decrypt_secret
 from app.core.ttl_cache import TTLCache
 from app.database.common import common_engine
-from app.database.connection import build_connect_args
+from app.database.connection import SAFE_ENGINE_OPTIONS, TenantBase, build_connect_args
+from app.database.schema_sync import sync_missing_columns, sync_missing_indexes
 from app.models.common.tenant_registry import Tenant
 
 logger = logging.getLogger("tenant_manager")
@@ -135,9 +137,18 @@ class TenantConnectionManager:
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="Tenant account is suspended or inactive",
                     )
+                try:
+                    database_password = decrypt_secret(tenant_record.database_password)
+                except SecretUnavailable as exc:
+                    # Fail closed for this tenant only; the message names no secret.
+                    logger.error("Cannot decrypt the database password of tenant '%s': %s", tenant_uid, exc)
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Tenant database is temporarily unavailable",
+                    )
                 db_url = self._build_tenant_url(
                     user=tenant_record.database_username,
-                    password=tenant_record.database_password,
+                    password=database_password,
                     host=tenant_record.database_host,
                     port=tenant_record.database_port,
                     db_name=tenant_record.database_name,
@@ -184,7 +195,9 @@ class TenantConnectionManager:
                         pool_recycle=settings.TENANT_POOL_RECYCLE,
                         pool_pre_ping=True,
                         connect_args=build_connect_args(),
+                        **SAFE_ENGINE_OPTIONS,
                     )
+                self._sync_schema(tenant_uid, engine)
                 self._engines[tenant_uid] = engine
                 self._sessionmakers[tenant_uid] = sessionmaker(
                     autocommit=False, autoflush=False, bind=engine
@@ -196,6 +209,21 @@ class TenantConnectionManager:
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="Tenant database is temporarily unavailable",
                 )
+
+    @staticmethod
+    def _sync_schema(tenant_uid: str, engine: Engine) -> None:
+        """The same additive-only column/index sync main.py runs for the default tenant at
+        startup, once per tenant when its pool is first created - so a column added to a tenant
+        model (e.g. tokenVersion) reaches every tenant database, not just the default one, before
+        any query selects it. Best-effort: a failure is logged and never blocks the tenant
+        (failure isolation). Skipped under tests, which must never run DDL."""
+        if settings.TESTING:
+            return
+        try:
+            sync_missing_columns(engine, TenantBase)
+            sync_missing_indexes(engine, TenantBase)
+        except SQLAlchemyError as exc:
+            logger.error("Schema sync skipped for tenant '%s': %s", tenant_uid, exc)
 
     def get_session(
         self, tenant_uid: str, common_db: Optional[Session] = None

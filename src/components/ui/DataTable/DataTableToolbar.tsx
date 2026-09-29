@@ -37,6 +37,7 @@ type DataTableToolbarProps = {
   onExportPdf: () => void;
   onPrint: () => void;
   busyAction: ExportAction | null;
+  searchLoading?: boolean;
 };
 
 export default function DataTableToolbar({
@@ -55,8 +56,21 @@ export default function DataTableToolbar({
   onExportPdf,
   onPrint,
   busyAction,
+  searchLoading = false,
 }: DataTableToolbarProps) {
   const [openMenu, setOpenMenu] = useState<"pageSize" | "columns" | null>(null);
+  const [inputValue, setInputValue] = useState(search);
+  // Follow the `search` prop when the owner changes it (e.g. a reset): adjusted during render
+  // against the last value seen, rather than in an effect that would render twice.
+  const [syncedSearch, setSyncedSearch] = useState(search);
+  if (search !== syncedSearch) {
+    setSyncedSearch(search);
+    setInputValue(search);
+  }
+
+  const handleSearch = () => {
+    onSearchChange(inputValue.trim());
+  };
 
   const pageSizeLabel = pageSize === "all" ? "Show all rows" : `Show ${pageSize} rows`;
 
@@ -175,15 +189,48 @@ export default function DataTableToolbar({
           </Pressable>
         </View>
 
-        <View style={styles.searchBox}>
-          <Ionicons name="search" size={12} color={Colors.gray400} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder={searchPlaceholder}
-            placeholderTextColor={Colors.gray400}
-            value={search}
-            onChangeText={onSearchChange}
-          />
+        <View style={styles.searchWrap}>
+          <View style={styles.searchBox}>
+            <Ionicons name="search" size={12} color={Colors.gray400} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder={searchPlaceholder}
+              placeholderTextColor={Colors.gray400}
+              value={inputValue}
+              onChangeText={setInputValue}
+              returnKeyType="search"
+              onSubmitEditing={handleSearch}
+            />
+            {inputValue.length > 0 && (
+              <Pressable
+                onPress={() => {
+                  setInputValue("");
+                  onSearchChange("");
+                }}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <Ionicons name="close-circle" size={14} color={Colors.gray400} />
+              </Pressable>
+            )}
+          </View>
+          <Pressable
+            style={[styles.searchButton, searchLoading && styles.searchButtonDisabled]}
+            onPress={searchLoading ? undefined : handleSearch}
+            disabled={searchLoading}
+            accessibilityRole="button"
+            accessibilityLabel="Search"
+          >
+            {searchLoading ? (
+              <ActivityIndicator size="small" color={Colors.white} style={styles.searchLoader} />
+            ) : (
+              <Ionicons name="search" size={12} color={Colors.white} />
+            )}
+            <AppText style={styles.searchButtonText} color={Colors.white} weight={FontWeight.semiBold}>
+              Search
+            </AppText>
+          </Pressable>
         </View>
       </View>
 
@@ -343,22 +390,49 @@ const styles = StyleSheet.create({
   },
   dropdownItemText: { fontSize: Fonts.overline },
 
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginLeft: "auto",
+  },
   searchBox: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    marginLeft: "auto",
     borderWidth: 1,
     borderColor: Colors.gray200,
     borderRadius: Radius.md,
     paddingHorizontal: 8,
-    height: 28,
-    minWidth: 100,
+    height: 32,
+    minWidth: 85,
+    backgroundColor: Colors.white,
   },
   searchInput: {
     flex: 1,
     fontSize: Fonts.overline,
     color: Colors.black,
     padding: 0,
+    minWidth: 50,
+  },
+  searchButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: Colors.mainColour1,
+    borderRadius: Radius.md,
+    paddingHorizontal: 10,
+    height: 32,
+  },
+  searchButtonText: {
+    fontSize: Fonts.overline,
+    color: Colors.white,
+  },
+  searchLoader: {
+    transform: [{ scale: 0.75 }],
+  },
+  searchButtonDisabled: {
+    opacity: 0.82,
   },
 });

@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import AppText from "@/components/ui/AppText";
@@ -36,6 +36,76 @@ function cellValue<T>(column: DataTableColumn<T>, row: T) {
   return column.searchValue ? column.searchValue(row) : column.exportValue ? column.exportValue(row, 0) : "";
 }
 
+function TableSkeletonRows<T>({
+  count,
+  columns,
+}: {
+  count: number;
+  columns: DataTableColumn<T>[];
+}) {
+  // One Animated.Value for the component's lifetime (useState's initializer runs once).
+  const [pulse] = useState(() => new Animated.Value(0.35));
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 0.85,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0.35,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [pulse]);
+
+  return (
+    <>
+      {Array.from({ length: count }).map((_, rowIndex) => (
+        <View key={`skeleton-row-${rowIndex}`} style={styles.bodyRow}>
+          {columns.map((column, colIndex) => {
+            const width = column.minWidth ?? 85;
+            const barWidth =
+              column.key === "slNo"
+                ? 24
+                : column.key === "action"
+                  ? 26
+                  : column.key === "currentReport"
+                    ? 110
+                    : column.key === "status"
+                      ? 74
+                      : Math.max(35, Math.min(width - 24, 70 + (colIndex % 3) * 15));
+            const barHeight = column.key === "action" ? 24 : 14;
+            const barRadius = column.key === "action" ? Radius.md : 999;
+
+            return (
+              <View key={column.key} style={[styles.bodyCell, { width }]}>
+                <Animated.View
+                  style={[
+                    styles.skeletonBar,
+                    {
+                      width: barWidth,
+                      height: barHeight,
+                      borderRadius: barRadius,
+                      opacity: pulse,
+                    },
+                  ]}
+                />
+              </View>
+            );
+          })}
+        </View>
+      ))}
+    </>
+  );
+}
+
 type DataTableProps<T> = {
   title: string;
   columns: DataTableColumn<T>[];
@@ -49,6 +119,8 @@ type DataTableProps<T> = {
   toolbarVariant?: DataTableToolbarVariant;
   headerBackgroundColor?: string;
   headerTextColor?: string;
+  /** When true, renders animated skeleton placeholder rows instead of old or blank rows. */
+  loading?: boolean;
   /** Server-driven mode (see DataTableServerMode) - search, sort, paging and export all go through the server. */
   server?: DataTableServerMode<T>;
 };
@@ -66,8 +138,10 @@ export default function DataTable<T>({
   toolbarVariant = "full",
   headerBackgroundColor,
   headerTextColor,
+  loading,
   server,
 }: DataTableProps<T>) {
+  const isBusy = Boolean(loading || server?.loading);
   const [search, setSearch] = useState("");
   const [pageSize, setPageSize] = useState<DataTablePageSize>(defaultPageSize);
   const [page, setPage] = useState(1);
@@ -223,6 +297,7 @@ export default function DataTable<T>({
               onExportPdf={() => runExport("pdf", async () => exportTableAsPdf(title, exportColumns, await exportRowsNow(), exportFileName))}
               onPrint={() => runExport("print", async () => printTable(title, exportColumns, await exportRowsNow()))}
               busyAction={busyAction}
+              searchLoading={isBusy}
             />
           )}
         </View>
@@ -243,7 +318,7 @@ export default function DataTable<T>({
                   return (
                     <Pressable
                       key={column.key}
-                      style={[styles.headerCell, { width: column.minWidth ?? 110 }]}
+                      style={[styles.headerCell, { width: column.minWidth ?? 85 }]}
                       onPress={isSortable ? () => toggleSort(column.key) : undefined}
                       disabled={!isSortable}
                     >
@@ -265,47 +340,58 @@ export default function DataTable<T>({
                   data, so an empty table renders the exact same height as a filled
                   one instead of collapsing to just the header row. */}
               <View style={styles.rowsArea}>
-                {pagedData.map((row, localIndex) => {
-                  const absoluteIndex = (pageSizeValue === "all" ? 0 : (currentPage - 1) * pageSizeValue) + localIndex;
-                  return (
-                    <View key={keyExtractor(row, absoluteIndex)} style={styles.bodyRow}>
-                      {visibleColumns.map((column) => (
-                        <View key={column.key} style={[styles.bodyCell, { width: column.minWidth ?? 110 }]}>
-                          {column.render ? (
-                            column.render(row, absoluteIndex)
-                          ) : (
-                            <AppText style={styles.bodyCellText}>
-                              {displayCellText(column.exportValue ? column.exportValue(row, absoluteIndex) : "")}
-                            </AppText>
-                          )}
+                {isBusy ? (
+                  <TableSkeletonRows
+                    count={pageSizeValue === "all" ? FALLBACK_EMPTY_ROW_COUNT : pageSizeValue}
+                    columns={visibleColumns}
+                  />
+                ) : (
+                  <>
+                    {pagedData.map((row, localIndex) => {
+                      const absoluteIndex = (pageSizeValue === "all" ? 0 : (currentPage - 1) * pageSizeValue) + localIndex;
+                      return (
+                        <View key={keyExtractor(row, absoluteIndex)} style={styles.bodyRow}>
+                          {visibleColumns.map((column) => (
+                            <View key={column.key} style={[styles.bodyCell, { width: column.minWidth ?? 85 }]}>
+                              {column.render ? (
+                                column.render(row, absoluteIndex)
+                              ) : (
+                                <AppText style={styles.bodyCellText}>
+                                  {displayCellText(column.exportValue ? column.exportValue(row, absoluteIndex) : "")}
+                                </AppText>
+                              )}
+                            </View>
+                          ))}
                         </View>
-                      ))}
-                    </View>
-                  );
-                })}
+                      );
+                    })}
 
-                {Array.from({
-                  length: Math.max(
-                    0,
-                    (pageSizeValue === "all" ? FALLBACK_EMPTY_ROW_COUNT : pageSizeValue) - pagedData.length
-                  ),
-                }).map((_, index) => (
-                  <View key={`filler-${index}`} style={styles.bodyRow}>
-                    {visibleColumns.map((column) => (
-                      <View key={column.key} style={[styles.bodyCell, { width: column.minWidth ?? 110 }]} />
+                    {Array.from({
+                      length: Math.max(
+                        0,
+                        (pageSizeValue === "all" ? FALLBACK_EMPTY_ROW_COUNT : pageSizeValue) - pagedData.length
+                      ),
+                    }).map((_, index) => (
+                      <View key={`filler-${index}`} style={styles.bodyRow}>
+                        {visibleColumns.map((column) => (
+                          <View key={column.key} style={[styles.bodyCell, { width: column.minWidth ?? 85 }]} />
+                        ))}
+                      </View>
                     ))}
-                  </View>
-                ))}
-
-                {pagedData.length === 0 && (
-                  <View style={styles.emptyOverlay} pointerEvents="none">
-                    <Ionicons name="file-tray-outline" size={28} color={Colors.gray200} />
-                    <AppText style={styles.emptyText} color={Colors.gray600}>{emptyLabel}</AppText>
-                  </View>
+                  </>
                 )}
               </View>
             </View>
           </ScrollView>
+
+          {pagedData.length === 0 && !isBusy && (
+            <View style={styles.emptyOverlay} pointerEvents="none">
+              <View style={styles.emptyPill}>
+                <Ionicons name="file-tray-outline" size={26} color={Colors.gray300} />
+                <AppText style={styles.emptyText} color={Colors.gray500}>{emptyLabel}</AppText>
+              </View>
+            </View>
+          )}
         </View>
 
         <View style={styles.paginationWrap}>
@@ -324,9 +410,10 @@ export default function DataTable<T>({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
+  container: { flex: 1, flexGrow: 1 },
   panelCard: {
     flex: 1,
+    flexGrow: 1,
     backgroundColor: Colors.white,
     borderRadius: Radius.xl,
     ...Shadows.card,
@@ -354,6 +441,7 @@ const styles = StyleSheet.create({
   downloadBtnText: { fontSize: Fonts.bodySm ,flexShrink: 1,alignSelf: "center",justifyContent: "center" },
   tableBox: {
     flex: 1,
+    flexGrow: 1,
     marginHorizontal: 10,
     marginBottom: 12,
     borderWidth: 1,
@@ -368,8 +456,8 @@ const styles = StyleSheet.create({
     borderTopColor: Colors.gray100,
   },
   tableScroll: { flex: 1 },
-  tableScrollContent: { flexGrow: 1 },
-  tableInner: { flex: 1 },
+  tableScrollContent: { flexGrow: 1, minHeight: "100%" },
+  tableInner: { flex: 1, minWidth: "100%", minHeight: "100%" },
   headerRow: {
     flexDirection: "row",
     backgroundColor: "rgba(198, 198, 198, 0.2)",
@@ -377,13 +465,15 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.gray200,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 38,
   },
   headerCell: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 6,
+    paddingHorizontal: 3,
     paddingVertical: 8,
+    minHeight: 38,
   },
   headerCellText: { fontSize: 9, letterSpacing: 0.2, textAlign: "center" },
   bodyRow: {
@@ -392,25 +482,41 @@ const styles = StyleSheet.create({
     borderBottomColor: Colors.gray100,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 38,
   },
   bodyCell: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 6,
+    paddingHorizontal: 3,
     paddingVertical: 5,
+    minHeight: 38,
   },
   bodyCellText: { fontSize: Fonts.overline, textAlign: "center" },
-  rowsArea: { position: "relative" },
+  rowsArea: { position: "relative", flex: 1, flexGrow: 1 },
   emptyOverlay: {
     position: "absolute",
-    top: 0,
+    top: 38,
     left: 0,
     right: 0,
     bottom: 0,
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
+    zIndex: 2,
   },
-  emptyText: { fontSize: Fonts.bodySm },
+  emptyPill: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.92)",
+    borderRadius: Radius.md,
+    maxWidth: "85%",
+  },
+  emptyText: { fontSize: Fonts.bodySm, textAlign: "center" },
+  skeletonBar: {
+    backgroundColor: Colors.gray200,
+  },
 });

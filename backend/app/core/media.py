@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from app.core.config import settings
@@ -49,8 +50,25 @@ ALLOWED_AADHAR_CONTENT_TYPES = {
 }
 
 
-def media_subdir(name: str) -> Path:
-    path = MEDIA_ROOT / name
+# A tenant's files live in their own folder, MEDIA_ROOT/<tenant_uid>/<kind>/..., so two tenants'
+# identically named uploads (agency_3.pdf, the same trainee UID, ...) can never overwrite or
+# reveal each other. The path stored in the database stays relative to that folder
+# ("trainee_photos/X.jpg"), so API responses and URLs are unchanged; /media resolves it inside the
+# caller's own tenant folder (routers/media.py).
+_TENANT_FOLDER = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}$")
+
+
+def tenant_folder(tenant_id: str | None) -> str:
+    """The folder name for a verified tenant id - refused (ValueError) unless it is a plain name,
+    so a tenant id can never point outside MEDIA_ROOT."""
+    folder = (tenant_id or "").strip()
+    if not _TENANT_FOLDER.match(folder):
+        raise ValueError("Unusable tenant id for media storage")
+    return folder
+
+
+def media_subdir(name: str, tenant_id: str | None) -> Path:
+    path = MEDIA_ROOT / tenant_folder(tenant_id) / name
     path.mkdir(parents=True, exist_ok=True)
     return path
 

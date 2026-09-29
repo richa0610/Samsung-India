@@ -23,6 +23,12 @@ def get_for_conference_and_trainee(db: Session, conference_uid: str, trainee_uid
     )
 
 
+def get_by_check_in_photo(db: Session, file_path: str) -> Optional[Attendance]:
+    """The attendance row whose check-in photo is `file_path` (it records whose photo it is and
+    for which conference)."""
+    return db.query(Attendance).filter(Attendance.checkInPhoto == file_path).first()
+
+
 def list_for_conference(db: Session, conference_uid: str) -> list[Attendance]:
     return db.query(Attendance).filter(Attendance.conferenceUid == conference_uid).all()
 
@@ -79,11 +85,13 @@ def delete(db: Session, attendance: Attendance) -> None:
     db.commit()
 
 
-def delete_for_conference_and_trainee(db: Session, conference_uid: str, trainee_uid: str) -> None:
-    db.query(Attendance).filter(
+def delete_for_conference_and_trainee(db: Session, conference_uid: str, trainee_uid: str) -> int:
+    """Deletes the trainee's attendance for this conference; returns how many rows went."""
+    deleted = db.query(Attendance).filter(
         Attendance.conferenceUid == conference_uid, Attendance.traineeUid == trainee_uid
     ).delete()
     db.commit()
+    return deleted
 
 
 def save(db: Session) -> None:

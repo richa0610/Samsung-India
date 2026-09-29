@@ -53,7 +53,7 @@ ATTENDANCE = "/admin/attendance/page?mode=all&limit=200"
 class WorldTestCase(unittest.TestCase):
     def setUp(self):
         self.w = TenantWorld()
-        rate_limit._attempts.clear()
+        rate_limit.reset()
         admin_router._stats_cache.clear()
 
     def tearDown(self):
@@ -102,7 +102,9 @@ class ExistingControlsStillHold(WorldTestCase):
         self.assertEqual(self.get("super", "/sessions/current").status_code, 401)
 
     def test_trainers_are_blocked_from_admin_only_endpoints(self):
-        self.assertEqual(self.get("trainer1", ATTENDANCE).status_code, 403)
+        # Trainer Flow Phase 2: the paged attendance list serves trainers too, but only the
+        # attendance on their own trainings - never a company-wide view.
+        self.assertEqual(self.keys("trainer1", ATTENDANCE), {"S_N1", "S_DEL", "S_N1V"})
         self.assertEqual(self.w.client.post(f"/admin/trainings/{uid('S_N1')}/reject", json={"message": "x"}, headers=self.w.headers("trainer1")).status_code, 403)
 
     def test_a_trainer_cannot_open_another_trainers_training(self):
@@ -121,7 +123,8 @@ class ExistingControlsStillHold(WorldTestCase):
         self.assertIn(body["admin"]["role"], ("admin", "trainer"))  # the mobile app routes on exactly these two values
         self.assertEqual(body["admin"]["tenant_id"], ALPHA)
         claims = jwt.decode(body["access_token"], settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        self.assertEqual(sorted(claims), ["exp", "role", "sub", "tenant_id"])  # the token contract: no new claims
+        # The token contract; `ver` (Phase 2.2, approved) lets an account's tokens be revoked.
+        self.assertEqual(sorted(claims), ["exp", "role", "sub", "tenant_id", "ver"])
         self.assertEqual(claims["tenant_id"], ALPHA)
 
     def test_public_endpoints_still_resolve_the_tenant_from_the_header(self):
@@ -153,7 +156,7 @@ class ExistingControlsStillHold(WorldTestCase):
         self.assertEqual(self.get("trainer1", "/admin/profile").status_code, 200)             # own profile: unchanged
         self.assertEqual(self.get("trainer1", f"/admin/trainings/{other}").status_code, 404)
         self.assertEqual(self.w.client.post(f"/admin/trainings/{other}/reject", json={"message": "x"}, headers=self.w.headers("trainer1")).status_code, 403)
-        self.assertEqual(self.get("trainer1", ATTENDANCE).status_code, 403)                   # no company-wide views
+        self.assertEqual(self.keys("trainer1", ATTENDANCE), {"S_N1", "S_DEL", "S_N1V"})       # own trainings only, no company-wide view
         self.assertEqual(self.get("trainer1", "/admin/attendance?org=true").status_code, 403)
 
     def test_an_admin_can_operate_a_training_within_their_granted_scope(self):
@@ -312,8 +315,11 @@ class RelatedEndpointAccessControl(WorldTestCase):
 
     def test_a_company_admin_can_still_edit_a_training_that_is_not_their_own(self):
         """The point of the feature this scope is built on: a Company Admin manages the whole
-        company, including a training assigned to a trainer they've never touched before."""
-        response = self.w.client.patch(f"/admin/trainings/{uid('S_S1')}", json=self.EDIT_PAYLOAD, headers=self.w.headers("coadmin"))
+        company, including a training assigned to a trainer they've never touched before. Sent the
+        way the edit form sends it: the whole form, including the training's own place and trainer."""
+        full_form = {**self.EDIT_PAYLOAD, "company": "Samsung India", "zone": "South Zone", "region": "South 1",
+                     "trainerEmployeeId": "trainer2", "trainerName": "Trainer2"}
+        response = self.w.client.patch(f"/admin/trainings/{uid('S_S1')}", json=full_form, headers=self.w.headers("coadmin"))
         self.assertEqual(response.status_code, 200)
 
 
@@ -712,8 +718,11 @@ class TenantResolutionAndStatus(WorldTestCase):
 
 
 class MediaIsTenantAndScopeBound(WorldTestCase):
-    @pending_phase_c("step 8: tenant-scoped media")
     def test_files_are_tenant_folders_and_follow_the_scope(self):
+        # A trainee photo is readable through the trainee that owns it (services/media_access.py).
+        beta = self.w.tenant_db[BETA]
+        beta.query(Trainee).filter(Trainee.traineeUid == "TR-B_N1-0").update({"profilePhoto": "trainee_photos/b.jpg"})
+        beta.commit()
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             for relative in (f"{ALPHA}/attendance_photos/{uid('S_N1')}/a.jpg", f"{ALPHA}/attendance_photos/{uid('S_S1')}/b.jpg", f"{BETA}/trainee_photos/b.jpg"):

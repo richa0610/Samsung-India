@@ -8,13 +8,14 @@ from app.dependencies.auth import get_current_admin, require_admin_role
 from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.dependencies.filters import ConferenceFilters, get_conference_filters
 from app.models.admin import Admin
-from app.schemas.trainee_admin import TraineeAdminIn, TraineeAdminOut
+from app.schemas.trainee_admin import TraineeAdminIn, TraineeAdminOut, TraineePageResponse
 from app.schemas.training import (
     AssessmentSuiteCreate,
     AssessmentSuiteDetail,
     AssessmentSuiteOut,
     AttendanceListItemOut,
     AttendanceMarkRequest,
+    AttendanceResetRequest,
     LiveBroadcastRequest,
     PendingSessionItem,
     ProctoringUnlockRequest,
@@ -33,7 +34,6 @@ from app.schemas.training import (
 )
 from app.services import (
     assessment_builder_service,
-    data_scope_service,
     live_quiz_service,
     trainee_admin_service,
     training_service,
@@ -95,9 +95,10 @@ def create_training(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
+    common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.create_training(db, payload, background_tasks, admin, tenant_id)
+    return training_service.create_training(db, payload, background_tasks, admin, tenant_id, common_db=common_db)
 
 
 @router.get("/trainings", response_model=TrainerAgendaResponse)
@@ -108,12 +109,14 @@ def list_trainer_trainings(
     filters: ConferenceFilters = Depends(get_conference_filters),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
+    common_db: Session = Depends(get_common_db),
+    tenant_id: str = Depends(get_tenant_id_from_request),
 ):
     if org and getattr(admin, "role", None) != "admin":
         raise forbidden("This view requires an admin account")
-    scoped_filters = data_scope_service.apply_identity_scope(db, admin, filters)
     return training_service.list_trainer_trainings(
-        db, admin, scoped_filters.start, scoped_filters.end, all_sessions, org, scoped_filters, approval
+        db, admin, filters.start, filters.end, all_sessions, org, filters, approval,
+        common_db=common_db, tenant_id=tenant_id,
     )
 
 
@@ -121,7 +124,7 @@ def list_trainer_trainings(
 # never read as a training id.
 @router.get("/trainings/page", response_model=TrainingPageResponse)
 def list_trainings_page(
-    approval: Optional[Literal["pending", "reviewed"]] = Query(None),
+    approval: Optional[Literal["pending", "reviewed", "approved"]] = Query(None),
     q: Optional[str] = Query(None, max_length=100),
     sort: Literal[
         "timestamp", "conferenceDate", "conferenceTime", "conferenceUid", "trainerName", "zone",
@@ -133,13 +136,13 @@ def list_trainings_page(
     page: Optional[int] = Query(None, ge=1, le=100_000),
     filters: ConferenceFilters = Depends(get_conference_filters),
     db: Session = Depends(get_db),
-    admin: Admin = Depends(require_admin_role),
+    admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    # Authorization comes from the admin's own admin_access grant (resolved inside
-    # list_trainings_page), not from apply_identity_scope's legacy company/zone columns -
-    # `filters` here is only ever a further narrowing, never the authorization boundary.
+    # Authorization comes from the caller's verified scope (resolved inside list_trainings_page):
+    # an admin's admin_access grant, or an active trainer's own assignments. `filters` here is
+    # only ever a further narrowing, never the authorization boundary.
     return training_service.list_trainings_page(
         db, admin, filters, approval, q, sort, dir == "desc", cursor, limit, page,
         common_db=common_db, tenant_id=tenant_id,
@@ -151,9 +154,10 @@ def list_pending_trainings(
     filters: ConferenceFilters = Depends(get_conference_filters),
     db: Session = Depends(get_db),
     admin: Admin = Depends(require_admin_role),
+    common_db: Session = Depends(get_common_db),
+    tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    scoped_filters = data_scope_service.apply_identity_scope(db, admin, filters)
-    return training_service.list_pending_trainings(db, scoped_filters)
+    return training_service.list_pending_trainings(db, admin, filters, common_db=common_db, tenant_id=tenant_id)
 
 
 @router.post("/trainings/{conference_uid}/approve", response_model=TrainingOut)
@@ -464,6 +468,7 @@ def unlock_proctoring(
 def reset_attendance(
     conference_uid: str,
     trainee_uid: str,
+    payload: AttendanceResetRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
@@ -471,7 +476,7 @@ def reset_attendance(
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
     return training_service.reset_attendance(
-        db, admin, conference_uid, trainee_uid, background_tasks, common_db, tenant_id
+        db, admin, conference_uid, trainee_uid, payload, background_tasks, common_db, tenant_id
     )
 
 
@@ -508,7 +513,7 @@ def list_attendance_page(
     page: Optional[int] = Query(None, ge=1, le=100_000),
     filters: ConferenceFilters = Depends(get_conference_filters),
     db: Session = Depends(get_db),
-    admin: Admin = Depends(require_admin_role),
+    admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
@@ -541,3 +546,21 @@ def list_trainees_admin(
 ):
     return trainee_admin_service.list_trainees_admin(db, admin, common_db, tenant_id)
 
+
+@router.get("/trainees/page", response_model=TraineePageResponse)
+def list_trainees_page(
+    mode: Literal["all", "pending"] = "all",
+    q: Optional[str] = Query(None, max_length=100),
+    sort: Literal["timestamp", "traineeUid", "name", "trainerName", "supervisorName", "district", "updatedBy", "status"] = "timestamp",
+    dir: Literal["asc", "desc"] = "desc",
+    cursor: Optional[str] = Query(None, max_length=500),
+    limit: int = Query(10, ge=1, le=200),
+    page: Optional[int] = Query(None, ge=1, le=100_000),
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+    common_db: Session = Depends(get_common_db),
+    tenant_id: str = Depends(get_tenant_id_from_request),
+):
+    return trainee_admin_service.list_trainees_page(
+        db, admin, mode, q, sort, dir == "desc", cursor, limit, page, common_db=common_db, tenant_id=tenant_id
+    )

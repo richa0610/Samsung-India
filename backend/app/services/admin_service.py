@@ -4,12 +4,13 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.core.constants import PASS_THRESHOLD_PERCENT
+from app.core import rate_limit
 from app.core.exceptions import forbidden, unauthorized
 from app.core.media import resolve_trainer_avatar
 from app.core.security import create_access_token, verify_password
 from app.dependencies.filters import ConferenceFilters
 from app.repositories import admin_repository, dashboard_repository
-from app.services.access_service import resolve_scope
+from app.services.access_service import norm, resolve_scope
 from app.schemas.admin import (
     AdminAuthSession,
     AdminDashboardStatsOut,
@@ -43,8 +44,13 @@ def login(
     """`Admin` (superadmin/internal accounts) lives in the shared Common
     Database; `AgencyTeam` (partner-agency trainers) lives in the caller's
     own tenant database - see the DB-per-tenant split in app/database/."""
+    # Per-account failure limit on top of the per-IP one (routers/admin.py): wrong passwords for
+    # one username, from however many addresses, lock only that username in this tenant for a while.
+    account = f"{tenant_id}:{payload.username}"
+    rate_limit.ensure_account_not_locked("admin-login", account)
     admin = admin_repository.get_admin_by_username(common_db, payload.username)
     if admin and admin.password and verify_password(payload.password, admin.password):
+        rate_limit.clear_account_failures("admin-login", account)
         # Correct credentials alone aren't enough: the account must actually hold an
         # admin_access grant for the tenant it's trying to log into - reusing the exact same
         # check that already gates every admin-panel request (access_service.resolve_scope), so
@@ -52,7 +58,7 @@ def login(
         # Admin's global grant passes for any tenant; anyone else needs a grant naming this one.
         if not resolve_scope(common_db, admin, tenant_id).allowed:
             raise forbidden("Not authorized for this tenant")
-        token = create_access_token(subject=f"admin:{admin.username}", tenant_id=tenant_id, role=admin.role)
+        token = create_access_token(subject=f"admin:{admin.username}", tenant_id=tenant_id, role=admin.role, version=admin.tokenVersion)
         # `logsmaster` is a per-tenant table (see app/models/logs_master.py) -
         # write via `db` (this tenant), never `common_db`, even though the
         # account itself was found in the Common DB.
@@ -75,16 +81,20 @@ def login(
     # `username` (phone) or `offerId` (employee ID).
     agent = admin_repository.get_agency_by_username_or_offer_id(db, payload.username)
     if agent and agent.password and verify_password(payload.password, agent.password):
-        token = create_access_token(
-            subject=f"agencyteam:{agent.username}", tenant_id=tenant_id, role=agent.role or "trainer"
-        )
-        log_activity(db, action="LOGIN", username=agent.username, role=agent.role or "trainer", ip_address=ip_address)
+        rate_limit.clear_account_failures("admin-login", account)
+        # Only an agency account with the trainer role signs in as a trainer - a NULL or any other
+        # role is refused (the approved rule; `status` is deliberately not checked). Same message
+        # as an admin without a grant, so the refusal reveals nothing beyond "not allowed here".
+        if not resolve_scope(common_db, agent, tenant_id).is_trainer:
+            raise forbidden("Not authorized for this tenant")
+        token = create_access_token(subject=f"agencyteam:{agent.username}", tenant_id=tenant_id, role="trainer", version=agent.tokenVersion)
+        log_activity(db, action="LOGIN", username=agent.username, role="trainer", ip_address=ip_address)
         return AdminAuthSession(
             access_token=token,
             admin=AdminOut(
                 username=agent.username,
                 name=agent.name or agent.username,
-                role=agent.role or "trainer",
+                role="trainer",
                 offerId=agent.offerId,
                 company=agent.company,
                 tenant_id=tenant_id,
@@ -92,6 +102,7 @@ def login(
             ),
         )
 
+    rate_limit.record_account_failure("admin-login", account)
     raise unauthorized("Invalid username or password")
 
 
@@ -119,22 +130,17 @@ def build_admin_dashboard_stats(
     conditions = dashboard_repository.conference_conditions(filters)
     if scope is not None:
         conditions += dashboard_repository.access_scope_conditions(scope)
-    # Narrows the partner-agency trainer pool the same way the conference conditions above
-    # narrow trainings - the one company in scope, if the caller is restricted to exactly one
-    # (a Company Admin, Coordinator or Sub-coordinator); unrestricted (None) for a Super Admin
-    # or a direct internal call, same as before this existed.
-    scope_company = None
-    if scope is not None and scope.allowed and not scope.is_super:
-        companies = {rule.company for rule in scope.rules}
-        if len(companies) == 1:
-            (scope_company,) = companies
-    if scope_company is None and filters is not None and filters.company:
-        # `filters.company` is never set by the router anymore (apply_identity_scope no longer
-        # runs here) - this only still matters for a direct internal caller, so this stays
-        # correct rather than just unreachable dead code.
-        scope_company = filters.company
+    # The trainer pool follows the same grant as the trainings: every company the caller's rules
+    # name (a grant can span several), all of this tenant for a Super Admin, none for no grant.
+    # Zone/region can't narrow it - no trainer record carries a zone of its own.
+    if scope is not None:
+        trainer_companies = None if scope.is_super else {rule.company for rule in scope.rules}
+    else:
+        # A direct internal call (never through the router): unscoped, as before, unless it
+        # passes an explicit `filters.company`.
+        trainer_companies = {norm(filters.company)} if filters is not None and filters.company else None
     # Every aggregate below comes from this ONE database round trip.
-    snapshot = dashboard_repository.dashboard_snapshot(db, conditions, scope_company)
+    snapshot = dashboard_repository.dashboard_snapshot(db, conditions, trainer_companies)
 
     # The Training and Trainers cards are built from ONE shared list so their
     # numbers always agree: a training counts once it's Completed, or once an
@@ -313,13 +319,15 @@ def build_admin_dashboard_stats(
         typeBreakdown=audience_breakdown,
     )
 
-    # Same merge-and-dedupe-by-username as trainer_service.list_trainers -
-    # a trainer can be seeded into both `admin` and `agencyteam`. Scoped to
-    # the caller's own company (same as everything else on this dashboard) -
-    # zone can't apply here, since no trainer record has a zone of its own.
-    trainer_usernames = {
-        t.username for t in admin_repository.list_admin_trainers(common_db, company=scope_company) if t.username
-    }
+    # Same merge-and-dedupe-by-username as trainer_service.list_trainers - a trainer can be seeded
+    # into both `admin` and `agencyteam`. Admin-table trainers live in the shared Common DB, so a
+    # real request only counts those with a trainer grant for THIS tenant.
+    admin_trainers = (
+        admin_repository.list_admin_trainers_for_tenant(common_db, tenant_id, trainer_companies)
+        if scope is not None
+        else admin_repository.list_admin_trainers(common_db, company=next(iter(trainer_companies)) if trainer_companies else None)
+    )
+    trainer_usernames = {t.username for t in admin_trainers if t.username}
     trainer_usernames |= snapshot.agency_trainers
     pool = len(trainer_usernames)
     # Trainers with at least one counted training (same list the Training

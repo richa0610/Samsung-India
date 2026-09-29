@@ -6,7 +6,7 @@ export function pendingStatusColumn(): DataTableColumn<TrainingAgendaItem> {
   return {
     key: "status",
     header: "Status",
-    minWidth: 92,
+    minWidth: 70,
     render: () => <StatusPill label="Pending" tone="warning" />,
     exportValue: () => "Pending",
   };
@@ -41,7 +41,7 @@ export function conferenceStatusColumn(): DataTableColumn<TrainingAgendaItem> {
   return {
     key: "status",
     header: "Status",
-    minWidth: 92,
+    minWidth: 70,
     render: (row) => {
       const presentation = presentationFor(row);
       return <StatusPill label={presentation.label} tone={presentation.tone} />;

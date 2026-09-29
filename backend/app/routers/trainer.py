@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_admin
-from app.dependencies.database import get_common_db, get_db
+from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.schemas.catalog import SelectOptionOut
@@ -17,9 +17,10 @@ def list_trainers(
     company: str | None = None,
     db: Session = Depends(get_db),
     common_db: Session = Depends(get_common_db),
-    _admin: Admin = Depends(get_current_admin),
+    admin: Admin = Depends(get_current_admin),
+    tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return trainer_service.list_trainers(common_db, db, company)
+    return trainer_service.list_trainers(common_db, db, admin, tenant_id, company)
 
 
 @router.get("/trainers/{username}")
@@ -28,8 +29,9 @@ def get_trainer_name(
     db: Session = Depends(get_db),
     common_db: Session = Depends(get_common_db),
     _admin: Admin = Depends(get_current_admin),
+    tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return trainer_service.get_trainer_name(common_db, db, username)
+    return trainer_service.get_trainer_name(common_db, db, username, tenant_id)
 
 
 @router.get("/profile", response_model=TrainerProfileOut)
@@ -53,8 +55,9 @@ async def upload_profile_photo(
     db: Session = Depends(get_db),
     common_db: Session = Depends(get_common_db),
     admin: Admin | AgencyTeam = Depends(get_current_admin),
+    tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return await trainer_service.upload_profile_photo(common_db, db, admin, file)
+    return await trainer_service.upload_profile_photo(common_db, db, admin, file, tenant_id)
 
 
 @router.post("/profile/aadhar", response_model=TrainerProfileOut)
@@ -63,5 +66,6 @@ async def upload_aadhar_document(
     db: Session = Depends(get_db),
     common_db: Session = Depends(get_common_db),
     admin: Admin | AgencyTeam = Depends(get_current_admin),
+    tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return await trainer_service.upload_aadhar_document(common_db, db, admin, file)
+    return await trainer_service.upload_aadhar_document(common_db, db, admin, file, tenant_id)

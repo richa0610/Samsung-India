@@ -88,3 +88,12 @@ class TraineeAdminOut(BaseModel):
     updatedBy: Optional[str] = None
     updationOn: Optional[str] = None
     timestamp: Optional[str] = None
+
+
+class TraineePageResponse(BaseModel):
+    """GET /admin/trainees/page - one page of the Trainee / Pending Trainee list, same shape as
+    the Training List's page. `total` is only sent with the first page."""
+
+    items: list[TraineeAdminOut]
+    nextCursor: Optional[str] = None
+    total: Optional[int] = None

@@ -14,7 +14,7 @@ statement costs one network round trip (~40 ms) however little work it does.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Collection, Optional
 
 from sqlalchemy import String, and_, case, cast, exists, false, func, literal, null, or_, select, union_all
 from sqlalchemy.orm import Session
@@ -25,6 +25,8 @@ from app.models.agency_team import AgencyTeam
 from app.models.attendance import Attendance
 from app.models.conference import Conference
 from app.models.quiz import AssessmentResult
+from app.models.trainee import Trainee
+from app.repositories import conference_repository, trainee_repository
 from app.services.access_service import AccessScope
 
 
@@ -103,6 +105,29 @@ def access_scope_conditions(
     return [or_(*(rule_condition(rule) for rule in scope.rules))]
 
 
+def conference_authorization_conditions(scope: AccessScope) -> list:
+    """WHERE conditions for the conferences `scope` may operate: an admin-panel grant by
+    company/zone/region (`access_scope_conditions`), an active trainer by assignment
+    (`conference_repository.trainer_condition`). Anything else matches nothing. AND these with
+    any other filter or search - never OR them in."""
+    if scope.is_admin_panel:
+        return access_scope_conditions(scope)
+    if scope.is_trainer:
+        return [conference_repository.trainer_condition(scope.trainer_username)]
+    return [false()]
+
+
+def trainee_authorization_conditions(scope: AccessScope) -> list:
+    """The trainee-table twin of `conference_authorization_conditions`: an admin-panel grant by
+    the trainee's own company/zone/region, an active trainer by assignment or roster
+    (`trainee_repository.trainer_owned_condition`). Anything else matches nothing."""
+    if scope.is_admin_panel:
+        return access_scope_conditions(scope, Trainee.company, Trainee.zone, Trainee.region)
+    if scope.is_trainer:
+        return [trainee_repository.trainer_owned_condition(scope.trainer_username)]
+    return [false()]
+
+
 def counted_condition():
     """A training the Training / Trainers cards count: Completed, or approved
     and still to run (Scheduled / Ongoing)."""
@@ -158,12 +183,14 @@ class DashboardSnapshot:
     submitted_pairs: int = 0
 
 
-def dashboard_snapshot(db: Session, conditions: list, agency_company: Optional[str] = None) -> DashboardSnapshot:
+def dashboard_snapshot(
+    db: Session, conditions: list, agency_companies: Optional[Collection[str]] = None
+) -> DashboardSnapshot:
     """Everything the admin dashboard counts, in a single round trip.
 
     `conditions` = the in-scope trainings (see `conference_conditions`).
-    `agency_company` narrows the partner-agency trainer pool the same way the
-    dashboard's trainer pool is narrowed."""
+    `agency_companies` narrows the partner-agency trainer pool to those companies (normalized like
+    every scope comparison); None = every company in this tenant, an empty set = none."""
     join_conf_att = Conference.conferenceUid == Attendance.conferenceUid
     join_conf_res = Conference.conferenceUid == AssessmentResult.conferenceUid
 
@@ -207,8 +234,8 @@ def dashboard_snapshot(db: Session, conditions: list, agency_company: Optional[s
         .distinct()
     )
     agency_conditions = [AgencyTeam.role == "trainer"]
-    if agency_company:
-        agency_conditions.append(func.lower(AgencyTeam.company) == agency_company.strip().lower())
+    if agency_companies is not None:
+        agency_conditions.append(_norm(AgencyTeam.company).in_(sorted(agency_companies)))
     agency_q = select(*_member("agency", _text(AgencyTeam.username))).where(*agency_conditions)
 
     results_q = (

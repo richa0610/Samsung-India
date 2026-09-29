@@ -92,20 +92,53 @@ export async function requestNativeLocationPermission(): Promise<LocationPermiss
 }
 
 /**
- * Safely retrieves current device GPS coordinates.
+ * Safely retrieves current device GPS coordinates within a strict time limit (default: 1000ms).
+ * Checks the device's last-known position first for near-instant (<50ms) resolution, and
+ * bounds any fresh hardware fix request to 1 second to avoid long freezes.
  */
-export async function getCurrentCoordinates(): Promise<LocationCoordinates> {
+export async function getCurrentCoordinates(timeoutMs: number = 1000): Promise<LocationCoordinates> {
   try {
-    const position = await Location.getCurrentPositionAsync({
+    // 1. Check last known position first (fast OS-level cache from cell/Wi-Fi/GPS)
+    const lastKnown = await Location.getLastKnownPositionAsync({ maxAge: 300000 }).catch(() => null);
+    if (lastKnown?.coords) {
+      return {
+        latitude: lastKnown.coords.latitude,
+        longitude: lastKnown.coords.longitude,
+        accuracy: lastKnown.coords.accuracy,
+      };
+    }
+
+    // 2. Race fresh position request against the timeout (1000ms default)
+    const positionPromise = Location.getCurrentPositionAsync({
       accuracy: Location.Accuracy.Balanced,
     });
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("LOCATION_TIMEOUT")), timeoutMs)
+    );
+
+    const position = await Promise.race([positionPromise, timeoutPromise]);
     return {
       latitude: position.coords.latitude,
       longitude: position.coords.longitude,
       accuracy: position.coords.accuracy,
     };
   } catch {
-    // Fallback coordinates for testing/emulator environment if GPS fails
+    // 3. Fallback: try any last known position even without maxAge constraint
+    try {
+      const anyLastKnown = await Location.getLastKnownPositionAsync().catch(() => null);
+      if (anyLastKnown?.coords) {
+        return {
+          latitude: anyLastKnown.coords.latitude,
+          longitude: anyLastKnown.coords.longitude,
+          accuracy: anyLastKnown.coords.accuracy,
+        };
+      }
+    } catch {
+      // Ignore
+    }
+
+    // Fallback coordinates for testing/emulator environment if GPS fails or times out
     return {
       latitude: 28.4595,
       longitude: 77.0266,

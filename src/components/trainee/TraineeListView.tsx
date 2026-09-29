@@ -2,13 +2,14 @@ import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, V
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
-import { DataTable } from "@/components/ui/DataTable";
+import { DataTable, DataTableServerMode } from "@/components/ui/DataTable";
 import AppText from "@/components/ui/AppText";
 import ScreenBanner from "@/components/ui/ScreenBanner";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { FontWeight } from "@/theme/fontWeight";
 import { TraineeListItem } from "@/api/trainee";
+import { PAGE_SIZE_OPTIONS, type PagedTraineeList } from "@/hooks/usePagedTraineeList";
 import { useTraineeListColumns } from "./trainee-list";
 
 type TraineeListViewProps = {
@@ -19,9 +20,11 @@ type TraineeListViewProps = {
   refreshing: boolean;
   onRefresh: () => void;
   onBack: () => void;
-  onEdit: (row: TraineeListItem) => void;
+  onEdit?: (row: TraineeListItem) => void;
   exportFileName: string;
   emptyLabel: string;
+  /** Server-driven mode: the list loads a page at a time and the server searches / sorts. */
+  paged?: PagedTraineeList;
 };
 
 export function TraineeListView({
@@ -32,12 +35,28 @@ export function TraineeListView({
   refreshing,
   onRefresh,
   onBack,
-  onEdit,
   exportFileName,
   emptyLabel,
+  paged,
 }: TraineeListViewProps) {
   const insets = useSafeAreaInsets();
-  const columns = useTraineeListColumns(onEdit);
+  const columns = useTraineeListColumns();
+
+  const server: DataTableServerMode<TraineeListItem> | undefined = paged && {
+    total: paged.total,
+    page: paged.page,
+    onPageChange: paged.setPage,
+    pageSize: paged.pageSize,
+    pageSizeOptions: PAGE_SIZE_OPTIONS,
+    onPageSizeChange: paged.setPageSize,
+    search: paged.search,
+    onSearchChange: paged.setSearch,
+    sort: paged.sort,
+    onSortChange: paged.toggleSort,
+    sortableKeys: paged.sortableKeys,
+    onExportAll: paged.exportAll,
+    loading: paged.searching,
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
@@ -64,15 +83,18 @@ export function TraineeListView({
           </View>
         ) : (
           <>
-            <DataTable
-              title={title}
-              columns={columns}
-              data={items}
-              keyExtractor={(row) => row.traineeUid}
-              exportFileName={exportFileName}
-              searchPlaceholder="Search..."
-              emptyLabel={emptyLabel}
-            />
+            <View style={styles.tableWrap}>
+              <DataTable
+                title={title}
+                columns={columns}
+                data={items}
+                keyExtractor={(row) => row.traineeUid}
+                exportFileName={exportFileName}
+                server={server}
+                searchPlaceholder="Search..."
+                emptyLabel={emptyLabel}
+              />
+            </View>
             <View style={styles.secureFooter}>
               <Ionicons name="lock-closed" size={12} color={Colors.gray400} />
               <AppText style={styles.secureFooterText} color={Colors.gray400}>Your information is secure</AppText>
@@ -92,9 +114,10 @@ const styles = StyleSheet.create({
   bannerTitle: { fontSize: Fonts.h3 },
   bannerSubtitle: { fontSize: Fonts.overline, marginTop: 2, opacity: 0.9 },
 
-  scroll: { marginTop: -50, zIndex: 1, elevation: 1 },
+  scroll: { flex: 1, marginTop: -50, zIndex: 1, elevation: 1 },
   content: { paddingHorizontal: 8, paddingVertical: 16, flexGrow: 1 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 60 },
+  tableWrap: { flex: 1, flexGrow: 1 },
 
   secureFooter: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10 },
   secureFooterText: { fontSize: Fonts.overline },

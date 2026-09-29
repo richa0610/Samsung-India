@@ -12,7 +12,7 @@ from app.schemas.trainee import (
     TraineeRegister,
     TraineeUpdate,
 )
-from app.services import trainee_service
+from app.services import token_revocation, trainee_service
 from app.utils.helpers import client_ip
 
 router = APIRouter(prefix="/trainees", tags=["trainees"])
@@ -42,6 +42,16 @@ def login_trainee(payload: TraineeLogin, request: Request, db: Session = Depends
     return trainee_service.login(db, payload, tenant_id, ip_address=client_ip(request))
 
 
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    request: Request,
+    db: Session = Depends(get_db),
+    trainee: Trainee = Depends(get_current_trainee),
+) -> None:
+    """Revokes every token of the signed-in trainee (all devices) - see token_revocation."""
+    token_revocation.revoke_all_tokens(db, trainee, db, ip_address=client_ip(request))
+
+
 @router.patch("/me", response_model=TokenResponse)
 def update_trainee(
     payload: TraineeUpdate,
@@ -58,5 +68,6 @@ async def upload_profile_photo(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
+    tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return await trainee_service.upload_profile_photo(db, trainee, file)
+    return await trainee_service.upload_profile_photo(db, trainee, file, tenant_id)

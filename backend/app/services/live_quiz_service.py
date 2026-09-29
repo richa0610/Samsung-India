@@ -33,7 +33,7 @@ from app.repositories import (
     conference_repository,
     trainee_repository,
 )
-from app.services.access_service import resolve_scope
+from app.services import conference_access
 from app.routers.ws import manager as ws_manager
 from app.utils.date_utils import utc_now
 from app.schemas.session import (
@@ -181,17 +181,7 @@ def _owned_live_conference(
 ) -> Conference:
     """Same access rule as training_service._get_owned_conference: the assigned trainer, or
     (per the Phase C access grants) an admin-table account whose scope covers this conference."""
-    if getattr(admin, "role", None) == "admin":
-        conference = conference_repository.get_by_uid(db, conference_uid)
-        if not conference:
-            raise not_found("Training not found")
-        scope = resolve_scope(common_db, admin, tenant_id) if common_db is not None else None
-        if scope is None or not scope.allows_row(conference.company, conference.zone, conference.region):
-            raise not_found("Training not found")
-    else:
-        conference = conference_repository.get_owned_by_trainer(db, admin.username, conference_uid)
-        if not conference:
-            raise not_found("Training not found")
+    conference = conference_access.get_authorized_conference(db, admin, conference_uid, common_db, tenant_id)
     if conference.conferenceStatus != "Ongoing":
         raise conflict("Session is not currently running")
     if conference.activeModuleId != "LIVE_QUIZ":
@@ -309,17 +299,7 @@ def finish(
     common_db: Session = None,
     tenant_id: str = None,
 ):
-    if getattr(admin, "role", None) == "admin":
-        conference = conference_repository.get_by_uid(db, conference_uid)
-        if not conference:
-            raise not_found("Training not found")
-        scope = resolve_scope(common_db, admin, tenant_id) if common_db is not None else None
-        if scope is None or not scope.allows_row(conference.company, conference.zone, conference.region):
-            raise not_found("Training not found")
-    else:
-        conference = conference_repository.get_owned_by_trainer(db, admin.username, conference_uid)
-        if not conference:
-            raise not_found("Training not found")
+    conference = conference_access.get_authorized_conference(db, admin, conference_uid, common_db, tenant_id)
     finish_quiz(db, conference)
     _nudge(background_tasks, conference_uid, tenant_id)
     return _dashboard(db, admin, conference_uid, common_db, tenant_id)

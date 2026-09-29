@@ -4,15 +4,21 @@ from typing import Optional
 
 from fastapi import Request
 
+from app.core.config import settings
+
 
 def client_ip(request: Request) -> Optional[str]:
-    """Best-effort caller IP for activity logging - `X-Forwarded-For`'s first
-    hop when behind a proxy/load balancer (e.g. Render), else the direct
-    socket peer. Never raises - logging metadata isn't worth failing a
-    request over."""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """The caller's IP as the trusted proxy saw it - used for rate limiting and activity logs.
+
+    Only the entries our own proxies appended to X-Forwarded-For are trusted
+    (settings.TRUSTED_PROXY_HOPS, counted from the right); anything to their left, and any
+    other client-settable header (CF-Connecting-IP, X-Real-IP, ...), is whatever the caller
+    chose to send and is ignored - otherwise a new fake value per request escapes every
+    per-IP limit. Falls back to the socket peer. Never raises."""
+    hops = settings.TRUSTED_PROXY_HOPS
+    forwarded = [part.strip() for part in (request.headers.get("x-forwarded-for") or "").split(",") if part.strip()]
+    if hops > 0 and len(forwarded) >= hops:
+        return forwarded[-hops]
     return request.client.host if request.client else None
 
 

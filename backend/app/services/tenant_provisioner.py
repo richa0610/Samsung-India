@@ -3,7 +3,8 @@ import logging
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import Session
 
-from app.database.connection import TenantBase, build_connect_args
+from app.core.secret_box import encryption_enabled, protect_secret
+from app.database.connection import SAFE_ENGINE_OPTIONS, TenantBase, build_connect_args
 from app.models.common.tenant_registry import Tenant
 
 logger = logging.getLogger("tenant_provisioner")
@@ -35,12 +36,14 @@ def provision_new_tenant(
 
     logger.info("Initializing schema for tenant '%s' at %s:%s/%s", tenant_uid, database_host, database_port, database_name)
 
-    tenant_engine = create_engine(db_url, pool_pre_ping=True, connect_args=build_connect_args())
+    tenant_engine = create_engine(db_url, pool_pre_ping=True, connect_args=build_connect_args(), **SAFE_ENGINE_OPTIONS)
     try:
         TenantBase.metadata.create_all(bind=tenant_engine)
     finally:
         tenant_engine.dispose()
 
+    if not encryption_enabled():
+        logger.warning("TENANT_SECRETS_KEYS is not set - tenant '%s' database password is stored unencrypted", tenant_uid)
     existing = common_db.query(Tenant).filter(Tenant.tenant_uid == tenant_uid).first()
     if existing:
         existing.company_name = company_name
@@ -48,7 +51,7 @@ def provision_new_tenant(
         existing.database_port = database_port
         existing.database_name = database_name
         existing.database_username = database_username
-        existing.database_password = database_password
+        existing.database_password = protect_secret(database_password)
         existing.status = status
         tenant_record = existing
     else:
@@ -59,7 +62,7 @@ def provision_new_tenant(
             database_port=database_port,
             database_name=database_name,
             database_username=database_username,
-            database_password=database_password,
+            database_password=protect_secret(database_password),
             status=status,
         )
         common_db.add(tenant_record)

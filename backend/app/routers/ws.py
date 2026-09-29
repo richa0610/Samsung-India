@@ -1,14 +1,19 @@
+import asyncio
+import json
+from typing import Callable, Optional
+
 from jose import JWTError, jwt
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from app.core.config import settings
 from app.database.tenant import tenant_manager
+from app.dependencies.auth import resolve_principal
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.models.trainee import Trainee
-from app.repositories import admin_repository, attendance_repository, conference_repository, trainee_repository
-from app.services.access_service import resolve_scope
+from app.repositories import attendance_repository
+from app.services import conference_access
 
 router = APIRouter(tags=["ws"])
 
@@ -34,7 +39,6 @@ class ConnectionManager:
         self._rooms: dict[tuple[str, str], set[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, tenant_id: str, username: str) -> None:
-        await websocket.accept()
         self._connections.setdefault((tenant_id, username), set()).add(websocket)
 
     def disconnect(self, websocket: WebSocket, tenant_id: str, username: str) -> None:
@@ -74,7 +78,6 @@ class ConnectionManager:
     # --- per-conference rooms -------------------------------------------------
 
     async def join_room(self, websocket: WebSocket, tenant_id: str, room: str) -> None:
-        await websocket.accept()
         self._rooms.setdefault((tenant_id, room), set()).add(websocket)
 
     def leave_room(self, websocket: WebSocket, tenant_id: str, room: str) -> None:
@@ -103,15 +106,15 @@ manager = ConnectionManager()
 def _resolve_identity(token: str):
     """Lightweight counterpart to `get_current_admin` for the WS handshake - HTTPBearer/Depends
     doesn't apply here, and neither browsers nor React Native's WebSocket can set a custom
-    Authorization header, so the token travels as a query param instead (visible in access logs
-    - acceptable for this app's local/dev threat model, not for a public deployment).
+    Authorization header, so the token arrives in the connection's first message (see
+    `_open_authenticated`), or - from older app builds - as a `?token=` query param.
 
     Decodes and verifies the token, reads its OWN `tenant_id` claim (never a header or a
     client-supplied value on the connection URL), resolves the account from the trusted
-    database, and - for an admin-table account - checks the same admin_access grant
-    `get_current_admin` does. Returns `None` on any failure (bad token, missing/malformed tenant
-    claim, account not found, admin without a grant for that tenant, a DB error resolving the
-    tenant) - every failure mode denies, never silently proceeds with a partial identity.
+    database (`dependencies.auth.resolve_principal` - the same checks the REST dependencies make:
+    an admin_access grant for an admin-table account, the trainer role for an agency account, a
+    token that hasn't been revoked). Returns `None` on any failure - every failure mode denies,
+    never silently proceeds with a partial identity.
 
     Returns `(principal, tenant_id, common_db, tenant_db)` on success; the caller owns both
     sessions and must close them (a WebSocket isn't a request-scoped FastAPI dependency, so
@@ -125,7 +128,6 @@ def _resolve_identity(token: str):
     if not isinstance(tenant_id, str) or not tenant_id.strip():
         return None
     tenant_id = tenant_id.strip()
-    subject = payload.get("sub") or ""
 
     # Local import (matching training_service.py's own _resolve_performer_names /
     # _updated_by_names_for) - a WebSocket handshake isn't part of the FastAPI Depends graph, so
@@ -140,52 +142,76 @@ def _resolve_identity(token: str):
         common_db.close()
         return None
 
-    def deny():
+    principal = resolve_principal(payload, tenant_id, common_db, tenant_db)
+    if principal is None:
         common_db.close()
         tenant_db.close()
         return None
+    return principal, tenant_id, common_db, tenant_db
 
-    if subject.startswith("admin:"):
-        admin = admin_repository.get_admin_by_username(common_db, subject.removeprefix("admin:"))
-        if not admin:
-            return deny()
-        if not resolve_scope(common_db, admin, tenant_id).allowed:
-            return deny()
-        return admin, tenant_id, common_db, tenant_db
 
-    if subject.startswith("agencyteam:"):
-        agent = admin_repository.get_agency_by_username(tenant_db, subject.removeprefix("agencyteam:"))
-        if not agent:
-            return deny()
-        return agent, tenant_id, common_db, tenant_db
+# How long a connection opened without a URL token may take to send its auth message.
+AUTH_TIMEOUT_SECONDS = 10
 
+
+async def _first_message_token(websocket: WebSocket) -> Optional[str]:
+    """The token from the connection's first message, `{"type": "auth", "token": "..."}`, or None
+    (anything else, malformed JSON, a disconnect, or nothing within AUTH_TIMEOUT_SECONDS)."""
     try:
-        phone = int(subject)
-    except (TypeError, ValueError):
-        return deny()
-    trainee = trainee_repository.get_by_phone(tenant_db, phone)
-    if not trainee:
-        return deny()
-    return trainee, tenant_id, common_db, tenant_db
+        message = json.loads(await asyncio.wait_for(websocket.receive_text(), AUTH_TIMEOUT_SECONDS))
+    except (asyncio.TimeoutError, WebSocketDisconnect, ValueError, KeyError, RuntimeError):
+        return None
+    if isinstance(message, dict) and message.get("type") == "auth" and isinstance(message.get("token"), str):
+        return message["token"] or None
+    return None
+
+
+async def _open_authenticated(websocket: WebSocket, url_token: str, authorize: Callable[[tuple], bool]):
+    """Authenticates and authorizes a connection; returns the identity, or None after closing it
+    with 1008.
+
+    Current clients send no token in the URL - tokens in URLs end up in proxy access logs. The
+    connection is accepted, the first message must carry the token, and only then is anything
+    joined (the server confirms with `{"type": "ready"}`). Older app builds still send `?token=`;
+    that path is unchanged - checked before accepting, refused without accepting - until
+    settings.WS_ALLOW_QUERY_TOKEN is turned off."""
+    if url_token:
+        identity = _resolve_identity(url_token) if settings.WS_ALLOW_QUERY_TOKEN else None
+        if identity is None or not authorize(identity):
+            _close_sessions(identity)
+            await websocket.close(code=1008)
+            return None
+        await websocket.accept()
+        return identity
+
+    await websocket.accept()
+    token = await _first_message_token(websocket)
+    identity = _resolve_identity(token) if token else None
+    if identity is None or not authorize(identity):
+        _close_sessions(identity)
+        await websocket.close(code=1008)
+        return None
+    await websocket.send_json({"type": "ready"})
+    return identity
+
+
+def _close_sessions(identity) -> None:
+    if identity is not None:
+        identity[2].close()
+        identity[3].close()
 
 
 def _authorize_room(principal, common_db, tenant_db, tenant_id: str, conference_uid: str) -> bool:
-    """Same rule as the REST endpoints, not a separate one: an admin-table account via
-    `resolve_scope`/`allows_row` (access_service - the exact check `_get_owned_conference`
-    already applies to start/operate a session); a trainer via the same ownership
-    `conference_repository.get_owned_by_trainer` already gates start/end/modules with; a
+    """Same rule as the REST endpoints, not a separate one: an admin-table account or a trainer
+    via `conference_access.find_authorized_conference` (the exact gate `_get_owned_conference`
+    applies to start/operate a session - admin grant by scope, active trainer by assignment); a
     trainee via the same `attendance_repository.get_for_conference_and_trainee` row every
     admin write endpoint already uses to confirm a trainee belongs to a session. The conference
     is looked up ONLY in the caller's own verified tenant's database - never a client-supplied
     tenant, and a UID that doesn't exist there denies exactly like one that exists but is out of
     scope, so neither response distinguishes "wrong tenant" from "not in scope"."""
-    conference = conference_repository.get_by_uid(tenant_db, conference_uid)
-    if not conference:
-        return False
-    if isinstance(principal, Admin):
-        return resolve_scope(common_db, principal, tenant_id).allows_row(conference.company, conference.zone, conference.region)
-    if isinstance(principal, AgencyTeam):
-        return conference_repository.get_owned_by_trainer(tenant_db, principal.username, conference_uid) is not None
+    if isinstance(principal, (Admin, AgencyTeam)):
+        return conference_access.find_authorized_conference(tenant_db, principal, conference_uid, common_db, tenant_id) is not None
     if isinstance(principal, Trainee):
         return attendance_repository.get_for_conference_and_trainee(tenant_db, conference_uid, principal.traineeUid) is not None
     return False
@@ -193,17 +219,13 @@ def _authorize_room(principal, common_db, tenant_db, tenant_id: str, conference_
 
 @router.websocket("/ws/admin")
 async def admin_events(websocket: WebSocket, token: str = ""):
-    identity = _resolve_identity(token)
+    # This channel is for the admin panel / trainer app only.
+    identity = await _open_authenticated(websocket, token, lambda identity: not isinstance(identity[0], Trainee))
     if identity is None:
-        await websocket.close(code=1008)
         return
     principal, tenant_id, common_db, tenant_db = identity
     try:
-        if isinstance(principal, Trainee):  # this channel is for the admin panel / trainer app only
-            await websocket.close(code=1008)
-            return
         username = principal.username
-
         await manager.connect(websocket, tenant_id, username)
         try:
             while True:
@@ -225,16 +247,13 @@ async def live_quiz_events(websocket: WebSocket, conference_uid: str, token: str
     every trainee's Live Quiz screen connect here while the module is running;
     each `{"type": "live_quiz"}` nudge tells them to refetch their REST view.
     Room membership itself is authorized before joining - see `_authorize_room`."""
-    identity = _resolve_identity(token)
+    identity = await _open_authenticated(
+        websocket, token, lambda identity: _authorize_room(identity[0], identity[2], identity[3], identity[1], conference_uid)
+    )
     if identity is None:
-        await websocket.close(code=1008)
         return
     principal, tenant_id, common_db, tenant_db = identity
     try:
-        if not _authorize_room(principal, common_db, tenant_db, tenant_id, conference_uid):
-            await websocket.close(code=1008)
-            return
-
         await manager.join_room(websocket, tenant_id, conference_uid)
         try:
             while True:

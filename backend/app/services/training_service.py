@@ -25,7 +25,8 @@ from app.repositories import (
     trainee_repository,
 )
 from app.routers.ws import manager as ws_manager
-from app.services.access_service import AccessScope, resolve_scope
+from app.services import conference_access
+from app.services.access_service import AccessScope, own_trainings_username, resolve_scope
 from app.utils.date_utils import ist_now, ist_to_iso, parse_module_start, to_utc_iso, utc_now
 from app.utils.helpers import geofence_enabled, within_geofence
 from app.utils.status import title_status
@@ -35,6 +36,7 @@ from app.schemas.training import (
     AttendanceConfig,
     AttendanceListItemOut,
     AttendanceMarkRequest,
+    AttendanceResetRequest,
     AudienceBreakdown,
     AuditLogEntry,
     ExecutionFlowItem,
@@ -59,6 +61,7 @@ from app.schemas.training import (
     TrainingOut,
 )
 from app.services import live_quiz_service
+from app.services import placement_rules
 from app.services.activity_log_service import log_activity
 from app.services.module_flow import (
     auto_advance_if_due,
@@ -349,8 +352,18 @@ def _audit_log(db: Session, conference: Conference) -> list[AuditLogEntry]:
 
 
 def create_training(
-    db: Session, payload: TrainingCreate, background_tasks: BackgroundTasks, admin: Admin, tenant_id: str = None
+    db: Session,
+    payload: TrainingCreate,
+    background_tasks: BackgroundTasks,
+    admin: Admin,
+    tenant_id: str = None,
+    common_db: Optional[Session] = None,
 ) -> TrainingOut:
+    placement_rules.authorize_placement(
+        db, common_db, admin, resolve_scope(common_db, admin, tenant_id), tenant_id,
+        company=payload.company, zone=payload.zone, region=payload.region, trainer=payload.trainerEmployeeId,
+    )
+
     session_config = {}
     if payload.isResidential and payload.trainingEndDate:
         session_config["trainingEndDate"] = payload.trainingEndDate
@@ -422,6 +435,16 @@ def create_training(
         status="Approved",
     )
     conference = conference_repository.create(db, conference)
+
+    assigned_to = conference.trainerEmployeeId
+    for_someone_else = f" for trainer {assigned_to}" if assigned_to and assigned_to != admin.username else ""
+    log_activity(
+        db,
+        action="CREATE_TRAINING",
+        username=admin.username,
+        role=admin.role,
+        remarks=f"Created training {conference.conferenceUid}{for_someone_else}",
+    )
 
     background_tasks.add_task(
         ws_manager.send_to,
@@ -509,7 +532,43 @@ def get_training_detail(
 _EDITABLE_CONFERENCE_STATUSES = {"Scheduled", "Pending", "Not Started"}
 
 
-def _apply_schedule_fields(db: Session, conference: Conference, payload: TrainingCreate) -> None:
+# Plain PATCH fields -> the conference column each one writes.
+_PATCH_COLUMNS = {
+    "zone": "zone",
+    "region": "region",
+    "company": "company",
+    "requestedBy": "requestedBy",
+    "trainerEmployeeId": "trainerEmployeeId",
+    "trainerName": "trainerName",
+    "conferenceDate": "conferenceDate",
+    "conferenceTime": "conferenceTime",
+    "trainingHub": "trainingHub",
+    "audience": "audience",
+    "sessionType": "sessionType",
+    "trainingType": "trainingType",
+    "batchSize": "batchSize",
+    "state": "state",
+    "district": "district",
+}
+# Fields that together decide the session flow (sessionConfig, check-in, geofence, module
+# question sets, residential type): when any of them is sent they are applied as one unit, the
+# way the edit form always sends them.
+_SESSION_FLOW_FIELDS = frozenset({"isResidential", "trainingEndDate", "sessionFlow", "venue"})
+
+
+def _apply_schedule_fields(db: Session, conference: Conference, payload: TrainingCreate, sent: set[str]) -> None:
+    """Writes only the fields the request sent (`sent` = payload.model_fields_set) - a field left
+    out keeps its stored value; one sent as null clears it."""
+    for field, column in _PATCH_COLUMNS.items():
+        if field in sent:
+            setattr(conference, column, getattr(payload, field))
+    if "checklist" in sent:
+        conference.checklistUid = ",".join(payload.checklist) if payload.checklist else None
+    if sent & _SESSION_FLOW_FIELDS:
+        _apply_session_flow(db, conference, payload)
+
+
+def _apply_session_flow(db: Session, conference: Conference, payload: TrainingCreate) -> None:
     session_config = {}
     if payload.isResidential and payload.trainingEndDate:
         session_config["trainingEndDate"] = payload.trainingEndDate
@@ -536,28 +595,12 @@ def _apply_schedule_fields(db: Session, conference: Conference, payload: Trainin
                 geo_latitude = venue.latitude
                 geo_longitude = venue.longitude
 
-    conference.zone = payload.zone
-    conference.region = payload.region
-    conference.company = payload.company
-    conference.requestedBy = payload.requestedBy
-    conference.trainerEmployeeId = payload.trainerEmployeeId
-    conference.trainerName = payload.trainerName
     conference.conferenceType = "Residential Conference" if payload.isResidential else "Non Residential Conference"
-    conference.conferenceDate = payload.conferenceDate
-    conference.conferenceTime = payload.conferenceTime
     conference.enableCheckIn = 1 if session_config.get("attendance") else 0
-    conference.trainingHub = payload.trainingHub
-    conference.audience = payload.audience
-    conference.sessionType = payload.sessionType
-    conference.trainingType = payload.trainingType
-    conference.batchSize = payload.batchSize
-    conference.state = payload.state
-    conference.district = payload.district
     conference.venueUid = payload.venue
     conference.geoLatitude = geo_latitude
     conference.geoLongitude = geo_longitude
     conference.geoRadius = geo_radius
-    conference.checklistUid = ",".join(payload.checklist) if payload.checklist else None
     conference.sessionConfig = json.dumps(session_config) if session_config else None
     conference.postAssessmentUid = (
         payload.sessionFlow.standardTest.assessmentSuiteUid
@@ -581,7 +624,20 @@ def update_training(
     conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
 
     if conference.conferenceStatus in _EDITABLE_CONFERENCE_STATUSES:
-        _apply_schedule_fields(db, conference, payload)
+        # A PATCH changes only the fields it sends; the training as it WILL be after the change
+        # (sent values over stored ones) must be inside the caller's grant, and a changed trainer
+        # must be one they may assign.
+        sent = payload.model_fields_set
+        merged = {
+            field: getattr(payload, field) if field in sent else getattr(conference, column)
+            for field, column in (("company", "company"), ("zone", "zone"), ("region", "region"), ("trainerEmployeeId", "trainerEmployeeId"))
+        }
+        placement_rules.authorize_placement(
+            db, common_db, admin, resolve_scope(common_db, admin, tenant_id), tenant_id,
+            company=merged["company"], zone=merged["zone"], region=merged["region"],
+            trainer=merged["trainerEmployeeId"], current_trainer=conference.trainerEmployeeId,
+        )
+        _apply_schedule_fields(db, conference, payload, sent)
 
     if payload.confirmedPax is not None:
         conference.confirmedPax = payload.confirmedPax
@@ -633,18 +689,10 @@ def _get_owned_conference(
     Company Admin their company, Coordinator their zone, Sub-coordinator their region. They
     operate it exactly like the assigned trainer (same approval/schedule/geofence/photo rules);
     only who is allowed to press the buttons changes.
-    `common_db`/`tenant_id` are only needed for that admin check - a caller that omits them keeps
-    the old trainer-only behaviour (an admin without them is denied, same as before this existed)."""
-    if getattr(admin, "role", None) == "admin":
-        conference = _find_any_conference(db, conference_uid)
-        scope = resolve_scope(common_db, admin, tenant_id) if common_db is not None else None
-        if scope is None or not scope.allows_row(conference.company, conference.zone, conference.region):
-            raise not_found("Training not found")
-        return conference
-    conference = conference_repository.get_owned_by_trainer(db, admin.username, conference_uid)
-    if not conference:
-        raise not_found("Training not found")
-    return conference
+    The rule itself lives in conference_access (shared with live_quiz_service and the WebSocket
+    room). It fails closed: a missing `tenant_id` denies everyone, a missing `common_db` denies an
+    admin-table account, and a trainer must be an active trainer in this tenant."""
+    return conference_access.get_authorized_conference(db, admin, conference_uid, common_db, tenant_id)
 
 
 def list_all_performers(
@@ -779,6 +827,8 @@ def list_trainer_trainings(
     org: bool = False,
     filters: Optional[ConferenceFilters] = None,
     approval: Optional[str] = None,
+    common_db: Optional[Session] = None,
+    tenant_id: Optional[str] = None,
 ) -> TrainerAgendaResponse:
     """Powers the trainer's Home agenda, and (with `all_sessions=true`) the
     Training List / Pending Training List / Sessions screens that need this
@@ -794,23 +844,28 @@ def list_trainer_trainings(
     question). As soon as the trainer applies an explicit start/end (or a
     caller asks for `all_sessions`), every number (including totalTrainees)
     is scoped to that range/scope instead."""
+    # Verified server-side (access_service.own_trainings_username) - never the token subject
+    # alone: an agency account without the trainer role, or an admin-table trainer without a
+    # trainer grant for this tenant, is refused here.
+    username = own_trainings_username(common_db, admin, tenant_id)
     is_default_view = start is None and end is None and not all_sessions
 
     if org:
-        # Admin-only org-wide view: every trainer's trainings, newest first.
-        # Filtered (and the pending / reviewed split applied) in the database,
-        # so only the rows the list actually shows are loaded.
+        # Admin-only org-wide view: every in-scope trainer's trainings, newest first. Scoped by
+        # the caller's admin_access grant and filtered (with the pending / reviewed split) in the
+        # database, so only the rows the list actually shows are loaded.
         conferences = conference_repository.list_filtered(
             db,
-            dashboard_repository.conference_conditions(filters, include_cancelled=True),
+            dashboard_repository.conference_conditions(filters, include_cancelled=True)
+            + dashboard_repository.conference_authorization_conditions(resolve_scope(common_db, admin, tenant_id)),
             approval,
         )
     elif all_sessions:
-        conferences = conference_repository.list_all_for_trainer(db, admin.username)
+        conferences = conference_repository.list_all_for_trainer(db, username)
     elif is_default_view:
-        conferences = conference_repository.list_for_trainer(db, admin.username, exact_date=date.today().isoformat())
+        conferences = conference_repository.list_for_trainer(db, username, exact_date=date.today().isoformat())
     else:
-        conferences = conference_repository.list_for_trainer(db, admin.username, start=start, end=end)
+        conferences = conference_repository.list_for_trainer(db, username, start=start, end=end)
 
     conference_uids = [c.conferenceUid for c in conferences]
     trainee_uids_by_conference = _real_trainee_uids_by_conference(db, conference_uids)
@@ -830,7 +885,7 @@ def list_trainer_trainings(
     if is_default_view:
         # All-time headcount across every session this trainer has ever run,
         # not just today's - a trainee trained last month still counts.
-        all_conference_uids = [c.conferenceUid for c in conference_repository.list_all_for_trainer(db, admin.username)]
+        all_conference_uids = [c.conferenceUid for c in conference_repository.list_all_for_trainer(db, username)]
         trainee_source = _real_trainee_uids_by_conference(db, all_conference_uids)
     else:
         # De-duplicated across every session in the filtered range - a
@@ -871,7 +926,7 @@ def list_trainer_trainings(
     # and Ongoing count across the trainer's whole history there; with an
     # explicit range/all_sessions they follow that scope. Missed always
     # follows the selected date range (today's, on the default view).
-    scoped = conference_repository.list_all_for_trainer(db, admin.username) if is_default_view else counted
+    scoped = conference_repository.list_all_for_trainer(db, username) if is_default_view else counted
     pending = sum(1 for c in _not_started_approved(scoped) if not _is_past(c))
     missed = sum(1 for c in _not_started_approved(counted) if _is_past(c))
     # Ongoing = every session that is live right now, same scope as above.
@@ -882,7 +937,7 @@ def list_trainer_trainings(
     # Always all-time, regardless of `start`/`end` - the Recent Sessions card
     # wants "what did I most recently complete", not "what completed within
     # whatever range is currently filtered".
-    recent_completed_conferences = conference_repository.list_recent_completed_for_trainer(db, admin.username, 2)
+    recent_completed_conferences = conference_repository.list_recent_completed_for_trainer(db, username, 2)
     recent_completed_uids = _real_trainee_uids_by_conference(
         db, [c.conferenceUid for c in recent_completed_conferences]
     )
@@ -931,7 +986,9 @@ def list_trainings_page(
     Admin their own company, a Coordinator their zone, a Sub-coordinator their region - resolved
     the same way the session-operation authorization already does (access_service.resolve_scope),
     never from company/zone/region the client sends. `filters` only narrows further, inside that
-    boundary; it can never widen past it.
+    boundary; it can never widen past it. An active trainer gets the same list restricted to the
+    trainings assigned to them (dashboard_repository.conference_authorization_conditions) - their
+    own Training / Pending Training List.
 
     `common_db`/`tenant_id` are what resolve_scope needs. An authenticated request always
     supplies a real `admin` (require_admin_role never returns None) plus both of these - if one
@@ -952,7 +1009,7 @@ def list_trainings_page(
     )
     conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
     if scope is not None:
-        conditions += dashboard_repository.access_scope_conditions(scope)
+        conditions += dashboard_repository.conference_authorization_conditions(scope)
     try:
         conferences, next_cursor, total = conference_repository.list_page(
             db,
@@ -987,15 +1044,22 @@ def list_trainings_page(
 
 
 def list_pending_trainings(
-    db: Session, filters: Optional[ConferenceFilters] = None
+    db: Session,
+    admin: Admin,
+    filters: Optional[ConferenceFilters] = None,
+    common_db: Optional[Session] = None,
+    tenant_id: Optional[str] = None,
 ) -> list[PendingSessionItem]:
-    """Every trainer's not-yet-reviewed sessions, across all trainers -
-    powers the admin dashboard's Pending Approvals list. `filters` here
-    normally only carries the caller's mandatory identity scope (company +
-    assigned zone, see data_scope_service) - there's no user-facing filter
-    UI on this screen - but any optional filter is honoured the same way
-    the other admin list views do."""
-    conferences = [c for c in conference_repository.list_pending(db) if filters is None or filters.matches(c)]
+    """Not-yet-reviewed sessions across every trainer inside the caller's admin_access grant -
+    powers the admin dashboard's Pending Approvals list. Scoped and filtered in SQL, the same
+    way as the Training List (conference_authorization_conditions); any optional filter only
+    narrows inside that scope."""
+    conferences = conference_repository.list_filtered(
+        db,
+        dashboard_repository.conference_conditions(filters, include_cancelled=True)
+        + dashboard_repository.conference_authorization_conditions(resolve_scope(common_db, admin, tenant_id)),
+        "pending",
+    )
     return [
         PendingSessionItem(
             conferenceUid=c.conferenceUid,
@@ -1007,13 +1071,6 @@ def list_pending_trainings(
         )
         for c in conferences
     ]
-
-
-def _find_any_conference(db: Session, conference_uid: str) -> Conference:
-    conference = conference_repository.get_by_uid(db, conference_uid)
-    if not conference:
-        raise not_found("Training not found")
-    return conference
 
 
 def approve_training(
@@ -1579,7 +1636,7 @@ async def start_training(
     # identity-verification idea as the trainee's secure attendance check-in.
     contents = await photo.read()
     extension = validate_image_upload(photo.content_type, contents, size_error_detail="Photo must be 5MB or smaller")
-    photo_dir = media_subdir("trainer_checkin_photos")
+    photo_dir = media_subdir("trainer_checkin_photos", tenant_id)
     filename = f"{conference.conferenceUid}.{extension}"
     (photo_dir / filename).write_bytes(contents)
     conference.startConferenceImage = f"trainer_checkin_photos/{filename}"
@@ -1830,11 +1887,11 @@ async def end_training(
         size_error_detail="Attendance sheet must be 5MB or smaller",
     )
 
-    photo_dir = media_subdir("trainer_checkout_photos")
+    photo_dir = media_subdir("trainer_checkout_photos", tenant_id)
     (photo_dir / f"{conference.conferenceUid}.{photo_ext}").write_bytes(photo_bytes)
     conference.conferenceImage = f"trainer_checkout_photos/{conference.conferenceUid}.{photo_ext}"
 
-    sheet_dir = media_subdir("attendance_sheets")
+    sheet_dir = media_subdir("attendance_sheets", tenant_id)
     (sheet_dir / f"{conference.conferenceUid}.{sheet_ext}").write_bytes(sheet_bytes)
     conference.attendanceSheet = f"attendance_sheets/{conference.conferenceUid}.{sheet_ext}"
 
@@ -1912,6 +1969,12 @@ def mark_attendance(
     log_line = f"{admin.username} -> {payload.status.upper()}: {payload.reason.strip()}"
 
     record = attendance_repository.get_for_conference_and_trainee(db, conference_uid, trainee_uid)
+    # The path's trainee UID must be someone the session's Trainee Master List can show: a roster /
+    # attendance row on this conference, or a Post Test attempt on it (the dashboard's "Attempted"
+    # row, the only case with no attendance row yet). Any other UID is refused, so a caller can't
+    # attach an arbitrary trainee to their session - and, through the roster, to their Trainee List.
+    if record is None and trainee_uid not in _latest_post_test_results(db, conference):
+        raise not_found("Trainee not found in this training")
     if record:
         record.status = payload.status
         record.markedOn = now_str
@@ -1995,14 +2058,26 @@ def reset_attendance(
     admin: Admin,
     conference_uid: str,
     trainee_uid: str,
+    payload: AttendanceResetRequest,
     background_tasks: BackgroundTasks,
     common_db: Session = None,
     tenant_id: str = None,
 ) -> SessionDashboardOut:
-    """Clears a trainee's attendance record entirely - the "..." control
-    on the Trainee Master List."""
+    """Clears a trainee's attendance record entirely - the "..." control on the Trainee Master
+    List. Same rules as a manual mark (mark_attendance): only while the session is running, and
+    with a reason, which goes into the audit trail."""
     conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
-    attendance_repository.delete_for_conference_and_trainee(db, conference_uid, trainee_uid)
+    if title_status(conference.conferenceStatus) != "Ongoing":
+        raise conflict("Attendance can only be changed while the session is running")
+    if attendance_repository.delete_for_conference_and_trainee(db, conference_uid, trainee_uid):
+        # Same audit trail as a manual mark or a proctoring unlock: who cleared whose record, where, why.
+        log_activity(
+            db,
+            action="RESET_ATTENDANCE",
+            username=admin.username,
+            role=admin.role,
+            remarks=f"Reset attendance of {trainee_uid} for {conference_uid}: {payload.reason}",
+        )
     _nudge_session_room(background_tasks, conference_uid, tenant_id)
     return _build_dashboard(db, conference)
 
@@ -2021,8 +2096,8 @@ def list_attendance_page(
     common_db: Optional[Session] = None,
     tenant_id: Optional[str] = None,
 ) -> AttendancePageResponse:
-    """One page of the admin org-wide attendance list, restricted to what `admin`'s admin_access
-    grant authorizes - the same scope (access_service.resolve_scope), the same SQL condition
+    """One page of the attendance list, restricted to what `admin`'s admin_access grant authorizes
+    (or, for an active trainer, to attendance on the trainings assigned to them) - the same scope (access_service.resolve_scope), the same SQL condition
     builder (dashboard_repository.access_scope_conditions) and the same fail-closed convention
     as list_trainings_page: a missing `common_db`/`tenant_id` on a real request denies rather
     than widens, and `admin=None` (only possible from a direct internal call, never through the
@@ -2041,7 +2116,7 @@ def list_attendance_page(
     )
     conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
     if scope is not None:
-        conditions += dashboard_repository.access_scope_conditions(scope)
+        conditions += dashboard_repository.conference_authorization_conditions(scope)
     try:
         rows, next_cursor, total = attendance_repository.list_page(
             db, conditions, mode, search, sort, descending, cursor, limit, page
@@ -2125,14 +2200,13 @@ def list_attendance(
     it applies the caller's admin_access grant the same way list_attendance_page does - see
     that function's docstring for the common_db/tenant_id fail-closed convention."""
     if org:
-        scope = resolve_scope(common_db, admin, tenant_id) if common_db is not None else AccessScope.denied(tenant_id or "", "no scope context")
-        conferences = [
-            c
-            for c in conference_repository.list_all(db)
-            if (filters is None or filters.matches(c)) and scope.allows_row(c.company, c.zone, c.region)
-        ]
+        conferences = conference_repository.list_filtered(
+            db,
+            dashboard_repository.conference_conditions(filters, include_cancelled=True)
+            + dashboard_repository.conference_authorization_conditions(resolve_scope(common_db, admin, tenant_id)),
+        )
     else:
-        conferences = conference_repository.list_all_for_trainer(db, admin.username)
+        conferences = conference_repository.list_all_for_trainer(db, own_trainings_username(common_db, admin, tenant_id))
     conference_by_uid = {c.conferenceUid: c for c in conferences}
     conference_uids = list(conference_by_uid.keys())
     if not conference_uids:

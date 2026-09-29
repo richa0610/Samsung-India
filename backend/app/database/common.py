@@ -4,7 +4,7 @@ from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
-from app.database.connection import build_connect_args
+from app.database.connection import SAFE_ENGINE_OPTIONS, build_connect_args
 
 COMMON_DATABASE_URL = URL.create(
     drivername="mysql+pymysql",
@@ -20,6 +20,7 @@ common_engine = create_engine(
     pool_pre_ping=True,
     pool_recycle=280,
     connect_args=build_connect_args(),
+    **SAFE_ENGINE_OPTIONS,
 )
 
 CommonSessionLocal = sessionmaker(

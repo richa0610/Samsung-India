@@ -30,10 +30,13 @@ export function useLiveQuizChannel(
     let stopped = false;
 
     const connect = () => {
-      socket = new WebSocket(`${getWsBaseUrl()}/ws/live/${conferenceUid}?token=${token}`);
-      socket.onopen = () => {
+      // The token goes in the first message, never the URL - URLs end up in proxy access logs.
+      const ws = new WebSocket(`${getWsBaseUrl()}/ws/live/${conferenceUid}`);
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: "auth", token }));
         if (!stopped) setConnected(true);
       };
+      socket = ws;
       socket.onmessage = (event) => {
         try {
           // Any well-formed message is a "refetch" nudge - the real state

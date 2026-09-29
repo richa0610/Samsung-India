@@ -74,5 +74,9 @@ class Admin(CommonBase):
     updatedBy = Column(String(100))
     updationOn = Column(DateTime)
     status = Column(String(100), nullable=False, server_default=text("'Pending'"))
+
+    # Bumped to revoke every token issued for this account (logout, see
+    # services/token_revocation.py); a token carries the value it was issued with as `ver`.
+    tokenVersion = Column(Integer, nullable=False, server_default=text("0"))
     remarks = Column(Text)
     timestamp = Column(DateTime, server_default=func.now(), nullable=False)

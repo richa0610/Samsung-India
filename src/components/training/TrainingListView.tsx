@@ -73,6 +73,7 @@ export function TrainingListView({
     onSortChange: paged.toggleSort,
     sortableKeys: paged.sortableKeys,
     onExportAll: paged.exportAll,
+    loading: paged.searching,
   };
 
   return (
@@ -97,7 +98,7 @@ export function TrainingListView({
         {topContent}
         {loading ? null : (
           <>
-            <View style={[styles.tableWrap, paged?.searching && styles.searching]}>
+            <View style={styles.tableWrap}>
             <DataTable
               title={title}
               columns={columns}
@@ -117,10 +118,8 @@ export function TrainingListView({
         )}
       </ScrollView>
 
-      {/* Loader in the middle of the SCREEN (not the scrolling page): first load, and
-          while a new page / search / sort / rows-per-page is fetched - the old rows
-          stay dimmed underneath and the table stays mounted so the search box keeps focus. */}
-      {(loading || paged?.searching) && (
+      {/* Screen-center loader for the very first fetch only (before table renders) */}
+      {loading && (
         <View style={styles.loadingOverlay} pointerEvents="none">
           <View style={styles.loadingPill}>
             <ActivityIndicator size="small" color={Colors.mainColour1} />
@@ -140,10 +139,10 @@ const styles = StyleSheet.create({
   bannerTitle: { fontSize: Fonts.h3 },
   bannerSubtitle: { fontSize: Fonts.overline, marginTop: 2, opacity: 0.9 },
 
-  scroll: { marginTop: -50, zIndex: 1, elevation: 1 },
+  scroll: { flex: 1, marginTop: -50, zIndex: 1, elevation: 1 },
   content: { paddingHorizontal: 8, paddingVertical: 16, flexGrow: 1 },
   // Grows to fill the screen, so with only a few trainings the card still reaches the bottom.
-  tableWrap: { flex: 1 },
+  tableWrap: { flex: 1, flexGrow: 1 },
   searching: { opacity: 0.55 },
   loadingText: { fontSize: Fonts.bodySm },
   loadingOverlay: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },

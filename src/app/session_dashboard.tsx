@@ -12,13 +12,13 @@ import {
   TrainerCheckOutModal,
   useSessionDashboardScreen,
 } from "@/components/session_dashboard/dashboard-screen";
+import { AdminTabBar } from "@/components/admin/dashboard";
 import DashboardBottomNav from "@/components/trainer/dashboard/DashboardBottomNav";
 import TrainerMoreMenu from "@/components/trainer/dashboard/TrainerMoreMenu";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 
 export default function SessionDashboardScreen() {
   const {
-    router,
     conferenceUid,
     data,
     generatedAt,
@@ -61,6 +61,9 @@ export default function SessionDashboardScreen() {
     dismissPendingModuleNotice,
     liveQuizControls,
     handleBottomNavSelect,
+    isAdmin,
+    handleBack,
+    handleReport,
     isSessionClosed,
     showSessionData,
     isLive,
@@ -82,11 +85,11 @@ export default function SessionDashboardScreen() {
         reportEnabled={isSessionClosed}
         loading={loading}
         timestamp={generatedAt}
-        onBack={() => router.back()}
+        onBack={handleBack}
         onCopyLink={handleCopyLink}
         onShowQR={() => setShowQR(true)}
         onRefresh={() => loadData("refresh")}
-        onReport={() => router.push({ pathname: "/session_report", params: { conferenceUid } })}
+        onReport={handleReport}
         onStartSession={handleStartSession}
         startingSession={requestingStartLocation}
         onEndSession={handleEndSession}
@@ -108,9 +111,14 @@ export default function SessionDashboardScreen() {
         liveQuizControls={liveQuizControls}
       />
 
-      <DashboardBottomNav activeTab={bottomTab} onSelectTab={handleBottomNavSelect} />
-
-      <TrainerMoreMenu visible={moreOpen} onClose={() => setMoreOpen(false)} />
+      {isAdmin ? (
+        <AdminTabBar activeTab="training" />
+      ) : (
+        <>
+          <DashboardBottomNav activeTab={bottomTab} onSelectTab={handleBottomNavSelect} />
+          <TrainerMoreMenu visible={moreOpen} onClose={() => setMoreOpen(false)} />
+        </>
+      )}
 
       <SessionQRModal visible={showQR} onClose={() => setShowQR(false)} conferenceUid={conferenceUid} />
 

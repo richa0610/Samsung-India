@@ -55,3 +55,10 @@ database_dump.sql
 claudememory.md
 tasks.lessons.md
 primer.md
+# Uploaded files (trainee / attendance photos, attendance sheets, Aadhaar documents) never go in git -
+# only the shared default trainer avatars do.
+backend/media/*
+!backend/media/trainer_photos/
+backend/media/trainer_photos/*
+!backend/media/trainer_photos/default_male.png
+!backend/media/trainer_photos/default_female.png

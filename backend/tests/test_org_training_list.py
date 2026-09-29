@@ -156,7 +156,23 @@ class PagedListTests(unittest.TestCase):
             rows = [c for c in rows if any(search.lower() in (getattr(c, f) or "").lower() for f in fields)]
 
         def key(c):
-            value = getattr(c, column)
+            if column == "conferenceStatus":
+                # Mirrors conference_repository.EFFECTIVE_STATUS / _encode_cursor:
+                # the list is sorted by what the UI actually displays (approval
+                # rejected/pending overrides the raw session status; an approved
+                # "Ongoing" session displays as "Started"), not the raw column.
+                approval = (c.status or "").lower()
+                conf_status = (c.conferenceStatus or "").lower()
+                if approval == "rejected":
+                    value = "rejected"
+                elif approval != "approved":
+                    value = "pending"
+                elif conf_status == "ongoing":
+                    value = "started"
+                else:
+                    value = conf_status
+            else:
+                value = getattr(c, column)
             return (value if column == "timestamp" else (value or ""), c.id)
 
         return [c.conferenceUid for c in sorted(rows, key=key, reverse=descending)]

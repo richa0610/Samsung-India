@@ -24,7 +24,6 @@ import { subscribe } from "@/services/liveEvents";
 export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200];
 const DEFAULT_PAGE_SIZE = 10;
 const EXPORT_PAGE_SIZE = 200;
-const SEARCH_DEBOUNCE_MS = 200;
 
 /** Table column key -> the server sort it maps to. Columns not listed can't be sorted. */
 export const SERVER_SORT_KEYS: Record<string, AttendanceSortKey> = {
@@ -91,16 +90,15 @@ export function usePagedAttendanceList(mode: AttendanceMode): PagedAttendanceLis
   const [error, setError] = useState<string | null>(null);
   const loadedOnce = useRef(false);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearchState] = useState("");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortState>(null);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  // Wait for a pause in typing before asking the server.
-  useEffect(() => {
-    const timer = setTimeout(() => setQuery(search), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [search]);
+  const setSearch = useCallback((value: string) => {
+    setSearchState(value);
+    setQuery(value);
+  }, []);
 
   const sortKey = sort ? SERVER_SORT_KEYS[sort.key] : undefined;
   const sortDir = sort?.direction;
@@ -123,6 +121,13 @@ export function usePagedAttendanceList(mode: AttendanceMode): PagedAttendanceLis
   const page = chosenPage.listKey === listKey ? chosenPage.page : 1;
   const setPage = useCallback((next: number) => setChosenPage({ listKey, page: Math.max(next, 1) }), [listKey]);
 
+  // In-memory cache of downloaded pages for the current listKey (filter/search/sort/pageSize).
+  // Going back to an already-visited page (e.g. page 2 -> page 1) renders instantly from
+  // memory with zero loading overlay or network delay.
+  // The cache remembers which list it belongs to and is swapped for an empty one by the loader
+  // (never during render) the first time a different list is requested.
+  const pageCache = useRef<{ listKey: string; pages: Map<number, AttendanceListItem[]> }>({ listKey, pages: new Map() });
+
   // A response only counts if it belongs to the latest request - a slow reply for an
   // old page or search must never overwrite the newer one. The older request is also
   // aborted, so it stops using the connection.
@@ -134,24 +139,53 @@ export function usePagedAttendanceList(mode: AttendanceMode): PagedAttendanceLis
     async (loadMode: "load" | "refresh" | "silent" = "load") => {
       if (!adminToken) return;
       const id = ++requestId.current;
+      if (pageCache.current.listKey !== listKey) pageCache.current = { listKey, pages: new Map() };
+      const pages = pageCache.current.pages;
       inFlight.current?.abort();
-      const controller = new AbortController();
-      inFlight.current = controller;
 
-      if (loadMode === "refresh") setRefreshing(true);
-      else if (loadMode === "load") {
+      if (loadMode === "refresh") {
+        pages.clear();
+        setRefreshing(true);
+      } else if (loadMode === "silent") {
+        pages.clear();
+      } else if (loadMode === "load") {
+        const cached = pages.get(page);
+        if (cached) {
+          setItems(cached);
+          setError(null);
+          setLoading(false);
+          setSearching(false);
+          return;
+        }
+
         // Blank the screen only for the very first load: swapping the table for a
         // spinner on every page / search would unmount the search box mid-typing.
         if (loadedOnce.current) setSearching(true);
         else setLoading(true);
       }
+
+      const controller = new AbortController();
+      inFlight.current = controller;
       try {
         const result = await fetchAttendancePage(adminToken, { ...requestOptions, page, signal: controller.signal });
         if (id !== requestId.current) return;
+        pages.set(page, result.items);
         setItems(result.items);
         setError(null);
         // The server sends the total with page 1 only; keep it while paging.
         if (result.total != null) setTotal(result.total);
+
+        // Silently pre-fetch the next page in background so tapping 'Next' renders instantly (0ms)
+        const nextPage = page + 1;
+        if (!pages.has(nextPage)) {
+          fetchAttendancePage(adminToken, { ...requestOptions, page: nextPage })
+            .then((nextResult) => {
+              if (id === requestId.current && nextResult.items.length > 0) {
+                pages.set(nextPage, nextResult.items);
+              }
+            })
+            .catch(() => {});
+        }
       } catch (err) {
         if (controller.signal.aborted || id !== requestId.current) return; // superseded by a newer request
         if (loadMode !== "silent") {
@@ -166,7 +200,7 @@ export function usePagedAttendanceList(mode: AttendanceMode): PagedAttendanceLis
         }
       }
     },
-    [adminToken, requestOptions, page],
+    [adminToken, requestOptions, page, listKey],
   );
 
   const exportAll = useCallback(async () => {

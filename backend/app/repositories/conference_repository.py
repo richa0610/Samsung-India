@@ -1,27 +1,61 @@
-import base64
-import json
-from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import func, or_, tuple_
+from sqlalchemy import and_, case, false, func, or_
 from sqlalchemy.orm import Session
 
 from app.models.conference import Conference
+from app.repositories import keyset
 
 
 def get_by_uid(db: Session, conference_uid: str) -> Optional[Conference]:
     return db.query(Conference).filter(Conference.conferenceUid == conference_uid).first()
 
 
-def get_owned_by_trainer(db: Session, trainer_employee_id: str, conference_uid: str) -> Optional[Conference]:
+def trainer_condition(trainer_employee_id: Optional[str]):
+    """SQL condition for "this conference is assigned to this trainer" - the one trainer-ownership
+    rule every trainer query below uses. A blank/None username matches nothing (never
+    `trainerEmployeeId IS NULL`), so an unresolved identity can't claim unassigned trainings."""
+    if not (trainer_employee_id or "").strip():
+        return false()
+    return Conference.trainerEmployeeId == trainer_employee_id
+
+
+def get_authorized(db: Session, conference_uid: str, authorization_conditions: list) -> Optional[Conference]:
+    """One conference, only if it also satisfies the caller's authorization conditions (see
+    dashboard_repository.conference_authorization_conditions) - checked in the query itself, so
+    an out-of-scope row is never loaded."""
+    return db.query(Conference).filter(Conference.conferenceUid == conference_uid, *authorization_conditions).first()
+
+
+def get_authorized_by_file(db: Session, file_path: str, authorization_conditions: list) -> Optional[Conference]:
+    """The conference whose trainer check-in photo, check-out photo or attendance sheet is
+    `file_path`, only if it also satisfies the caller's authorization conditions."""
     return (
         db.query(Conference)
         .filter(
-            Conference.conferenceUid == conference_uid,
-            Conference.trainerEmployeeId == trainer_employee_id,
+            or_(
+                Conference.startConferenceImage == file_path,
+                Conference.conferenceImage == file_path,
+                Conference.attendanceSheet == file_path,
+            ),
+            *authorization_conditions,
         )
         .first()
     )
+
+
+def approval_conditions(approval: Optional[str]) -> list:
+    """The approval split the Training lists use: "pending" = awaiting review, "reviewed" =
+    anything else (approved or rejected - the admin's list), "approved" = approved only (the
+    trainer's own Training List). None = no split."""
+    approval_status = func.lower(Conference.status)
+    if approval == "pending":
+        return [approval_status == "pending"]
+    if approval == "reviewed":
+        return [or_(Conference.status.is_(None), approval_status != "pending")]
+    if approval == "approved":
+        return [approval_status == "approved"]
+    return []
 
 
 def list_filtered(db: Session, conditions: list, approval: Optional[str] = None) -> list[Conference]:
@@ -29,19 +63,14 @@ def list_filtered(db: Session, conditions: list, approval: Optional[str] = None)
     database (newest first) instead of loading every row and filtering in
     Python. `approval`: "pending" = awaiting review, "reviewed" = anything else
     (approved or rejected)."""
-    query = db.query(Conference).filter(*conditions)
-    approval_status = func.lower(Conference.status)
-    if approval == "pending":
-        query = query.filter(approval_status == "pending")
-    elif approval == "reviewed":
-        query = query.filter(or_(Conference.status.is_(None), approval_status != "pending"))
+    query = db.query(Conference).filter(*conditions, *approval_conditions(approval))
     return query.order_by(Conference.timestamp.desc()).all()
 
 
 def list_all_for_trainer(db: Session, trainer_employee_id: str) -> list[Conference]:
     return (
         db.query(Conference)
-        .filter(Conference.trainerEmployeeId == trainer_employee_id)
+        .filter(trainer_condition(trainer_employee_id))
         .order_by(Conference.timestamp.desc())
         .all()
     )
@@ -55,7 +84,7 @@ def list_for_trainer(
     start: Optional[str] = None,
     end: Optional[str] = None,
 ) -> list[Conference]:
-    query = db.query(Conference).filter(Conference.trainerEmployeeId == trainer_employee_id)
+    query = db.query(Conference).filter(trainer_condition(trainer_employee_id))
     if exact_date is not None:
         query = query.filter(Conference.conferenceDate == exact_date)
     else:
@@ -64,10 +93,6 @@ def list_for_trainer(
         if end:
             query = query.filter(Conference.conferenceDate <= end)
     return query.order_by(Conference.timestamp.desc()).all()
-
-
-def list_pending(db: Session) -> list[Conference]:
-    return db.query(Conference).filter(Conference.status == "Pending").order_by(Conference.timestamp.desc()).all()
 
 
 def list_all(db: Session) -> list[Conference]:
@@ -80,7 +105,7 @@ def list_all(db: Session) -> list[Conference]:
 def list_recent_completed_for_trainer(db: Session, trainer_employee_id: str, limit: int) -> list[Conference]:
     return (
         db.query(Conference)
-        .filter(Conference.trainerEmployeeId == trainer_employee_id, Conference.conferenceStatus == "Completed")
+        .filter(trainer_condition(trainer_employee_id), Conference.conferenceStatus == "Completed")
         .order_by(Conference.timestamp.desc())
         .limit(limit)
         .all()
@@ -111,7 +136,31 @@ def save(db: Session, conference: Conference) -> Conference:
     return conference
 
 
-# Columns the admin list can be sorted by (client column key -> model column).
+# What the user sees in the UI:
+# - If approval status is 'Rejected' -> 'Rejected'
+# - If approval status is NOT 'Approved' (e.g. 'Pending') -> 'Pending'
+# - If approved and conferenceStatus is 'Ongoing' -> 'Started'
+# - Otherwise -> conferenceStatus ('Scheduled', 'Completed', 'Cancelled')
+EFFECTIVE_STATUS = case(
+    (func.lower(func.coalesce(Conference.status, "")) == "rejected", "rejected"),
+    (func.lower(func.coalesce(Conference.status, "")) != "approved", "pending"),
+    (func.lower(func.coalesce(Conference.conferenceStatus, "")) == "ongoing", "started"),
+    else_=func.lower(func.coalesce(Conference.conferenceStatus, "")),
+)
+
+# For searching: also match "ongoing" when the session is Ongoing/Started
+EFFECTIVE_STATUS_ONGOING = case(
+    (
+        and_(
+            func.lower(func.coalesce(Conference.status, "")) == "approved",
+            func.lower(func.coalesce(Conference.conferenceStatus, "")) == "ongoing",
+        ),
+        "ongoing",
+    ),
+    else_="",
+)
+
+# Columns the admin list can be sorted by (client column key -> model column or expression).
 SORT_COLUMNS = {
     "timestamp": Conference.timestamp,
     "conferenceDate": Conference.conferenceDate,
@@ -124,10 +173,10 @@ SORT_COLUMNS = {
     "trainingHub": Conference.trainingHub,
     "state": Conference.state,
     "district": Conference.district,
-    "conferenceStatus": Conference.conferenceStatus,
+    "conferenceStatus": EFFECTIVE_STATUS,
 }
 
-# Text columns a free-text search looks in.
+# Text columns / expressions a free-text search looks in.
 SEARCH_COLUMNS = (
     Conference.conferenceUid,
     Conference.trainerName,
@@ -140,12 +189,13 @@ SEARCH_COLUMNS = (
     Conference.state,
     Conference.district,
     Conference.conferenceDate,
-    Conference.conferenceStatus,
-    Conference.status,
+    Conference.conferenceTime,
     Conference.suiteTitle,
+    EFFECTIVE_STATUS,
+    EFFECTIVE_STATUS_ONGOING,
 )
 
-MAX_PAGE_SIZE = 200
+MAX_PAGE_SIZE = keyset.MAX_PAGE_SIZE
 
 
 def _sort_expression(sort: str):
@@ -155,19 +205,19 @@ def _sort_expression(sort: str):
     return column if column is Conference.timestamp else func.coalesce(column, "")
 
 
-def _encode_cursor(sort: str, row: Conference) -> str:
-    value = getattr(row, SORT_COLUMNS.get(sort, Conference.timestamp).key)
-    if isinstance(value, datetime):
-        value = value.isoformat()
-    return base64.urlsafe_b64encode(json.dumps({"v": value if value is not None else "", "id": row.id}).encode()).decode()
-
-
-def _decode_cursor(sort: str, cursor: str):
-    data = json.loads(base64.urlsafe_b64decode(cursor.encode()))
-    value = data["v"]
-    if SORT_COLUMNS.get(sort, Conference.timestamp) is Conference.timestamp and isinstance(value, str):
-        value = datetime.fromisoformat(value)
-    return value, int(data["id"])
+def _cursor_value(sort: str, row: Conference):
+    """The row's value for `sort`, as stored in the next-page cursor."""
+    if sort == "conferenceStatus":
+        status = (row.status or "").lower()
+        conf_status = (row.conferenceStatus or "").lower()
+        if status == "rejected":
+            return "rejected"
+        if status != "approved":
+            return "pending"
+        if conf_status == "ongoing":
+            return "started"
+        return conf_status
+    return getattr(row, SORT_COLUMNS.get(sort, Conference.timestamp).key)
 
 
 def list_page(
@@ -181,48 +231,20 @@ def list_page(
     limit: int = 50,
     page: Optional[int] = None,
 ) -> tuple[list[Conference], Optional[str], Optional[int]]:
-    """One page of the org-wide list, using keyset ("rows after this one")
-    paging so a page stays correct - no skipped or repeated rows - even while
-    trainings are being added, and each page costs the same however deep it is
-    (an OFFSET would re-read every earlier row). Ordering is (sort column, id),
-    the id breaking ties. Returns (rows, next_cursor, total); `total` is only
-    computed for the first page (no cursor, and page 1 when a page number is
-    used) since it doesn't change as you move through the pages.
-
-    Two ways to move: `cursor` ("the rows after this one" - what "load more" and
-    export use) or `page` (1-based, jump straight to a numbered page - what the
-    table's page buttons use; an OFFSET, fine at these sizes)."""
-    limit = max(1, min(limit, MAX_PAGE_SIZE))
-    query = db.query(Conference).filter(*conditions)
-
-    approval_status = func.lower(Conference.status)
-    if approval == "pending":
-        query = query.filter(approval_status == "pending")
-    elif approval == "reviewed":
-        query = query.filter(or_(Conference.status.is_(None), approval_status != "pending"))
-
-    text = (search or "").strip().lower()
-    if text:
-        query = query.filter(
-            or_(*[func.lower(func.coalesce(column, "")).contains(text, autoescape=True) for column in SEARCH_COLUMNS])
-        )
-
-    total = query.count() if cursor is None and page in (None, 1) else None
-
-    sort_expr = _sort_expression(sort)
-    if cursor:
-        value, last_id = _decode_cursor(sort, cursor)
-        after = tuple_(sort_expr, Conference.id)
-        query = query.filter(after < tuple_(value, last_id) if descending else after > tuple_(value, last_id))
-
-    order = (sort_expr.desc(), Conference.id.desc()) if descending else (sort_expr.asc(), Conference.id.asc())
-    query = query.order_by(*order)
-    if page and page > 1 and not cursor:
-        query = query.offset((page - 1) * limit)
-    rows = query.limit(limit + 1).all()
-
-    next_cursor = None
-    if len(rows) > limit:
-        rows = rows[:limit]
-        next_cursor = _encode_cursor(sort, rows[-1])
-    return rows, next_cursor, total
+    """One page of the Training List: `conditions` (the caller's authorization AND its filters),
+    the approval split and the search are all in the WHERE before anything is counted, sorted or
+    paged - see keyset.paginate for the paging itself. Returns (rows, next_cursor, total)."""
+    query = db.query(Conference).filter(
+        *conditions, *approval_conditions(approval), *keyset.search_conditions(SEARCH_COLUMNS, search)
+    )
+    return keyset.paginate(
+        query,
+        _sort_expression(sort),
+        Conference.id,
+        descending=descending,
+        cursor=cursor,
+        limit=limit,
+        page=page,
+        cursor_value=lambda row: _cursor_value(sort, row),
+        datetime_sort=SORT_COLUMNS.get(sort, Conference.timestamp) is Conference.timestamp,
+    )

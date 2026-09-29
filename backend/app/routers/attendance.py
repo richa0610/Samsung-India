@@ -37,6 +37,7 @@ from app.routers.ws import manager as ws_manager
 from app.services import attendance_service
 from app.utils.date_utils import utc_now
 from app.utils.helpers import (
+    client_ip,
     distance_meters,
     geofence_enabled,
     within_geofence,
@@ -167,7 +168,7 @@ def check_in(
     )
     db.add(attendance)
 
-    client_ip = request.client.host if request.client else None
+    caller_ip = client_ip(request)
     user_agent = (
         request.headers.get("user-agent", "")[:255]
         if request.headers.get("user-agent")
@@ -180,7 +181,7 @@ def check_in(
         moduleId=module_id,
         markedAt=utc_now(),
         status="Present",
-        ipAddress=client_ip,
+        ipAddress=caller_ip,
         deviceInfo=user_agent,
     )
     db.add(attendance_log)
@@ -291,7 +292,7 @@ async def check_in_secure(
     venue_lng = float(conference.geoLongitude) if conference and conference.geoLongitude is not None else None
     distance = distance_meters(latitude, longitude, venue_lat, venue_lng)
 
-    photo_dir = media_subdir("attendance_photos")
+    photo_dir = media_subdir("attendance_photos", get_tenant_id_from_request(request))
     filename = f"{uuid.uuid4().hex}.{extension}"
     (photo_dir / filename).write_bytes(contents)
 
@@ -304,7 +305,7 @@ async def check_in_secure(
     existing.checkInDistance = f"{distance:.0f}" if distance is not None else None
     existing.checkInPhoto = f"attendance_photos/{filename}"
 
-    client_ip = request.client.host if request.client else None
+    caller_ip = client_ip(request)
     user_agent = (
         request.headers.get("user-agent", "")[:255]
         if request.headers.get("user-agent")
@@ -323,7 +324,7 @@ async def check_in_secure(
             moduleId=module_id,
             markedAt=utc_now(),
             status="Present",
-            ipAddress=client_ip,
+            ipAddress=caller_ip,
             deviceInfo=user_agent,
             locationData=f"{latitude},{longitude}",
         )

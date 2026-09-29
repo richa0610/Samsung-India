@@ -28,7 +28,7 @@ export default function AdminPendingTrainingsScreen() {
         paged={paged}
         onBack={() => router.back()}
         onEdit={openReview}
-        onReport={(row) => router.push({ pathname: "/session_dashboard", params: { conferenceUid: row.conferenceUid } })}
+        onReport={(row) => router.push({ pathname: "/session_dashboard", params: { conferenceUid: row.conferenceUid, from: "admin" } })}
         extendedColumns
         hasBottomNav
         topContent={<AdminFilterBar />}

@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from app.core.config import settings
+from app.core.log_redaction import install_token_redaction
 from app.core.media import MEDIA_ROOT
 from app.database.common import common_engine
 from app.database.connection import CommonBase, TenantBase
@@ -29,6 +30,9 @@ from app.routers.training import router as training_router
 from app.routers.ws import router as ws_router
 
 logger = logging.getLogger("main")
+
+# WebSocket handshakes carry the token in the query string; keep it out of uvicorn's log lines.
+install_token_redaction()
 
 # Startup DB initialisation. Skipped entirely under TESTING (see core/config.py):
 # importing this module in a test must never run DDL against a real database.

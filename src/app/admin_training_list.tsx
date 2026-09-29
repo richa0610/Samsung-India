@@ -22,7 +22,7 @@ export default function AdminTrainingListScreen() {
         paged={paged}
         onBack={() => router.back()}
         onEdit={(row) => router.push({ pathname: "/edit_training", params: { conferenceUid: row.conferenceUid } })}
-        onReport={(row) => router.push({ pathname: "/session_dashboard", params: { conferenceUid: row.conferenceUid } })}
+        onReport={(row) => router.push({ pathname: "/session_dashboard", params: { conferenceUid: row.conferenceUid, from: "admin" } })}
         extendedColumns
         hasBottomNav
         topContent={<AdminFilterBar />}

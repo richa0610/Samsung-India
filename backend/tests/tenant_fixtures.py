@@ -214,5 +214,12 @@ class TenantWorld:
         for tenant in (ALPHA, BETA):
             tenant_manager._engines.pop(tenant, None)
             tenant_manager._sessionmakers.pop(tenant, None)
+        # tenant_manager is a real, process-wide singleton (same object every test shares, by
+        # design - it mirrors the one instance the running app has). Its status cache
+        # (app/database/tenant.py's STATUS_CACHE_SECONDS) would otherwise outlive this world: a
+        # test that flips ALPHA to "suspended" (test_a_suspended_tenant_is_refused_even_after_first_use)
+        # would leak that verdict into every other test's own, unrelated ALPHA for up to
+        # STATUS_CACHE_SECONDS afterward.
+        tenant_manager.clear_status_cache()
         for p in self._patches:
             p.stop()

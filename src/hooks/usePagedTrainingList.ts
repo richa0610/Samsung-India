@@ -7,7 +7,7 @@
  * Any change to the filter, search text, sort or rows-per-page returns to page 1.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
 import { TrainingAgendaItem, TrainingSortKey, fetchTrainingsPage } from "@/api/training";
@@ -18,7 +18,6 @@ import { subscribe } from "@/services/liveEvents";
 export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200];
 const DEFAULT_PAGE_SIZE = 10;
 const EXPORT_PAGE_SIZE = 200;
-const SEARCH_DEBOUNCE_MS = 200;
 
 /** Table column key -> the server sort it maps to. Columns not listed can't be sorted. */
 export const SERVER_SORT_KEYS: Record<string, TrainingSortKey> = {
@@ -64,10 +63,15 @@ export type PagedTrainingList = {
   exportAll: () => Promise<TrainingAgendaItem[]>;
 };
 
-export function usePagedTrainingList(pendingOnly: boolean): PagedTrainingList {
+/** `otherwise` is the non-pending split: "reviewed" (admin - approved or rejected) or
+ *  "approved" (a trainer's own Training List). The server scopes rows to the caller either way. */
+export function usePagedTrainingList(
+  pendingOnly: boolean,
+  otherwise: "reviewed" | "approved" = "reviewed",
+): PagedTrainingList {
   const { adminToken } = useAuth();
   const { applied, appliedKey } = useAdminFilters("lists");
-  const approval: "pending" | "reviewed" = pendingOnly ? "pending" : "reviewed";
+  const approval: "pending" | "reviewed" | "approved" = pendingOnly ? "pending" : otherwise;
 
   const [items, setItems] = useState<TrainingAgendaItem[]>([]);
   const [total, setTotal] = useState<number | null>(null);
@@ -76,16 +80,15 @@ export function usePagedTrainingList(pendingOnly: boolean): PagedTrainingList {
   const [searching, setSearching] = useState(false);
   const loadedOnce = useRef(false);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearchState] = useState("");
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortState>(null);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  // Wait for a pause in typing before asking the server.
-  useEffect(() => {
-    const timer = setTimeout(() => setQuery(search), SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [search]);
+  const setSearch = useCallback((value: string) => {
+    setSearchState(value);
+    setQuery(value);
+  }, []);
 
   const sortKey = sort ? SERVER_SORT_KEYS[sort.key] : undefined;
   const sortDir = sort?.direction;
@@ -108,6 +111,13 @@ export function usePagedTrainingList(pendingOnly: boolean): PagedTrainingList {
   const page = chosenPage.listKey === listKey ? chosenPage.page : 1;
   const setPage = useCallback((next: number) => setChosenPage({ listKey, page: Math.max(next, 1) }), [listKey]);
 
+  // In-memory cache of downloaded pages for the current listKey (filter/search/sort/pageSize).
+  // Going back to an already-visited page (e.g. page 2 -> page 1) renders instantly from
+  // memory with zero loading overlay or network delay.
+  // The cache remembers which list it belongs to and is swapped for an empty one by the loader
+  // (never during render) the first time a different list is requested.
+  const pageCache = useRef<{ listKey: string; pages: Map<number, TrainingAgendaItem[]> }>({ listKey, pages: new Map() });
+
   // A response only counts if it belongs to the latest request - a slow reply for
   // an old page or search must never overwrite the newer one.
   const requestId = useRef(0);
@@ -116,8 +126,22 @@ export function usePagedTrainingList(pendingOnly: boolean): PagedTrainingList {
     async (mode: "load" | "refresh" | "silent" = "load") => {
       if (!adminToken) return;
       const id = ++requestId.current;
-      if (mode === "refresh") setRefreshing(true);
-      else if (mode === "load") {
+      if (pageCache.current.listKey !== listKey) pageCache.current = { listKey, pages: new Map() };
+      const pages = pageCache.current.pages;
+      if (mode === "refresh") {
+        pages.clear();
+        setRefreshing(true);
+      } else if (mode === "silent") {
+        pages.clear();
+      } else if (mode === "load") {
+        const cached = pages.get(page);
+        if (cached) {
+          setItems(cached);
+          setLoading(false);
+          setSearching(false);
+          return;
+        }
+
         // Blank the screen only for the very first load: swapping the table for a
         // spinner on every page / search would unmount the search box mid-typing.
         if (loadedOnce.current) setSearching(true);
@@ -126,9 +150,22 @@ export function usePagedTrainingList(pendingOnly: boolean): PagedTrainingList {
       try {
         const result = await fetchTrainingsPage(adminToken, { ...requestOptions, page });
         if (id !== requestId.current) return;
+        pages.set(page, result.items);
         setItems(result.items);
         // The server sends the total with page 1 only; keep it while paging.
         if (result.total != null) setTotal(result.total);
+
+        // Silently pre-fetch the next page in background so tapping 'Next' renders instantly (0ms)
+        const nextPage = page + 1;
+        if (!pages.has(nextPage)) {
+          fetchTrainingsPage(adminToken, { ...requestOptions, page: nextPage })
+            .then((nextResult) => {
+              if (id === requestId.current && nextResult.items.length > 0) {
+                pages.set(nextPage, nextResult.items);
+              }
+            })
+            .catch(() => {});
+        }
       } catch {
         if (id === requestId.current && mode !== "silent") {
           setItems([]);
@@ -143,7 +180,7 @@ export function usePagedTrainingList(pendingOnly: boolean): PagedTrainingList {
         }
       }
     },
-    [adminToken, requestOptions, page],
+    [adminToken, requestOptions, page, listKey],
   );
 
   const exportAll = useCallback(async () => {

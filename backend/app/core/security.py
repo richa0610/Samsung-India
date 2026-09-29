@@ -26,6 +26,7 @@ def create_access_token(
     subject: str,
     tenant_id: Optional[str] = None,
     role: Optional[str] = None,
+    version: int = 0,
 ) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
@@ -34,7 +35,20 @@ def create_access_token(
         "sub": subject,
         "exp": expire,
         "tenant_id": tenant_id or settings.DEFAULT_TENANT_ID,
+        # The account's tokenVersion when issued - see is_token_current.
+        "ver": int(version or 0),
     }
     if role:
         payload["role"] = role
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def is_token_current(payload: dict, account) -> bool:
+    """False once the account's tokens were revoked (its tokenVersion bumped past the token's
+    `ver`). A token issued before versions existed carries no `ver` and counts as 0, so it stays
+    valid until that account's first revocation - nobody is signed out by the rollout itself."""
+    try:
+        issued = int(payload.get("ver") or 0)
+    except (TypeError, ValueError):
+        return False
+    return issued == int(getattr(account, "tokenVersion", 0) or 0)

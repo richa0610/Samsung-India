@@ -350,14 +350,18 @@ class MySqlDialectTests(unittest.TestCase):
 
 
 class RouteAuthorizationTests(unittest.TestCase):
-    def test_route_requires_an_admin_and_applies_the_scope_filters(self):
+    def test_route_requires_an_authenticated_account_and_applies_the_scope_filters(self):
+        """Trainer Flow Phase 2: any authenticated admin-panel or trainer account may call it; what
+        each one sees is decided in SQL by the caller's verified scope (see
+        test_trainer_lists.py and test_tenant_isolation.py), never by the route alone."""
         from app.routers.training import router
 
         route = next(r for r in router.routes if getattr(r, "path", "") == "/admin/attendance/page")
         called = {d.call.__name__ for d in route.dependant.dependencies}
-        self.assertIn("require_admin_role", called)
+        self.assertIn("get_current_admin", called)
+        self.assertIn("get_common_db", called)
+        self.assertIn("get_tenant_id_from_request", called)
         self.assertIn("get_conference_filters", called)
-        self.assertNotIn("get_current_admin", called)  # the org endpoint's weaker check
         params = {q.name: q for q in route.dependant.query_params}
         self.assertEqual(params["limit"].field_info.metadata[0].ge, 1)
         self.assertEqual(params["limit"].field_info.metadata[1].le, 200)

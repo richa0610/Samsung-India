@@ -57,6 +57,15 @@ export function loginTrainee(phone: string) {
   });
 }
 
+/** Signs the trainee out on the server: every token issued for them stops working (all devices). */
+export function logoutTrainee(token: string) {
+  if (USE_MOCK_DATA) return Promise.resolve(null);
+  return apiRequest<null>("/trainees/logout", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export type UpdateProfilePayload = Partial<{
   name: string;
   phone: string;

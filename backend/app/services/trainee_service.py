@@ -1,7 +1,8 @@
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import bad_request, not_found
+from app.core import rate_limit
+from app.core.exceptions import bad_request, unauthorized
 from app.core.media import media_subdir
 from app.core.security import create_access_token
 from app.models.trainee import Trainee
@@ -40,11 +41,18 @@ def register(
 
 
 def login(db: Session, payload: TraineeLogin, tenant_id: str, ip_address: str | None = None) -> TokenResponse:
+    # Per-phone failure limit on top of the per-IP one (routers/trainee.py), keyed by tenant so
+    # one tenant's failures never lock the same number elsewhere.
+    account = f"{tenant_id}:{payload.phone}"
+    rate_limit.ensure_account_not_locked("trainee-login", account)
     trainee = trainee_repository.get_by_phone(db, payload.phone)
     if not trainee:
-        raise not_found("No trainee found with this phone number")
+        rate_limit.record_account_failure("trainee-login", account)
+        # Deliberately says neither "not found" nor "registered" - the same words for any failure.
+        raise unauthorized("Couldn't sign in with this phone number. Check it, or register first.")
+    rate_limit.clear_account_failures("trainee-login", account)
 
-    access_token = create_access_token(subject=str(trainee.phone), tenant_id=tenant_id, role="trainee")
+    access_token = create_access_token(subject=str(trainee.phone), tenant_id=tenant_id, role="trainee", version=trainee.tokenVersion)
     log_activity(db, action="LOGIN", username=str(trainee.phone), role="trainee", ip_address=ip_address)
     return TokenResponse(access_token=access_token, trainee=trainee)
 
@@ -78,17 +86,17 @@ def update_me(db: Session, trainee: Trainee, payload: TraineeUpdate, tenant_id: 
     # subject), so a changed phone number invalidates the token that was
     # just used to make this request - issue a fresh one so the trainee
     # doesn't get silently logged out by their own edit.
-    access_token = create_access_token(subject=str(trainee.phone), tenant_id=tenant_id, role="trainee")
+    access_token = create_access_token(subject=str(trainee.phone), tenant_id=tenant_id, role="trainee", version=trainee.tokenVersion)
     return TokenResponse(access_token=access_token, trainee=trainee)
 
 
-async def upload_profile_photo(db: Session, trainee: Trainee, file) -> Trainee:
+async def upload_profile_photo(db: Session, trainee: Trainee, file, tenant_id: str) -> Trainee:
     contents = await file.read()
     extension = validate_profile_photo_upload(file.content_type, contents, size_error_detail="Image must be 5MB or smaller")
 
     # Named after the trainee (not the upload), so re-uploading replaces
     # the old file instead of littering the disk with orphans.
-    photo_dir = media_subdir("trainee_photos")
+    photo_dir = media_subdir("trainee_photos", tenant_id)
     filename = f"{trainee.traineeUid}.{extension}"
     (photo_dir / filename).write_bytes(contents)
 

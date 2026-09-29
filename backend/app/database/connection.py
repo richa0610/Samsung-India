@@ -4,6 +4,12 @@ from sqlalchemy.orm import sessionmaker, declarative_base
 from app.core.config import settings
 
 
+# Every engine the app creates passes these. `hide_parameters` keeps a query's bound values
+# (phone numbers, emails, password hashes, ...) out of SQLAlchemy exception messages - and so out
+# of every log line that records a database error (main.py's handlers, get_db, tenant_manager).
+SAFE_ENGINE_OPTIONS = {"hide_parameters": True}
+
+
 def build_connect_args() -> dict:
     """Shared connection options for every MySQL engine this app opens
     (default tenant, Common DB, and each additional tenant created via
@@ -38,6 +44,7 @@ engine = create_engine(
     # above). 280s keeps every connection well under that window.
     pool_recycle=280,
     connect_args=build_connect_args(),
+    **SAFE_ENGINE_OPTIONS,
 )
 
 # This engine now backs the *default* tenant only (see app/database/tenant.py) -

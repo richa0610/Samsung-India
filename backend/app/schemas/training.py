@@ -1,6 +1,6 @@
 from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from app.schemas._common import (
     DateLikeStr,
@@ -142,9 +142,21 @@ class TrainingCreate(BaseModel):
 
 
 class TrainingAdminUpdate(TrainingCreate):
-    """PATCH /admin/trainings/{uid} - the full registration form plus the
-    admin-only review fields. Once a session has started only the review
-    fields are applied (see update_training)."""
+    """PATCH /admin/trainings/{uid} - any of the registration form's fields plus the admin-only
+    review fields. Only the fields sent are changed (the edit form still sends all of them).
+    Once a session has started only the review fields are applied (see update_training)."""
+
+    # Optional here (required on create): a PATCH may leave the schedule alone. When sent, they
+    # still can't be blanked - a training always has a date and a time.
+    conferenceDate: OptDateLikeStr = None
+    conferenceTime: OptDateLikeStr = None
+
+    @field_validator("conferenceDate", "conferenceTime")
+    @classmethod
+    def _not_blank_when_sent(cls, value: Optional[str]) -> Optional[str]:
+        if value is None or not value.strip():
+            raise ValueError("can't be empty")
+        return value
 
     confirmedPax: OptDigitStr = None
     approvalStatus: Optional[Literal["Pending", "Approved", "Rejected"]] = None
@@ -211,6 +223,12 @@ class AttendanceMarkRequest(BaseModel):
     # The trainer must give a reason for a manual Present/Absent mark - it's
     # appended (with who + when) to `attendance.remarks` as an audit trail.
     reason: str = Field(min_length=1, max_length=500)
+
+
+class AttendanceResetRequest(BaseModel):
+    # Same rule as a manual mark: clearing a trainee's attendance needs a reason, recorded
+    # (with who + when) in the activity log.
+    reason: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 
 
 class ProctoringUnlockRequest(BaseModel):

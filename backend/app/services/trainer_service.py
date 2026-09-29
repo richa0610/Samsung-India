@@ -6,22 +6,26 @@ from app.core.security import hash_password
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.repositories import admin_repository
+from app.services.access_service import norm, resolve_scope
 from app.schemas.catalog import SelectOptionOut
 from app.schemas.trainer_profile import TrainerProfileOut, TrainerProfileUpdate
 from app.utils.validators import validate_aadhar_upload, validate_profile_photo_upload
 
 
-def _find_trainer(common_db: Session, db: Session, username: str) -> Admin | AgencyTeam | None:
-    """Real trainers live in `agencyteam` (tenant DB), not `admin` (Common
-    DB) - same fallback the login endpoint uses - check both so this
-    doesn't 404 for accounts only seeded into `agencyteam`."""
+def find_trainer(common_db: Session, db: Session, username: str, tenant_id: str | None) -> Admin | AgencyTeam | None:
+    """An active trainer of this tenant by username. Real trainers live in `agencyteam` (tenant
+    DB), not `admin` (Common DB) - same fallback the login endpoint uses - so both are checked;
+    an admin-table trainer only counts with a trainer grant for this tenant (resolve_scope),
+    since the Common DB `admin` table is shared by every tenant."""
     trainer = admin_repository.get_admin_by_username_and_role(common_db, username, "trainer")
-    if trainer:
+    if trainer and resolve_scope(common_db, trainer, tenant_id).is_trainer:
         return trainer
     return admin_repository.get_agency_by_username_and_role(db, username, "trainer")
 
 
-def list_trainers(common_db: Session, db: Session, company: str | None = None) -> list[SelectOptionOut]:
+def list_trainers(
+    common_db: Session, db: Session, principal: Admin | AgencyTeam, tenant_id: str | None, company: str | None = None
+) -> list[SelectOptionOut]:
     """Powers the Add Training and New Trainee forms' Trainer ID pickers.
     `label` shows the employee ID alongside the name (e.g.
     "OFF26001 - Aditya Kumar") so trainers sharing a name are still
@@ -32,12 +36,31 @@ def list_trainers(common_db: Session, db: Session, company: str | None = None) -
     When `company` is given (the New Trainee form, which maps a trainee to
     one company's trainer) the list is the `agencyteam` trainers of that
     company only. Without it, both the `admin` and `agencyteam` trainer
-    rows are merged (the Add Training form's behaviour)."""
-    if company:
+    rows are merged (the Add Training form's behaviour).
+
+    Scoped to the caller: an admin-panel account sees this tenant's trainers; a trainer sees the
+    trainers of their own company only (the only ones they may assign a training to - see
+    training_service._authorize_trainer_assignment), or just themselves when their company is
+    unknown; anyone else sees none. Admin-table trainers are always limited to this tenant."""
+    scope = resolve_scope(common_db, principal, tenant_id)
+    if scope.is_trainer:
+        own_company = norm(principal.company)
+        if not own_company:
+            trainers = [principal]
+        elif company and norm(company) != own_company:
+            trainers = []
+        else:
+            trainers = [
+                *admin_repository.list_admin_trainers_for_tenant(common_db, tenant_id, companies={own_company}),
+                *admin_repository.list_agency_trainers(db, company=own_company),
+            ]
+    elif not scope.is_admin_panel:
+        trainers = []
+    elif company:
         trainers = admin_repository.list_agency_trainers(db, company=company)
     else:
         trainers = [
-            *admin_repository.list_admin_trainers(common_db),
+            *admin_repository.list_admin_trainers_for_tenant(common_db, tenant_id),
             *admin_repository.list_agency_trainers(db),
         ]
 
@@ -55,8 +78,8 @@ def list_trainers(common_db: Session, db: Session, company: str | None = None) -
     return sorted(options, key=lambda o: o.name or o.label)
 
 
-def get_trainer_name(common_db: Session, db: Session, username: str) -> dict:
-    trainer = _find_trainer(common_db, db, username)
+def get_trainer_name(common_db: Session, db: Session, username: str, tenant_id: str | None) -> dict:
+    trainer = find_trainer(common_db, db, username, tenant_id)
     if not trainer:
         raise not_found("Trainer not found")
 
@@ -279,7 +302,7 @@ def update_profile(
 
 
 async def upload_profile_photo(
-    common_db: Session, db: Session, admin: Admin | AgencyTeam, file
+    common_db: Session, db: Session, admin: Admin | AgencyTeam, file, tenant_id: str
 ) -> TrainerProfileOut:
     """Same pattern as the trainee's own profile-photo upload
     (trainee_service.upload_profile_photo): named after the account so a
@@ -293,7 +316,7 @@ async def upload_profile_photo(
     # Admin accounts get their own folder; agency trainers stay in trainer_photos.
     is_admin = isinstance(admin, Admin)
     folder = "admin_profile" if is_admin else "trainer_photos"
-    photo_dir = media_subdir(folder)
+    photo_dir = media_subdir(folder, tenant_id)
     filename = f"{'admin' if is_admin else 'agency'}_{admin.id}.{extension}"
     (photo_dir / filename).write_bytes(contents)
 
@@ -307,7 +330,7 @@ async def upload_profile_photo(
 
 
 async def upload_aadhar_document(
-    common_db: Session, db: Session, admin: Admin | AgencyTeam, file
+    common_db: Session, db: Session, admin: Admin | AgencyTeam, file, tenant_id: str
 ) -> TrainerProfileOut:
     """Same overwrite-on-reupload pattern as upload_profile_photo, in its
     own trainer_documents/aadhar/ folder rather than trainer_photos/ - a
@@ -316,7 +339,7 @@ async def upload_aadhar_document(
     contents = await file.read()
     extension = validate_aadhar_upload(file.content_type, contents, size_error_detail="File must be 5MB or smaller")
 
-    doc_dir = media_subdir("trainer_documents/aadhar")
+    doc_dir = media_subdir("trainer_documents/aadhar", tenant_id)
     is_admin = isinstance(admin, Admin)
     filename = f"{'admin' if is_admin else 'agency'}_{admin.id}.{extension}"
     (doc_dir / filename).write_bytes(contents)

@@ -2,8 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
-import { AdminAccount, AdminAuthSession } from "@/api/admin";
-import { AuthSession, Trainee } from "@/api/auth";
+import { AdminAccount, AdminAuthSession, logoutAdmin } from "@/api/admin";
+import { AuthSession, Trainee, logoutTrainee } from "@/api/auth";
 import { getWsBaseUrl } from "@/constants/api";
 import { USE_MOCK_DATA } from "@/config/dataSource";
 import { DEMO_AUTH_SESSION } from "@/data/mockData";
@@ -102,9 +102,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    // Revoke the token server-side too; best-effort - signing out locally never waits on it.
+    if (session?.access_token) logoutTrainee(session.access_token).catch(() => {});
     setSessionState(null);
     writeStored(AUTH_SESSION_KEY, null);
-  }, []);
+  }, [session]);
 
   const setAdminSession = useCallback((next: AdminAuthSession) => {
     setAdminSessionState(next);
@@ -112,9 +114,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const adminLogout = useCallback(() => {
+    // Revoke the token server-side too; best-effort - signing out locally never waits on it.
+    if (adminSession?.access_token) logoutAdmin(adminSession.access_token).catch(() => {});
     setAdminSessionState(null);
     writeStored(ADMIN_SESSION_KEY, null);
-  }, []);
+  }, [adminSession]);
 
   const updateAdminPhoto = useCallback((profilePicture: string) => {
     setAdminSessionState((current) => {
@@ -137,7 +141,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let stopped = false;
 
     const connect = () => {
-      socket = new WebSocket(`${getWsBaseUrl()}/ws/admin?token=${adminToken}`);
+      // The token goes in the first message, never the URL - URLs end up in proxy access logs.
+      const ws = new WebSocket(`${getWsBaseUrl()}/ws/admin`);
+      ws.onopen = () => ws.send(JSON.stringify({ type: "auth", token: adminToken }));
+      socket = ws;
       socket.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data as string);

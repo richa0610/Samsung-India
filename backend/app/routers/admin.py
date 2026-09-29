@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.core.rate_limit import rate_limit
 from app.core.ttl_cache import TTLCache
-from app.dependencies.auth import require_admin_role
+from app.dependencies.auth import get_current_admin, require_admin_role
 from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.dependencies.filters import ConferenceFilters, get_conference_filters
 from app.models.admin import Admin
+from app.models.agency_team import AgencyTeam
 from app.schemas.admin import AdminAccessScopeOut, AdminAuthSession, AdminDashboardStatsOut, AdminLoginRequest
-from app.services import admin_service
+from app.services import admin_service, token_revocation
 from app.services.access_service import resolve_scope, scope_summary
 from app.utils.helpers import client_ip
 
@@ -43,6 +44,18 @@ def login(
 ):
     tenant_id = get_tenant_id_from_request(request)
     return admin_service.login(common_db, db, payload, tenant_id, ip_address=client_ip(request))
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    request: Request,
+    admin: Admin | AgencyTeam = Depends(get_current_admin),
+    common_db: Session = Depends(get_common_db),
+    db: Session = Depends(get_db),
+) -> None:
+    """Revokes every token of the signed-in account (all devices) - see token_revocation."""
+    account_db = common_db if isinstance(admin, Admin) else db
+    token_revocation.revoke_all_tokens(account_db, admin, db, ip_address=client_ip(request))
 
 
 @router.get("/dashboard/stats", response_model=AdminDashboardStatsOut)

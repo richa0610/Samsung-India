@@ -50,6 +50,22 @@ class Settings(BaseSettings):
 
     ALLOW_ATTENDANCE_RETEST: bool = False
 
+    # How many reverse proxies sit in front of this API and append the caller's address to
+    # X-Forwarded-For. Production is behind Render's proxy only (1): the LAST entry is the one
+    # Render added, so it's the real caller - everything before it is whatever the client sent
+    # and is never trusted. 0 = no proxy (use the socket peer, e.g. local LAN testing).
+    TRUSTED_PROXY_HOPS: int = 1
+
+    # WebSocket clients now send their token in the first message (routers/ws.py). Older app
+    # builds still put it in the URL (?token=), which proxies log; set this to false once every
+    # installed app has been updated, to refuse URL tokens entirely.
+    WS_ALLOW_QUERY_TOKEN: bool = True
+
+    # Comma-separated Fernet keys that encrypt tenant database passwords at rest (core/secret_box.py).
+    # The first key encrypts, any listed key decrypts. Empty = not configured yet: existing
+    # plaintext rows keep working and new ones stay plaintext until a key is set.
+    TENANT_SECRETS_KEYS: str = ""
+
     # Absolute path to a persistent disk mount for uploaded files (profile
     # photos, Aadhaar docs, attendance photos/sheets, etc). Left blank, media
     # falls back to a folder inside the repo checkout - fine for local dev,

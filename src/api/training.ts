@@ -281,7 +281,8 @@ export type TrainingSortKey =
 export function fetchTrainingsPage(
   token: string,
   options: {
-    approval: "pending" | "reviewed";
+    /** "reviewed" = approved or rejected (admin list); "approved" = approved only (trainer's own list). */
+    approval: "pending" | "reviewed" | "approved";
     filters?: AdminFilters;
     q?: string;
     sort?: TrainingSortKey;
@@ -528,12 +529,15 @@ export function markAttendance(
   );
 }
 
-export function resetAttendance(token: string, conferenceUid: string, traineeUid: string) {
+/** Clear a trainee's attendance - like a manual mark, only while the session is
+ *  running and with a reason (audit-logged). */
+export function resetAttendance(token: string, conferenceUid: string, traineeUid: string, reason: string) {
   return apiRequest<SessionDashboard>(
     `/admin/trainings/${encodeURIComponent(conferenceUid)}/attendance/${encodeURIComponent(traineeUid)}`,
     {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ reason }),
     }
   );
 }

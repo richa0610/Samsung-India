@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert, Share } from "react-native";
 
 import { ApiError } from "@/api/client";
@@ -24,6 +24,7 @@ import { DashboardTab } from "@/components/trainer/dashboard/DashboardBottomNav"
 import { useAuth } from "@/hooks/useAuth";
 import { useLiveQuizChannel } from "@/hooks/useLiveQuizChannel";
 import { useLocationPermission } from "@/hooks/useLocationPermission";
+import { checkLocationPermission, getCurrentCoordinates } from "@/services/locationService";
 import { formatDisplayDate } from "@/utils/formatDisplayDate";
 import { formatGeneratedTimestamp } from "./formatting";
 import { TrainerCheckInPhoto } from "./TrainerCheckInModal";
@@ -55,9 +56,10 @@ export type ScheduleOverridePrompt = {
 
 export function useSessionDashboardScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ conferenceUid?: string }>();
+  const params = useLocalSearchParams<{ conferenceUid?: string; from?: string }>();
   const conferenceUid = params.conferenceUid || "CONF25456581";
-  const { adminToken } = useAuth();
+  const { admin, adminToken } = useAuth();
+  const isAdmin = admin?.role === "admin" || params.from === "admin";
 
   const [data, setData] = useState<SessionDashboard | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
@@ -92,6 +94,17 @@ export function useSessionDashboardScreen() {
     setStartedForUid(conferenceUid);
     setHasStarted(false);
   }
+
+  // Pre-warm the location cache silently on mount so tapping "Start Session" resolves instantly (<50ms)
+  useEffect(() => {
+    checkLocationPermission()
+      .then((status) => {
+        if (status === "granted") {
+          getCurrentCoordinates(1000).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const loadData = useCallback(
     async (mode: "load" | "refresh" | "silent" = "load") => {
@@ -507,6 +520,23 @@ export function useSessionDashboardScreen() {
     }
   };
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else if (isAdmin) {
+      router.replace("/admin_training_list");
+    } else {
+      router.replace("/sessions");
+    }
+  };
+
+  const handleReport = () => {
+    router.push({
+      pathname: "/session_report",
+      params: { conferenceUid, from: isAdmin ? "admin" : undefined },
+    });
+  };
+
   const isSessionClosed = data?.conferenceStatus === "Completed";
   // The backend is the source of truth for whether the session is live -
   // `hasStarted` is only an optimistic local flag so the UI flips the
@@ -586,6 +616,9 @@ export function useSessionDashboardScreen() {
       showingLobby,
     },
     handleBottomNavSelect,
+    isAdmin,
+    handleBack,
+    handleReport,
     isSessionClosed,
     showSessionData,
     isLive,

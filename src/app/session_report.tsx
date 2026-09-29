@@ -10,14 +10,16 @@ import {
   SessionSummaryCard,
   useSessionReportColumns,
 } from "@/components/session_report";
+import { AdminTabBar } from "@/components/admin/dashboard";
 import { useAuth } from "@/hooks/useAuth";
 import { Colors } from "@/theme/colors";
 
 export default function SessionReportScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ conferenceUid?: string }>();
+  const params = useLocalSearchParams<{ conferenceUid?: string; from?: string }>();
   const conferenceUid = params.conferenceUid || "";
-  const { adminToken } = useAuth();
+  const { admin, adminToken } = useAuth();
+  const isAdmin = admin?.role === "admin" || params.from === "admin";
 
   const [report, setReport] = useState<SessionReport | null>(null);
   const columns = useSessionReportColumns();
@@ -47,9 +49,19 @@ export default function SessionReportScreen() {
     venueLink: report?.summary.venueLink || "--",
   };
 
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+    } else if (isAdmin) {
+      router.replace({ pathname: "/session_dashboard", params: { conferenceUid, from: "admin" } });
+    } else {
+      router.replace({ pathname: "/session_dashboard", params: { conferenceUid } });
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.container} edges={["bottom"]}>
-      <SessionReportHeader onBack={() => router.back()} />
+    <SafeAreaView style={styles.container} edges={isAdmin ? [] : ["bottom"]}>
+      <SessionReportHeader onBack={handleBack} />
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <SessionSummaryCard summary={summary} />
@@ -80,6 +92,8 @@ export default function SessionReportScreen() {
           />
         </View>
       </ScrollView>
+
+      {isAdmin && <AdminTabBar activeTab="training" />}
     </SafeAreaView>
   );
 }

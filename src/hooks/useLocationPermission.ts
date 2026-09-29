@@ -24,7 +24,7 @@ export type LocationPermissionResult = {
   error?: string | null;
 };
 
-export function useLocationPermission() {
+export function useLocationPermission(timeoutMs: number = 1000) {
   const [permissionState, setPermissionState] =
     useState<LocationPermissionState>("undetermined");
   const [coords, setCoords] = useState<LocationCoordinates | null>(null);
@@ -54,7 +54,7 @@ export function useLocationPermission() {
           setLoading(true);
           setError(null);
           try {
-            const currentCoords = await getCurrentCoordinates();
+            const currentCoords = await getCurrentCoordinates(timeoutMs);
             setCoords(currentCoords);
             setPermissionState("granted");
             setLoading(false);
@@ -108,7 +108,7 @@ export function useLocationPermission() {
               setPermissionState(status);
 
               if (status === "granted") {
-                const currentCoords = await getCurrentCoordinates();
+                const currentCoords = await getCurrentCoordinates(timeoutMs);
                 setCoords(currentCoords);
                 setLoading(false);
                 isRequestingRef.current = false;
@@ -177,7 +177,7 @@ export function useLocationPermission() {
         );
       });
     },
-    [coords, permissionState, error],
+    [coords, permissionState, error, timeoutMs],
   );
 
   /**

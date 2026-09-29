@@ -33,6 +33,10 @@ class Trainee(Base):
     employee_id = Column("uid", String(100))
 
     status = Column(String(100), nullable=False, server_default=text("'Pending'"))
+
+    # Bumped to revoke every token issued for this account (logout, see
+    # services/token_revocation.py); a token carries the value it was issued with as `ver`.
+    tokenVersion = Column(Integer, nullable=False, server_default=text("0"))
     timestamp = Column(DateTime, server_default=func.now(), nullable=False)
 
     # ─── Columns used by the admin-side trainee registration/list flow ─────

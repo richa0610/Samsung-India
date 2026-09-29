@@ -23,6 +23,12 @@ a time - never a blanket switch.
     List (`list_attendance_page`, and the non-paged `list_attendance(org=True)` via
     `AccessScope.allows_row` in Python) are scoped at the query level - count, search, sort,
     paging, export all included (the Training List RBAC task's Phases 1 and 4).
+  - Trainer authorization (Trainer Flow Phase 1): an active trainer is `AccessScope.is_trainer`
+    (agency-team role "trainer", or an admin-table trainer grant). conference_access turns the
+    scope into SQL via dashboard_repository.conference_authorization_conditions for every
+    conference-level endpoint, the Live Quiz controls and the live WebSocket room;
+    `own_trainings_username` gates the trainer's own Home / Training / Attendance lists; and
+    dashboard_repository.trainee_authorization_conditions gates the Trainee List.
 `GET /admin/access/scope` (`scope_summary`) additionally exposes the caller's own scope to the
 frontend, for hiding filter options it isn't authorized for - display only, grants nothing.
 Everything else is untouched: trainee lists, dashboard stats, login/tenant-membership, etc.
@@ -41,6 +47,7 @@ from typing import Optional
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import forbidden
 from app.models.admin import Admin
 from app.models.admin_access import AdminAccess
 from app.models.agency_team import AgencyTeam
@@ -112,6 +119,12 @@ class AccessScope:
     def is_admin_panel(self) -> bool:
         return self.allowed and self.role in _ADMIN_PANEL_ROLES
 
+    @property
+    def is_trainer(self) -> bool:
+        """An active trainer with a resolved username - the only scope that owns trainings by
+        assignment. A blank username never counts, so it can't match unassigned rows."""
+        return self.allowed and self.role == AccessRole.TRAINER and bool((self.trainer_username or "").strip())
+
     def allows_row(self, company: Optional[str], zone: Optional[str], region: Optional[str]) -> bool:
         """Whether a training / trainee / attendance row with this company, zone and region is
         inside the scope. Trainers are not company-scoped (their access is by assignment), so
@@ -138,9 +151,34 @@ def resolve_scope(common_db: Session, principal: object, tenant_id: Optional[str
         return AccessScope(True, tenant, AccessRole.TRAINER, trainer_username=principal.username)
 
     if isinstance(principal, Admin):
+        if common_db is None:
+            return AccessScope.denied(tenant, "no common database to read grants from")
         return _resolve_admin(common_db, principal, tenant)
 
     return AccessScope.denied(tenant, "unknown principal")
+
+
+def reject_outside_scope(scope: AccessScope, company: Optional[str], zone: Optional[str], region: Optional[str]) -> None:
+    """For an admin-panel account creating or moving a record (a training, a trainee): the
+    company/zone/region it will carry must be inside the caller's grant - the same `allows_row`
+    test that decides what the caller can read, so nobody can place a record where they couldn't
+    see it (or into someone else's scope). A Super Admin passes; no grant never does."""
+    if not scope.allows_row(company, zone, region):
+        raise forbidden("This company, zone or region is outside your authorized scope")
+
+
+def own_trainings_username(common_db: Optional[Session], principal: object, tenant_id: Optional[str]) -> str:
+    """The verified username whose OWN trainings the caller's personal views list (trainer Home,
+    Training List, Attendance List). A trainer gets their own username only once `resolve_scope`
+    confirms they are an active trainer in this tenant (agency-team role "trainer", or an
+    admin-table trainer grant). An admin-panel account keeps its existing "trainings assigned to
+    my username" view. Anything else - no grant, wrong role, missing tenant - is refused."""
+    scope = resolve_scope(common_db, principal, tenant_id)
+    if scope.is_trainer:
+        return scope.trainer_username
+    if scope.is_admin_panel:
+        return principal.username
+    raise forbidden("This action requires an active trainer account")
 
 
 def _resolve_admin(common_db: Session, admin: Admin, tenant: str) -> AccessScope:

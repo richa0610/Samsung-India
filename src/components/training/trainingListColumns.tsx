@@ -26,7 +26,7 @@ export function buildTrainingListColumns(
     {
       key: "slNo",
       header: "Sl No.",
-      minWidth: 48,
+      minWidth: 36,
       sortable: false,
       render: (_row, index) => <AppText style={styles.cellText}>{index + 1}</AppText>,
       exportValue: (_row, index) => String(index + 1),
@@ -34,7 +34,7 @@ export function buildTrainingListColumns(
     {
       key: "action",
       header: "Action",
-      minWidth: 48,
+      minWidth: 38,
       sortable: false,
       render: (row) => (
         <Pressable style={styles.actionButton} onPress={() => onEdit(row)} hitSlop={4}>
@@ -46,7 +46,7 @@ export function buildTrainingListColumns(
     {
       key: "currentReport",
       header: "Current Report",
-      minWidth: 150,
+      minWidth: 115,
       sortable: false,
       render: (row) => (
         <Pressable style={styles.reportButton} onPress={() => (onReport ?? onEdit)(row)} hitSlop={4}>
@@ -56,39 +56,39 @@ export function buildTrainingListColumns(
       exportValue: () => "Conference Report",
     },
     statusColumn,
-    { key: "trainingsId", header: "Trainings ID", minWidth: 118, exportValue: (row) => row.conferenceUid },
+    { key: "trainingsId", header: "Trainings ID", minWidth: 95, exportValue: (row) => row.conferenceUid },
     ...(extended
-      ? [{ key: "zone", header: "Zone", minWidth: 80, exportValue: (row: TrainingAgendaItem) => row.zone ?? "--" }]
+      ? [{ key: "zone", header: "Zone", minWidth: 60, exportValue: (row: TrainingAgendaItem) => row.zone ?? "--" }]
       : []),
-    { key: "totalPax", header: "Total Pax (Trainer)", minWidth: 100, exportValue: (row) => String(row.traineeCount ?? 0) },
-    { key: "trainerName", header: "Trainer Name", minWidth: 118, exportValue: (row) => row.trainerName ?? "--" },
-    { key: "hoid", header: "HOID", minWidth: 96, exportValue: (row) => row.hoid ?? "--" },
+    { key: "totalPax", header: "Total Pax (Trainer)", minWidth: 85, exportValue: (row) => String(row.traineeCount ?? 0) },
+    { key: "trainerName", header: "Trainer Name", minWidth: 95, exportValue: (row) => row.trainerName ?? "--" },
+    { key: "hoid", header: "HOID", minWidth: 75, exportValue: (row) => row.hoid ?? "--" },
     {
       key: "date",
       header: "Date",
-      minWidth: 128,
+      minWidth: 88,
       exportValue: (row) => formatDisplayDate(row.conferenceDate),
       searchValue: (row) => row.conferenceDate ?? "",
     },
-    { key: "time", header: "Time", minWidth: 76, exportValue: (row) => row.conferenceTime ?? "--" },
+    { key: "time", header: "Time", minWidth: 65, exportValue: (row) => row.conferenceTime ?? "--" },
     ...(extended
       ? [
           {
             key: "sessionType",
             header: "Session Type",
-            minWidth: 130,
+            minWidth: 95,
             exportValue: (row: TrainingAgendaItem) => row.sessionType ?? "--",
           },
         ]
       : []),
-    { key: "trainingType", header: "Training Type", minWidth: 130, exportValue: (row) => row.trainingType ?? "--" },
-    { key: "venueName", header: "Venue Name", minWidth: 110, exportValue: (row) => row.venueName ?? "--" },
-    { key: "state", header: "State", minWidth: 100, exportValue: (row) => row.state ?? "--" },
-    { key: "district", header: "District", minWidth: 100, exportValue: (row) => row.district ?? "--" },
-    { key: "trainingHub", header: "Training Hub", minWidth: 110, exportValue: (row) => row.trainingHub ?? "--" },
-    { key: "updatedBy", header: "Updated By", minWidth: 96, exportValue: (row) => row.updatedBy ?? "--" },
-    { key: "updationOn", header: "Updation On", minWidth: 140, exportValue: (row) => row.updationOn ?? "--" },
-    { key: "timestamp", header: "Timestamp", minWidth: 140, exportValue: (row) => row.timestamp ?? "--" },
+    { key: "trainingType", header: "Training Type", minWidth: 95, exportValue: (row) => row.trainingType ?? "--" },
+    { key: "venueName", header: "Venue Name", minWidth: 95, exportValue: (row) => row.venueName ?? "--" },
+    { key: "state", header: "State", minWidth: 80, exportValue: (row) => row.state ?? "--" },
+    { key: "district", header: "District", minWidth: 80, exportValue: (row) => row.district ?? "--" },
+    { key: "trainingHub", header: "Training Hub", minWidth: 95, exportValue: (row) => row.trainingHub ?? "--" },
+    { key: "updatedBy", header: "Updated By", minWidth: 80, exportValue: (row) => row.updatedBy ?? "--" },
+    { key: "updationOn", header: "Updation On", minWidth: 95, exportValue: (row) => row.updationOn ?? "--" },
+    { key: "timestamp", header: "Timestamp", minWidth: 95, exportValue: (row) => row.timestamp ?? "--" },
   ];
 }
 

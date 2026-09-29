@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Integer, String
+from sqlalchemy import BigInteger, Column, Integer, String, text
 
 from app.database.connection import Base
 
@@ -59,3 +59,7 @@ class AgencyTeam(Base):
     password = Column(String(100), nullable=False)
     role = Column(String(100))
     status = Column(String(50), nullable=False, default="Pending")
+
+    # Bumped to revoke every token issued for this account (logout, see
+    # services/token_revocation.py); a token carries the value it was issued with as `ver`.
+    tokenVersion = Column(Integer, nullable=False, server_default=text("0"))

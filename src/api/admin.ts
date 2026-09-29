@@ -131,3 +131,12 @@ export function fetchAdminAccessScope(token: string) {
 }
 
 export { ApiError } from "./client";
+
+/** Signs the admin / trainer out on the server: every token issued for them stops working (all devices). */
+export function logoutAdmin(token: string) {
+  if (USE_MOCK_DATA) return Promise.resolve(null);
+  return apiRequest<null>("/admin/logout", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

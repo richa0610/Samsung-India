@@ -21,7 +21,7 @@ export default function AdminAttendanceScreen({ mode, title, subtitle, exportFil
   const paged = usePagedAttendanceList(mode);
   const columns = useAdminAttendanceColumns((row) => {
     if (row.conferenceId) {
-      router.push({ pathname: "/session_dashboard", params: { conferenceUid: row.conferenceId } });
+      router.push({ pathname: "/session_dashboard", params: { conferenceUid: row.conferenceId, from: "admin" } });
     }
   });
 

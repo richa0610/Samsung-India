@@ -33,6 +33,8 @@ export type DataTableServerMode<T> = {
   sortableKeys: ReadonlySet<string>;
   /** Fetches every matching row (all pages) for export / copy / print. */
   onExportAll: () => Promise<T[]>;
+  /** When true, table displays animated skeleton rows instead of stale data. */
+  loading?: boolean;
 };
 
 export type ExportAction = "copy" | "csv" | "excel" | "pdf" | "print";
