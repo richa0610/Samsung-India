@@ -27,64 +27,6 @@ TRAINERS = ["t1", "t2", "t3"]
 COMPANIES = ["Samsung India", "samsung india ", "Other Co"]
 
 
-class OrgTrainingListTests(unittest.TestCase):
-    def setUp(self):
-        engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-        TenantBase.metadata.create_all(bind=engine)
-        self.db = sessionmaker(bind=engine)()
-        rng = random.Random(3)
-        base = datetime(2026, 1, 1)
-        for n in range(400):
-            self.db.add(
-                Conference(
-                    conferenceUid=f"c{n}",
-                    zone=rng.choice(ZONES),
-                    company=rng.choice(COMPANIES),
-                    trainerEmployeeId=rng.choice(TRAINERS),
-                    conferenceDate=(date(2026, 8, 1) + timedelta(days=rng.randint(0, 60))).isoformat(),
-                    conferenceStatus=rng.choice(STATUS),
-                    status=rng.choice(APPROVAL),
-                    trainingType=rng.choice(TYPES),
-                    timestamp=base + timedelta(minutes=n),  # distinct, so the order is unambiguous
-                )
-            )
-        self.db.commit()
-
-    def _old(self, filters, approval):
-        rows = sorted(
-            [c for c in self.db.query(Conference).all() if filters is None or filters.matches(c)],
-            key=lambda c: c.timestamp or datetime.min,
-            reverse=True,
-        )
-        if approval == "pending":
-            rows = [c for c in rows if title_status(c.status) == "Pending"]
-        elif approval == "reviewed":
-            rows = [c for c in rows if title_status(c.status) != "Pending"]
-        return [c.conferenceUid for c in rows]
-
-    def _new(self, filters, approval):
-        conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
-        return [c.conferenceUid for c in conference_repository.list_filtered(self.db, conditions, approval)]
-
-    def test_same_rows_in_same_order(self):
-        cases = [
-            ConferenceFilters(),
-            ConferenceFilters(start="2026-08-15", end="2026-09-10"),
-            ConferenceFilters(zones=["east zone"], training_types=["webinar"]),
-            ConferenceFilters(trainers=["t1", "t3"], company="Samsung India"),
-            ConferenceFilters(zones=["mars"]),
-        ]
-        for filters in cases:
-            for approval in (None, "pending", "reviewed"):
-                with self.subTest(filters=filters, approval=approval):
-                    self.assertEqual(self._old(filters, approval), self._new(filters, approval))
-
-    def test_cancelled_trainings_stay_in_the_list(self):
-        self.assertTrue(any(title_status(c.conferenceStatus) == "Cancelled" for c in self.db.query(Conference)))
-        uids = self._new(ConferenceFilters(), None)
-        self.assertEqual(len(uids), 400)
-
-
 class PagedListTests(unittest.TestCase):
     """Walks the keyset-paged list page by page and checks the concatenated
     result is exactly the full sorted list - no row skipped, none repeated -
@@ -202,7 +144,8 @@ class PagedListTests(unittest.TestCase):
                             if page == 1:
                                 total = page_total
                             else:
-                                self.assertIsNone(page_total)  # total only comes with page 1
+                                # Phase 3: every numbered page carries the same authorized total.
+                                self.assertEqual(page_total, total)
                             if not rows:
                                 break
                             seen += [c.conferenceUid for c in rows]

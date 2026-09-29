@@ -107,7 +107,7 @@ def _resolve_identity(token: str):
     """Lightweight counterpart to `get_current_admin` for the WS handshake - HTTPBearer/Depends
     doesn't apply here, and neither browsers nor React Native's WebSocket can set a custom
     Authorization header, so the token arrives in the connection's first message (see
-    `_open_authenticated`), or - from older app builds - as a `?token=` query param.
+    `_open_authenticated`) - never in the URL, where proxies would log it.
 
     Decodes and verifies the token, reads its OWN `tenant_id` claim (never a header or a
     client-supplied value on the connection URL), resolves the account from the trusted
@@ -166,24 +166,13 @@ async def _first_message_token(websocket: WebSocket) -> Optional[str]:
     return None
 
 
-async def _open_authenticated(websocket: WebSocket, url_token: str, authorize: Callable[[tuple], bool]):
+async def _open_authenticated(websocket: WebSocket, authorize: Callable[[tuple], bool]):
     """Authenticates and authorizes a connection; returns the identity, or None after closing it
     with 1008.
 
-    Current clients send no token in the URL - tokens in URLs end up in proxy access logs. The
-    connection is accepted, the first message must carry the token, and only then is anything
-    joined (the server confirms with `{"type": "ready"}`). Older app builds still send `?token=`;
-    that path is unchanged - checked before accepting, refused without accepting - until
-    settings.WS_ALLOW_QUERY_TOKEN is turned off."""
-    if url_token:
-        identity = _resolve_identity(url_token) if settings.WS_ALLOW_QUERY_TOKEN else None
-        if identity is None or not authorize(identity):
-            _close_sessions(identity)
-            await websocket.close(code=1008)
-            return None
-        await websocket.accept()
-        return identity
-
+    The connection is accepted, the first message must carry the token, and only then is anything
+    joined (the server confirms with `{"type": "ready"}`). A token in the URL is ignored - URLs end
+    up in proxy access logs, and every app build sends it in the first message."""
     await websocket.accept()
     token = await _first_message_token(websocket)
     identity = _resolve_identity(token) if token else None
@@ -218,9 +207,9 @@ def _authorize_room(principal, common_db, tenant_db, tenant_id: str, conference_
 
 
 @router.websocket("/ws/admin")
-async def admin_events(websocket: WebSocket, token: str = ""):
+async def admin_events(websocket: WebSocket):
     # This channel is for the admin panel / trainer app only.
-    identity = await _open_authenticated(websocket, token, lambda identity: not isinstance(identity[0], Trainee))
+    identity = await _open_authenticated(websocket, lambda identity: not isinstance(identity[0], Trainee))
     if identity is None:
         return
     principal, tenant_id, common_db, tenant_db = identity
@@ -242,13 +231,13 @@ async def admin_events(websocket: WebSocket, token: str = ""):
 
 
 @router.websocket("/ws/live/{conference_uid}")
-async def live_quiz_events(websocket: WebSocket, conference_uid: str, token: str = ""):
+async def live_quiz_events(websocket: WebSocket, conference_uid: str):
     """Per-conference Live Quiz room. Both the trainer's Session Dashboard and
     every trainee's Live Quiz screen connect here while the module is running;
     each `{"type": "live_quiz"}` nudge tells them to refetch their REST view.
     Room membership itself is authorized before joining - see `_authorize_room`."""
     identity = await _open_authenticated(
-        websocket, token, lambda identity: _authorize_room(identity[0], identity[2], identity[3], identity[1], conference_uid)
+        websocket, lambda identity: _authorize_room(identity[0], identity[2], identity[3], identity[1], conference_uid)
     )
     if identity is None:
         return

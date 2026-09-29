@@ -4,6 +4,7 @@ from typing import Annotated, Literal, Optional
 from pydantic import BaseModel, EmailStr, Field, StringConstraints
 
 from app.schemas._common import (
+    PageMeta,
     DigitStr,
     IdStr,
     NameStr,
@@ -90,10 +91,7 @@ class TraineeAdminOut(BaseModel):
     timestamp: Optional[str] = None
 
 
-class TraineePageResponse(BaseModel):
-    """GET /admin/trainees/page - one page of the Trainee / Pending Trainee list, same shape as
-    the Training List's page. `total` is only sent with the first page."""
+class TraineePageResponse(PageMeta):
+    """GET /admin/trainees/page - one page of the Trainee / Pending Trainee list (see PageMeta)."""
 
     items: list[TraineeAdminOut]
-    nextCursor: Optional[str] = None
-    total: Optional[int] = None

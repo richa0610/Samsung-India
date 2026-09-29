@@ -15,7 +15,13 @@ type SessionsListContentProps = {
   activeTab: SessionTab;
   onLaunch: (conferenceUid: string) => void;
   onReport: (conferenceUid: string) => void;
+  /** Asks for the next page when the list is scrolled near its end. */
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
 };
+
+// How close to the bottom (px) the list may get before the next page is requested.
+const LOAD_MORE_THRESHOLD = 200;
 
 export default function SessionsListContent({
   loading,
@@ -25,11 +31,17 @@ export default function SessionsListContent({
   activeTab,
   onLaunch,
   onReport,
+  onLoadMore,
+  loadingMore = false,
 }: SessionsListContentProps) {
   return (
     <ScrollView
       contentContainerStyle={styles.scrollContent}
       showsVerticalScrollIndicator={false}
+      scrollEventThrottle={200}
+      onScroll={({ nativeEvent: { layoutMeasurement, contentOffset, contentSize } }) => {
+        if (layoutMeasurement.height + contentOffset.y >= contentSize.height - LOAD_MORE_THRESHOLD) onLoadMore?.();
+      }}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.mainColour1]} tintColor={Colors.mainColour1} />
       }
@@ -56,6 +68,7 @@ export default function SessionsListContent({
           {filteredSessions.map((session) => (
             <SessionCard key={session.conferenceUid} item={session} onLaunch={onLaunch} onReport={onReport} />
           ))}
+          {loadingMore && <ActivityIndicator style={styles.loadingMore} color={Colors.mainColour1} />}
         </View>
       )}
     </ScrollView>
@@ -71,6 +84,9 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: 4,
+  },
+  loadingMore: {
+    paddingVertical: 16,
   },
   centered: {
     flex: 1,

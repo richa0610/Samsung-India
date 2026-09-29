@@ -1,4 +1,4 @@
-from sqlalchemy import BigInteger, Column, Date, DateTime, Integer, String, Text, text
+from sqlalchemy import BigInteger, Column, Date, DateTime, Index, Integer, String, Text, text
 from sqlalchemy.sql import func
 
 from app.database.connection import Base
@@ -10,6 +10,9 @@ class Trainee(Base):
     database_dump.sql / mmtbtwob_tops.sql for the full shape)."""
 
     __tablename__ = "trainee"
+    # A trainer's Trainee List filters on the assigned trainer (trainee_repository.trainer_owned_condition).
+    # Existing databases get it from database/schema_sync.py; new ones from create_all().
+    __table_args__ = (Index("ix_trainee_trainer", "trainerEmployeeId"),)
 
     id = Column(Integer, primary_key=True, index=True)
 

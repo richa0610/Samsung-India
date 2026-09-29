@@ -56,9 +56,9 @@ class TrainerWorldTestCase(unittest.TestCase):
         self.alpha.commit()
 
     def own_list_keys(self, who):
-        response = self.get(who, "/admin/trainings?all_sessions=true")
+        response = self.get(who, "/admin/trainings/page?limit=200")
         self.assertEqual(response.status_code, 200, response.text)
-        return self.w.conference_keys(response.json()["trainings"])
+        return self.w.conference_keys(response.json()["items"])
 
 
 class AssignedTrainerAccess(TrainerWorldTestCase):
@@ -70,7 +70,7 @@ class AssignedTrainerAccess(TrainerWorldTestCase):
 
     def test_own_lists_contain_exactly_the_assigned_trainings(self):
         self.assertEqual(self.own_list_keys("trainer1"), {"S_N1", "S_DEL", "S_N1V"})
-        attendance = self.get("trainer1", "/admin/attendance").json()
+        attendance = self.get("trainer1", "/admin/attendance/page?limit=200").json()["items"]
         self.assertEqual(self.w.conference_keys(attendance), {"S_N1", "S_DEL", "S_N1V"})
 
     def test_an_admin_table_trainer_follows_the_same_rule(self):
@@ -122,8 +122,8 @@ class InactiveMembership(TrainerWorldTestCase):
         for role in (None, "", "manager"):
             with self.subTest(role=role):
                 self.set_agency_role("trainer1", role)
-                for path in (f"/admin/trainings/{OWN}", "/admin/trainings?all_sessions=true", "/admin/attendance",
-                             "/admin/trainees", "/admin/profile"):
+                for path in (f"/admin/trainings/{OWN}", "/admin/trainings/summary", "/admin/attendance/page",
+                             "/admin/trainees/page", "/admin/profile"):
                     self.assertEqual(self.get("trainer1", path).status_code, 403, path)
 
     def test_a_revoked_trainer_grant_stops_the_admin_table_trainer_at_once(self):
@@ -158,7 +158,7 @@ class MissingContextFailsClosed(TrainerWorldTestCase):
         self.alpha.commit()
         for blank in (None, "", "   "):
             with self.subTest(blank=blank):
-                self.assertEqual(conference_repository.list_all_for_trainer(self.alpha, blank), [])
+                self.assertEqual(self.alpha.query(Conference).filter(conference_repository.trainer_condition(blank)).all(), [])
 
 
 class CrossTenantAccess(TrainerWorldTestCase):
@@ -180,7 +180,7 @@ class IdTampering(TrainerWorldTestCase):
         response = self.post("trainer1", f"/admin/trainings/{OWN}/attendance/TR-OTHER-TRAINER", MARK)
         self.assertEqual(response.status_code, 404)
         self.assertIsNone(self.alpha.query(Attendance).filter_by(conferenceUid=OWN, traineeUid="TR-OTHER-TRAINER").first())
-        visible = {t["traineeUid"] for t in self.get("trainer1", "/admin/trainees").json()}
+        visible = {t["traineeUid"] for t in self.get("trainer1", "/admin/trainees/page?limit=200").json()["items"]}
         self.assertNotIn("TR-OTHER-TRAINER", visible)
 
     def test_marking_a_session_participant_still_works(self):

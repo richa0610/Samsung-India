@@ -1,5 +1,6 @@
 import type { NewTraineeRecord } from "@/data/mockData";
 import { apiRequest } from "./client";
+import type { PageMeta } from "./training";
 
 export type NewTraineeInput = Omit<NewTraineeRecord, "registeredAt" | "approvalStatus" | "updatedBy" | "updationOn" | "timestamp">;
 export type TraineeListItem = NewTraineeRecord;
@@ -12,13 +13,6 @@ export function registerNewTrainee(token: string, payload: NewTraineeInput) {
   });
 }
 
-export function fetchTraineeList(token: string) {
-  return apiRequest<TraineeListItem[]>("/admin/trainees", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
-
 export type TraineeSortKey =
   | "timestamp"
   | "traineeUid"
@@ -29,12 +23,8 @@ export type TraineeSortKey =
   | "updatedBy"
   | "status";
 
-export type TraineePage = {
+export type TraineePage = PageMeta & {
   items: TraineeListItem[];
-  /** Opaque marker for "the rows after this page"; null on the last page. */
-  nextCursor: string | null;
-  /** All rows the caller may see that match the search - only sent with page 1. */
-  total: number | null;
 };
 
 /** One page of the Trainee / Pending Trainee list. The server authorizes the rows

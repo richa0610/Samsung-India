@@ -9,11 +9,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { AdminDashboardStats, fetchAdminDashboardStats } from "@/api/admin";
 import { useAdminFilters } from "@/hooks/useAdminFilters";
 import { useAuth } from "@/hooks/useAuth";
-import {
-  ApiError,
-  PendingSessionItem,
-  fetchPendingTrainings,
-} from "@/api/training";
+import { ApiError, fetchPendingTrainingCount } from "@/api/training";
 import { subscribe } from "@/services/liveEvents";
 
 export function useAdminDashboard() {
@@ -21,7 +17,8 @@ export function useAdminDashboard() {
   const { admin, adminToken, adminLogout } = useAuth();
   const { applied, appliedKey } = useAdminFilters("home");
 
-  const [pending, setPending] = useState<PendingSessionItem[]>([]);
+  // How many trainings await review (the banner and the tab badge only ever show the number).
+  const [pendingCount, setPendingCount] = useState(0);
   const [stats, setStats] = useState<AdminDashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -41,8 +38,8 @@ export function useAdminDashboard() {
 
       // The two requests are independent, so each result is shown the moment it
       // arrives - the stat cards no longer wait for the (separate) pending-review
-      // list, or the other way round.
-      const pendingTask = fetchPendingTrainings(adminToken).then(setPending).catch(fail);
+      // count, or the other way round.
+      const pendingTask = fetchPendingTrainingCount(adminToken).then(setPendingCount).catch(fail);
       try {
         // A normal open may use the server's 30-second cache; a pull-to-refresh or a
         // live "training changed" event (both call load(true)) always gets fresh numbers.
@@ -87,7 +84,7 @@ export function useAdminDashboard() {
 
   return {
     admin,
-    pending,
+    pendingCount,
     stats,
     loading,
     refreshing,

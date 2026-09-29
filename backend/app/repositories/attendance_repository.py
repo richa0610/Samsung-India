@@ -1,9 +1,7 @@
-import base64
-import json
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, and_, case, cast, func, or_, select, tuple_
+from sqlalchemy import String, and_, case, cast, func, or_, select
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import FunctionElement
@@ -12,6 +10,7 @@ from app.models.attendance import Attendance
 from app.models.attendance_log import AttendanceLog
 from app.models.conference import Conference
 from app.models.trainee import Trainee
+from app.repositories import keyset
 from app.utils.date_utils import utc_now
 
 
@@ -134,7 +133,6 @@ def upsert_attendance_log(
 # Paged admin attendance list
 # ---------------------------------------------------------------------------
 
-MAX_PAGE_SIZE = 200
 EPOCH = datetime(1970, 1, 1)
 
 
@@ -248,18 +246,6 @@ _PAGE_COLUMNS = (
 )
 
 
-def _decode_cursor(sort: str, cursor: str):
-    data = json.loads(base64.urlsafe_b64decode(cursor.encode()))
-    if data["s"] != sort:
-        raise ValueError("cursor was issued for a different sort")
-    value = data["v"]
-    if SORT_COLUMNS[sort][1] == "datetime":
-        value = datetime.fromisoformat(value)
-    elif not isinstance(value, str):
-        raise ValueError("bad cursor value")
-    return value, int(data["id"])
-
-
 def list_page(
     db: Session,
     conditions: list,
@@ -270,22 +256,16 @@ def list_page(
     cursor: Optional[str] = None,
     limit: int = 10,
     page: Optional[int] = None,
-):
-    """One page of the admin attendance list: attendance JOIN conference (the
-    admin's scope, `conditions`) LEFT JOIN trainee, filtered by `mode`, searched,
-    sorted and limited in SQL. Returns (rows, next_cursor, total).
-
-    Paging: `cursor` = "the rows after this one" (keyset - stable while rows are
-    added, used to walk everything for export) or `page` = a 1-based page number
-    (OFFSET - can drift if rows are added between page requests). Order is (sort
-    expression, attendance.id) so ties are never ambiguous. `total` is computed only
-    for the first page. Only the columns the list shows are selected (no ORM
-    entities, no relationship loading)."""
-    limit = max(1, min(limit, MAX_PAGE_SIZE))
+) -> keyset.Page:
+    """One page of the attendance list: attendance JOIN conference (the caller's authorization,
+    `conditions`) LEFT JOIN trainee, filtered by `mode`, searched, then counted, sorted and paged
+    in SQL (keyset.paginate). Both joins are on unique keys (conference.conferenceUid,
+    trainee.traineeUid), so a row can never appear twice. Only the columns the list shows are
+    selected (no ORM entities, no relationship loading)."""
     sort = sort if sort in SORT_COLUMNS else "markedAt"
     sort_expr, kind = SORT_COLUMNS[sort]
 
-    base = (
+    stmt = (
         select(*_PAGE_COLUMNS, sort_expr.label("sort_value"))
         .select_from(Attendance)
         .join(Conference, Conference.conferenceUid == Attendance.conferenceUid)
@@ -293,41 +273,20 @@ def list_page(
         .where(*conditions)
     )
     if mode == "confirmed":
-        base = base.where(Attendance.status == "Present")
+        stmt = stmt.where(Attendance.status == "Present")
     elif mode == "pending":
-        base = base.where(or_(Attendance.status.is_(None), Attendance.status != "Present"))
+        stmt = stmt.where(or_(Attendance.status.is_(None), Attendance.status != "Present"))
+    stmt = stmt.where(*keyset.search_conditions(SEARCH_EXPRESSIONS, search))
 
-    text = (search or "").strip().lower()
-    if text:
-        base = base.where(or_(*[func.lower(expr).contains(text, autoescape=True) for expr in SEARCH_EXPRESSIONS]))
-
-    total = None
-    if cursor is None and page in (None, 1):
-        total = int(db.execute(select(func.count()).select_from(base.with_only_columns(Attendance.id).subquery())).scalar() or 0)
-
-    query = base
-    if cursor:
-        value, last_id = _decode_cursor(sort, cursor)
-        after = tuple_(sort_expr, Attendance.id)
-        query = query.where(after < tuple_(value, last_id) if descending else after > tuple_(value, last_id))
-
-    order = (sort_expr.desc(), Attendance.id.desc()) if descending else (sort_expr.asc(), Attendance.id.asc())
-    query = query.order_by(*order)
-    if page and page > 1 and not cursor:
-        query = query.offset((page - 1) * limit)
-    rows = db.execute(query.limit(limit + 1)).all()
-
-    next_cursor = None
-    if len(rows) > limit:
-        rows = rows[:limit]
-        last = rows[-1]
-        value = last.sort_value
-        if isinstance(value, datetime):
-            value = value.isoformat()
-        next_cursor = base64.urlsafe_b64encode(
-            json.dumps({"s": sort, "v": value if value is not None else "", "id": last.id}).encode()
-        ).decode()
-    return rows, next_cursor, total
+    order = keyset.SortOrder.keyset(
+        sort,
+        sort_expr,
+        Attendance.id,
+        descending=descending,
+        cursor_value=lambda row: row.sort_value,
+        datetime_value=kind == "datetime",
+    )
+    return keyset.paginate(db, stmt, order, cursor=cursor, limit=limit, page=page, entities=False)
 
 
 def tallies_for_trainees(db: Session, conditions: list, trainee_uids: set[str]) -> dict[str, tuple[int, int, int]]:

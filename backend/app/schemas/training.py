@@ -3,6 +3,7 @@ from typing import Annotated, Literal, Optional
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 
 from app.schemas._common import (
+    PageMeta,
     DateLikeStr,
     IdStr,
     OptDateLikeStr,
@@ -81,15 +82,6 @@ class AssessmentSuiteDetail(BaseModel):
     type: str
     noOfQuestion: int
     questions: list[QuestionOut] = []
-
-
-class PendingSessionItem(BaseModel):
-    conferenceUid: str
-    title: str
-    trainerName: Optional[str] = None
-    conferenceDate: Optional[str] = None
-    conferenceTime: Optional[str] = None
-    status: str
 
 
 class AttendanceConfig(BaseModel):
@@ -301,38 +293,32 @@ class TrainingAgendaItem(BaseModel):
     traineeCount: int = 0
 
 
-class AttendancePageResponse(BaseModel):
-    """GET /admin/attendance/page - one page of the admin attendance list.
-    `nextCursor` is null on the last page; `total` (all rows matching the mode /
-    filters / search) is only sent with the first page."""
+class AttendancePageResponse(PageMeta):
+    """GET /admin/attendance/page - one page of the attendance list (see PageMeta)."""
 
     items: list[AttendanceListItemOut]
-    nextCursor: Optional[str] = None
-    total: Optional[int] = None
 
 
-class TrainingPageResponse(BaseModel):
-    """GET /admin/trainings/page - one page of the admin Training / Pending
-    list. `nextCursor` is null on the last page; `total` (all rows matching the
-    filter / search) is only sent with the first page."""
+class TrainingPageResponse(PageMeta):
+    """GET /admin/trainings/page - one page of the Training / Pending Training list or the
+    trainer's Sessions screen (see PageMeta)."""
 
     items: list[TrainingAgendaItem]
-    nextCursor: Optional[str] = None
-    total: Optional[int] = None
 
 
-class TrainerAgendaResponse(BaseModel):
-    """GET /admin/trainings - the session list plus the dashboard's summary
-    stats, all computed server-side so the frontend just displays them
-    rather than re-deriving them from the raw list itself. `totalTrainees`
-    is a de-duplicated headcount (see the router for how it's built from
-    `attendance`/`assessment_results`); `totalSessions`/`completed`/`pending`
-    are counted straight off the filtered `conference` rows. `recentCompleted`
-    is always the trainer's most recently completed sessions all-time,
-    regardless of `start`/`end` - the Recent Sessions card ignores whatever
-    date scope the rest of this response uses."""
+class TrainingFacetsOut(BaseModel):
+    """GET /admin/trainings/facets - the Sessions screen's filter options, from the trainings the
+    caller may see (never the whole tenant's)."""
 
-    trainings: list[TrainingAgendaItem]
+    trainingHubs: list[str]
+    trainingTypes: list[str]
+
+
+class TrainerSummaryOut(BaseModel):
+    """GET /admin/trainings/summary - the trainer Home dashboard's numbers (today, or the chosen
+    range), counted in SQL. `recentCompleted` is always the two most recently completed trainings,
+    whatever the range."""
+
     totalTrainees: int
     totalSessions: int
     completed: int
@@ -342,7 +328,6 @@ class TrainerAgendaResponse(BaseModel):
     executedPercentage: int
     pendingPercentage: int
     recentCompleted: list[TrainingAgendaItem] = []
-
 
 class AudienceBreakdown(BaseModel):
     total: int

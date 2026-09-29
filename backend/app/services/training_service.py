@@ -41,7 +41,6 @@ from app.schemas.training import (
     AuditLogEntry,
     ExecutionFlowItem,
     ModuleConfig,
-    PendingSessionItem,
     ProctoringUnlockRequest,
     SessionDashboardOut,
     SessionFlowConfig,
@@ -51,13 +50,14 @@ from app.schemas.training import (
     SessionReportSummary,
     TopPerformer,
     TraineeRow,
-    TrainerAgendaResponse,
+    TrainerSummaryOut,
     TrainingPageResponse,
     AttendancePageResponse,
     TrainingAdminUpdate,
     TrainingAgendaItem,
     TrainingCreate,
     TrainingDetailOut,
+    TrainingFacetsOut,
     TrainingOut,
 )
 from app.services import live_quiz_service
@@ -818,152 +818,40 @@ def _to_agenda_item(
     )
 
 
-def list_trainer_trainings(
+def trainer_summary(
     db: Session,
     admin: Admin,
-    start: Optional[str],
-    end: Optional[str],
-    all_sessions: bool,
-    org: bool = False,
-    filters: Optional[ConferenceFilters] = None,
-    approval: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
     common_db: Optional[Session] = None,
     tenant_id: Optional[str] = None,
-) -> TrainerAgendaResponse:
-    """Powers the trainer's Home agenda, and (with `all_sessions=true`) the
-    Training List / Pending Training List / Sessions screens that need this
-    trainer's complete history rather than just today. `start`/`end` are
-    `YYYY-MM-DD` strings (matching how `conferenceDate` is stored) and are
-    compared lexicographically, which sorts correctly for that format.
-
-    With neither `start`/`end` nor `all_sessions` given - the dashboard's
-    initial, unfiltered landing view - this deliberately mixes scopes:
-    totalSessions/completed/pending only cover TODAY, while totalTrainees is
-    an all-time cumulative headcount across every session this trainer has
-    ever run ("who have I trained so far" isn't naturally a single-day
-    question). As soon as the trainer applies an explicit start/end (or a
-    caller asks for `all_sessions`), every number (including totalTrainees)
-    is scoped to that range/scope instead."""
-    # Verified server-side (access_service.own_trainings_username) - never the token subject
-    # alone: an agency account without the trainer role, or an admin-table trainer without a
-    # trainer grant for this tenant, is refused here.
+) -> TrainerSummaryOut:
+    """The trainer Home dashboard: its numbers for today (no range) or for start..end, counted in
+    SQL (dashboard_repository.trainer_summary_counts - two statements, whatever the trainer's
+    history), plus the Recent Sessions card - always the two most recently completed trainings,
+    whatever the range. Only the trainer's own trainings, verified server-side."""
     username = own_trainings_username(common_db, admin, tenant_id)
-    is_default_view = start is None and end is None and not all_sessions
-
-    if org:
-        # Admin-only org-wide view: every in-scope trainer's trainings, newest first. Scoped by
-        # the caller's admin_access grant and filtered (with the pending / reviewed split) in the
-        # database, so only the rows the list actually shows are loaded.
-        conferences = conference_repository.list_filtered(
-            db,
-            dashboard_repository.conference_conditions(filters, include_cancelled=True)
-            + dashboard_repository.conference_authorization_conditions(resolve_scope(common_db, admin, tenant_id)),
-            approval,
-        )
-    elif all_sessions:
-        conferences = conference_repository.list_all_for_trainer(db, username)
-    elif is_default_view:
-        conferences = conference_repository.list_for_trainer(db, username, exact_date=date.today().isoformat())
-    else:
-        conferences = conference_repository.list_for_trainer(db, username, start=start, end=end)
-
-    conference_uids = [c.conferenceUid for c in conferences]
-    trainee_uids_by_conference = _real_trainee_uids_by_conference(db, conference_uids)
-    venue_name_by_uid = _venue_names_for(db, conferences)
-    updated_by_name_by_username = _updated_by_names_for(db, conferences)
-
-    result = [
-        _to_agenda_item(
-            conference,
-            len(trainee_uids_by_conference.get(conference.conferenceUid, set())),
-            venue_name_by_uid,
-            updated_by_name_by_username,
-        )
-        for conference in conferences
-    ]
-
-    if is_default_view:
-        # All-time headcount across every session this trainer has ever run,
-        # not just today's - a trainee trained last month still counts.
-        all_conference_uids = [c.conferenceUid for c in conference_repository.list_all_for_trainer(db, username)]
-        trainee_source = _real_trainee_uids_by_conference(db, all_conference_uids)
-    else:
-        # De-duplicated across every session in the filtered range - a
-        # trainee trained in more than one of these sessions still counts once.
-        trainee_source = trainee_uids_by_conference
-
-    all_trainee_uids: set[str] = set()
-    for uids in trainee_source.values():
-        all_trainee_uids |= uids
-
-    # Cancelled trainings stay in the session list (so they show as Cancelled)
-    # but never count toward any dashboard number.
-    counted = [c for c in conferences if title_status(c.conferenceStatus) != "Cancelled"]
-    total_sessions = len(counted)
-    completed = sum(1 for c in counted if title_status(c.conferenceStatus) == "Completed")
-    # Pending = incoming AND approved: not yet started (excludes Ongoing/Live -
-    # that's running right now, not "incoming"), not Completed, and actually
-    # Approved (a training still awaiting admin approval, or Rejected, isn't
-    # a real incoming session). Was `total_sessions - completed`, which lumped
-    # in-progress and not-yet-approved sessions into "Pending" too.
-    # Missed = approved but never started, and its scheduled date has already
-    # passed (venue/IST date). Kept out of `pending` so a stale session isn't
-    # counted as both "incoming" and "missed".
-    today_ist = ist_now().date().isoformat()
-
-    def _not_started_approved(rows: list[Conference]) -> list[Conference]:
-        return [
-            c
-            for c in rows
-            if title_status(c.status) == "Approved"
-            and title_status(c.conferenceStatus) not in ("Ongoing", "Live", "Completed", "Cancelled")
-        ]
-
-    def _is_past(c: Conference) -> bool:
-        return bool(c.conferenceDate) and c.conferenceDate < today_ist
-
-    # The default view only lists today's sessions, so Planned (all upcoming)
-    # and Ongoing count across the trainer's whole history there; with an
-    # explicit range/all_sessions they follow that scope. Missed always
-    # follows the selected date range (today's, on the default view).
-    scoped = conference_repository.list_all_for_trainer(db, username) if is_default_view else counted
-    pending = sum(1 for c in _not_started_approved(scoped) if not _is_past(c))
-    missed = sum(1 for c in _not_started_approved(counted) if _is_past(c))
-    # Ongoing = every session that is live right now, same scope as above.
-    ongoing = sum(1 for c in scoped if title_status(c.conferenceStatus) in ("Ongoing", "Live"))
-    executed_percentage = round((completed / total_sessions) * 100) if total_sessions else 0
-    pending_percentage = round((pending / total_sessions) * 100) if total_sessions else 0
-
-    # Always all-time, regardless of `start`/`end` - the Recent Sessions card
-    # wants "what did I most recently complete", not "what completed within
-    # whatever range is currently filtered".
-    recent_completed_conferences = conference_repository.list_recent_completed_for_trainer(db, username, 2)
-    recent_completed_uids = _real_trainee_uids_by_conference(
-        db, [c.conferenceUid for c in recent_completed_conferences]
+    counts = dashboard_repository.trainer_summary_counts(
+        db, username, start, end, today=date.today().isoformat(), today_ist=ist_now().date().isoformat()
     )
-    recent_venue_name_by_uid = _venue_names_for(db, recent_completed_conferences)
-    recent_updated_by_name_by_username = _updated_by_names_for(db, recent_completed_conferences)
-    recent_completed = [
-        _to_agenda_item(
-            conference,
-            len(recent_completed_uids.get(conference.conferenceUid, set())),
-            recent_venue_name_by_uid,
-            recent_updated_by_name_by_username,
-        )
-        for conference in recent_completed_conferences
-    ]
-
-    return TrainerAgendaResponse(
-        trainings=result,
-        totalTrainees=len(all_trainee_uids),
-        totalSessions=total_sessions,
-        completed=completed,
-        pending=pending,
-        missed=missed,
-        ongoing=ongoing,
-        executedPercentage=executed_percentage,
-        pendingPercentage=pending_percentage,
-        recentCompleted=recent_completed,
+    total = counts["totalSessions"]
+    recent = conference_repository.list_recent_completed_for_trainer(db, username, 2)
+    trainee_uids_by_conference = _real_trainee_uids_by_conference(db, [c.conferenceUid for c in recent])
+    venue_name_by_uid = _venue_names_for(db, recent)
+    updated_by_name_by_username = _updated_by_names_for(db, recent)
+    return TrainerSummaryOut(
+        **counts,
+        executedPercentage=round(counts["completed"] / total * 100) if total else 0,
+        pendingPercentage=round(counts["pending"] / total * 100) if total else 0,
+        recentCompleted=[
+            _to_agenda_item(
+                conference,
+                len(trainee_uids_by_conference.get(conference.conferenceUid, set())),
+                venue_name_by_uid,
+                updated_by_name_by_username,
+            )
+            for conference in recent
+        ],
     )
 
 
@@ -980,6 +868,10 @@ def list_trainings_page(
     page: Optional[int] = None,
     common_db: Optional[Session] = None,
     tenant_id: Optional[str] = None,
+    *,
+    on_date: Optional[str] = None,
+    status: Optional[str] = None,
+    location: Optional[str] = None,
 ) -> TrainingPageResponse:
     """One page (default 50 rows) of the admin org-wide Training / Pending list, restricted to
     what `admin`'s admin_access grant authorizes: a Super Admin sees every company, a Company
@@ -997,6 +889,9 @@ def list_trainings_page(
     which only happens from a direct internal call (never through the router) - such a caller
     is explicitly asking to skip authorization, so no scope condition is added.
 
+    `on_date` / `status` / `location` are the trainer Sessions screen's tab and filters
+    (conference_repository.session_conditions), and `sort="session"` its grouped order.
+
     Filtering, searching, sorting and paging all happen in the database; only
     this page's rows are enriched (headcounts, venue and updater names), so the
     cost per request is the page size, not the size of the tenant."""
@@ -1008,23 +903,15 @@ def list_trainings_page(
         else AccessScope.denied(tenant_id or "", "no scope context")
     )
     conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
+    conditions += conference_repository.session_conditions(on_date, status, location)
     if scope is not None:
         conditions += dashboard_repository.conference_authorization_conditions(scope)
     try:
-        conferences, next_cursor, total = conference_repository.list_page(
-            db,
-            conditions,
-            approval,
-            search,
-            sort,
-            descending,
-            cursor,
-            limit,
-            page,
-        )
+        result = conference_repository.list_page(db, conditions, approval, search, sort, descending, cursor, limit, page)
     except (ValueError, KeyError, TypeError):
         raise bad_request("Invalid page cursor")
 
+    conferences = result.rows
     trainee_uids_by_conference = _real_trainee_uids_by_conference(db, [c.conferenceUid for c in conferences])
     venue_name_by_uid = _venue_names_for(db, conferences)
     updated_by_name_by_username = _updated_by_names_for(db, conferences)
@@ -1038,39 +925,26 @@ def list_trainings_page(
             )
             for conference in conferences
         ],
-        nextCursor=next_cursor,
-        total=total,
+        **result.meta(),
     )
 
 
-def list_pending_trainings(
+def training_facets(
     db: Session,
     admin: Admin,
-    filters: Optional[ConferenceFilters] = None,
+    filters: Optional[ConferenceFilters],
     common_db: Optional[Session] = None,
     tenant_id: Optional[str] = None,
-) -> list[PendingSessionItem]:
-    """Not-yet-reviewed sessions across every trainer inside the caller's admin_access grant -
-    powers the admin dashboard's Pending Approvals list. Scoped and filtered in SQL, the same
-    way as the Training List (conference_authorization_conditions); any optional filter only
-    narrows inside that scope."""
-    conferences = conference_repository.list_filtered(
-        db,
-        dashboard_repository.conference_conditions(filters, include_cancelled=True)
-        + dashboard_repository.conference_authorization_conditions(resolve_scope(common_db, admin, tenant_id)),
-        "pending",
+) -> TrainingFacetsOut:
+    """The Sessions screen's filter options (training hubs, training types), taken from the
+    trainings the caller may see within `filters` - the same authorization as the list, so an
+    option never reveals a training outside it."""
+    conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
+    conditions += dashboard_repository.conference_authorization_conditions(resolve_scope(common_db, admin, tenant_id))
+    return TrainingFacetsOut(
+        trainingHubs=catalog_repository.list_distinct_conference_values(db, Conference.trainingHub, conditions),
+        trainingTypes=catalog_repository.list_distinct_conference_values(db, Conference.trainingType, conditions),
     )
-    return [
-        PendingSessionItem(
-            conferenceUid=c.conferenceUid,
-            title=c.suiteTitle or c.trainingType or "Training Session",
-            trainerName=c.trainerName,
-            conferenceDate=c.conferenceDate,
-            conferenceTime=c.conferenceTime,
-            status=title_status(c.status),
-        )
-        for c in conferences
-    ]
 
 
 def approve_training(
@@ -2118,11 +1992,10 @@ def list_attendance_page(
     if scope is not None:
         conditions += dashboard_repository.conference_authorization_conditions(scope)
     try:
-        rows, next_cursor, total = attendance_repository.list_page(
-            db, conditions, mode, search, sort, descending, cursor, limit, page
-        )
+        page_result = attendance_repository.list_page(db, conditions, mode, search, sort, descending, cursor, limit, page)
     except (ValueError, KeyError, TypeError):
         raise bad_request("Invalid page cursor")
+    rows = page_result.rows
 
     tallies = attendance_repository.tallies_for_trainees(db, conditions, {r.trainee_uid for r in rows})
     results = assessment_repository.latest_post_test_results_for_pairs(
@@ -2179,114 +2052,4 @@ def list_attendance_page(
                 trainerTrainingsPending=tally_pending,
             )
         )
-    return AttendancePageResponse(items=items, nextCursor=next_cursor, total=total)
-
-
-def list_attendance(
-    db: Session,
-    admin: Admin,
-    org: bool = False,
-    filters: Optional[ConferenceFilters] = None,
-    common_db: Optional[Session] = None,
-    tenant_id: Optional[str] = None,
-) -> list[AttendanceListItemOut]:
-    """Powers the trainer's Attendance List / Pending Attendance / Confirmed
-    Attendance screens (all three fetch this same list and split it
-    client-side by `marked`). Scoped to this trainer's own conferences,
-    same as list_trainer_trainings - this lives in the trainer's own More
-    menu, not a cross-trainer admin view.
-
-    `org=True` is the cross-trainer admin view (gated by the router to role="admin" accounts);
-    it applies the caller's admin_access grant the same way list_attendance_page does - see
-    that function's docstring for the common_db/tenant_id fail-closed convention."""
-    if org:
-        conferences = conference_repository.list_filtered(
-            db,
-            dashboard_repository.conference_conditions(filters, include_cancelled=True)
-            + dashboard_repository.conference_authorization_conditions(resolve_scope(common_db, admin, tenant_id)),
-        )
-    else:
-        conferences = conference_repository.list_all_for_trainer(db, own_trainings_username(common_db, admin, tenant_id))
-    conference_by_uid = {c.conferenceUid: c for c in conferences}
-    conference_uids = list(conference_by_uid.keys())
-    if not conference_uids:
-        return []
-
-    attendance_rows = attendance_repository.list_for_conferences(db, conference_uids)
-
-    trainee_uids = {a.traineeUid for a in attendance_rows}
-    trainees_by_uid = {t.traineeUid: t for t in trainee_repository.get_by_uids(db, trainee_uids)}
-
-    # Per-participant tallies across every training this trainer owns - the
-    # roster is seeded (status "Pending") when a training is scheduled, so a
-    # trainee on an upcoming session counts here before it's held.
-    trainings_total: Counter[str] = Counter(a.traineeUid for a in attendance_rows)
-    trainings_present: Counter[str] = Counter(
-        a.traineeUid for a in attendance_rows if a.status == "Present"
-    )
-    trainings_pending: Counter[str] = Counter(
-        a.traineeUid for a in attendance_rows if a.status in ("Pending", "Joined")
-    )
-
-    result_rows = assessment_repository.list_results_for_conferences(db, conference_uids)
-    # Keep only the latest attempt per (conference, trainee), matching a
-    # conference's own post-test suite - the same "latest attempt wins"
-    # rule _build_dashboard uses for the single-session dashboard.
-    latest_result: dict[tuple[str, str], object] = {}
-    for r in result_rows:
-        conference = conference_by_uid.get(r.conferenceUid)
-        if not conference or r.assessmentSuiteUid != conference.postAssessmentUid:
-            continue
-        key = (r.conferenceUid, r.traineeUid)
-        latest_result.setdefault(key, r)
-
-    items: list[AttendanceListItemOut] = []
-    for a in attendance_rows:
-        conference = conference_by_uid.get(a.conferenceUid)
-        trainee = trainees_by_uid.get(a.traineeUid)
-        result = latest_result.get((a.conferenceUid, a.traineeUid))
-
-        post_test_score = None
-        post_test_summary = None
-        if result:
-            total = float(result.maxScore)
-            correct = float(result.totalScore)
-            post_test_score = f"{correct:g} / {total:g} ({float(result.percentage):g}%)"
-            post_test_summary = f"Total: {total:g}, Correct: {correct:g}, Wrong: {total - correct:g}"
-
-        items.append(
-            AttendanceListItemOut(
-                attendanceId=a.attendanceUid or str(a.id),
-                region=conference.region if conference else None,
-                product=conference.trainingType if conference else None,
-                session=conference.sessionType if conference else None,
-                audienceType=conference.audience if conference else None,
-                conferenceDate=conference.conferenceDate if conference else None,
-                trainerName=conference.trainerName if conference else None,
-                trainerHoId=conference.trainerEmployeeId if conference else None,
-                participantHoId=trainee.employee_id if trainee else None,
-                participantName=trainee.name if trainee else "Unknown Trainee",
-                phone=str(a.phone) if a.phone else (str(trainee.phone) if trainee else None),
-                state=conference.state if conference else None,
-                location=", ".join(filter(None, [conference.district, conference.state])) if conference else None,
-                district=conference.district if conference else None,
-                reportingManagerOfPromoter=trainee.supervisorName if trainee else None,
-                attendanceStatus=a.status,
-                markedAt=a.timestamp.strftime("%Y-%m-%d %H:%M:%S") if a.timestamp else None,
-                checkIn=a.markedOn,
-                checkOut=a.checkOutTime.strftime("%Y-%m-%d %H:%M:%S") if a.checkOutTime else None,
-                postTestScore=post_test_score,
-                postTestScoreSummary=post_test_summary,
-                sessionTypeMethod=conference.sessionType if conference else None,
-                conferenceId=a.conferenceUid,
-                lastUpdates=a.timestamp.strftime("%Y-%m-%d %H:%M:%S") if a.timestamp else None,
-                updatedBy=a.updatedBy,
-                updationOn=a.updationOn.strftime("%Y-%m-%d %H:%M:%S") if a.updationOn else None,
-                marked=a.status == "Present",
-                trainerTrainingsTotal=trainings_total[a.traineeUid],
-                trainerTrainingsPresent=trainings_present[a.traineeUid],
-                trainerTrainingsPending=trainings_pending[a.traineeUid],
-            )
-        )
-
-    return items
+    return AttendancePageResponse(items=items, **page_result.meta())

@@ -2,10 +2,11 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { BackHandler } from "react-native";
 
-import { TrainingAgendaItem, fetchTrainerAgenda } from "@/api/training";
+import { TrainingAgendaItem, fetchTrainerSummary } from "@/api/training";
 import { DatePreset, DateRange, rangeForPreset } from "@/components/trainer/DateDrop";
 import { useAuth } from "@/hooks/useAuth";
 import { subscribe } from "@/services/liveEvents";
+import { DashboardTab } from "./DashboardBottomNav";
 import { DashboardStats } from "./dashboardUtils";
 import { toApiDate } from "./TrainerMoreMenu";
 
@@ -23,8 +24,6 @@ const EMPTY_STATS: DashboardStats = {
   executedPercentage: 0,
   pendingPercentage: 0,
 };
-
-import { DashboardTab } from "./DashboardBottomNav";
 
 export type TrainerDashboardTab = DashboardTab;
 
@@ -65,7 +64,7 @@ export function useTrainerDashboardScreen() {
       if (mode === "refresh") setRefreshing(true);
       else if (mode === "load") setLoadingAgenda(true);
       try {
-        const data = await fetchTrainerAgenda(
+        const data = await fetchTrainerSummary(
           adminToken,
           filterApplied
             ? { start: toApiDate(dateRange.start), end: toApiDate(dateRange.end) }

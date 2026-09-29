@@ -154,8 +154,10 @@ class AttendancePageTestCase(unittest.TestCase):
             response = self.page_call(filters, mode, search, sort, descending, cursor if by == "cursor" else None, limit, page if by == "page" else None)
             if step == 0:
                 total = response.total
+            elif by == "cursor":
+                self.assertIsNone(response.total, "a cursor continuation carries no count")
             else:
-                self.assertIsNone(response.total, "total must only be sent with the first page")
+                self.assertEqual(response.total, total, "every numbered page carries the same total")
             items += response.items
             self.assertLessEqual(len(response.items), limit)
             if by == "cursor":
@@ -258,7 +260,7 @@ class OrderingAndPagingTests(AttendancePageTestCase):
         last = (len(expected) + 9) // 10
         response = self.page_call(ConferenceFilters(), limit=10, page=last)
         self.assertEqual([i.attendanceId for i in response.items], expected[(last - 1) * 10:])
-        self.assertIsNone(response.total)
+        self.assertEqual((response.total, response.page, response.totalPages), (len(expected), last, last))
 
     def test_invalid_cursors_return_400(self):
         good = self.page_call(ConferenceFilters(), limit=5).nextCursor
@@ -304,6 +306,10 @@ class SearchTests(AttendancePageTestCase):
 
 class StatementBudgetTests(AttendancePageTestCase):
     def count_statements(self, **kwargs):
+        # Measures an uncached request; count reuse itself is tested in test_phase3_pagination.
+        from app.repositories import keyset
+
+        keyset.clear_count_cache()
         seen = []
 
         def listener(conn, cursor, statement, params, context, executemany):
@@ -316,10 +322,15 @@ class StatementBudgetTests(AttendancePageTestCase):
             event.remove(self.engine, "before_cursor_execute", listener)
         return len(seen)
 
-    def test_at_most_four_statements_and_three_after_the_first_page(self):
+    def test_at_most_four_statements_per_page_and_three_for_a_cursor_continuation(self):
+        # Phase 3: every numbered page carries its total, so it runs the count too (4); a cursor
+        # continuation (export / load more) skips the count (3).
         self.assertLessEqual(self.count_statements(limit=50), 4)
-        self.assertLessEqual(self.count_statements(limit=50, page=2), 3)
+        self.assertLessEqual(self.count_statements(limit=50, page=2), 4)
         self.assertLessEqual(self.count_statements(limit=50, search="asha", mode="confirmed"), 4)
+        first = self.page_call(ConferenceFilters(company="Samsung India"), limit=5)
+        self.assertIsNotNone(first.nextCursor)
+        self.assertLessEqual(self.count_statements(limit=5, cursor=first.nextCursor), 3)
 
     def test_statements_do_not_grow_with_the_page_size(self):
         self.assertEqual(self.count_statements(limit=5), self.count_statements(limit=200))
@@ -362,7 +373,10 @@ class RouteAuthorizationTests(unittest.TestCase):
         self.assertIn("get_common_db", called)
         self.assertIn("get_tenant_id_from_request", called)
         self.assertIn("get_conference_filters", called)
-        params = {q.name: q for q in route.dependant.query_params}
+        from fastapi.dependencies.utils import get_flat_dependant
+
+        # Paging params live in the shared dependencies.paging.page_request dependency.
+        params = {q.name: q for q in get_flat_dependant(route.dependant).query_params}
         self.assertEqual(params["limit"].field_info.metadata[0].ge, 1)
         self.assertEqual(params["limit"].field_info.metadata[1].le, 200)
         self.assertEqual(params["q"].field_info.metadata[0].max_length, 100)

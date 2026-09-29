@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import { useFocusEffect, useRouter } from "expo-router";
 
-import { fetchPendingTrainings } from "@/api/training";
+import { fetchPendingTrainingCount } from "@/api/training";
 import { useAuth } from "@/hooks/useAuth";
 import AdminBottomNav, { AdminDashboardTab } from "./AdminBottomNav";
 
@@ -26,9 +26,9 @@ export default function AdminTabBar({ activeTab }: AdminTabBarProps) {
     useCallback(() => {
       if (!adminToken) return;
       let cancelled = false;
-      fetchPendingTrainings(adminToken)
-        .then((list) => {
-          if (!cancelled) setPendingCount(list.length);
+      fetchPendingTrainingCount(adminToken)
+        .then((count) => {
+          if (!cancelled) setPendingCount(count);
         })
         .catch(() => {});
       return () => {

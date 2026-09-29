@@ -1,5 +1,6 @@
 import { AdminFilters, adminFilterParams } from "./adminFilters";
 import { apiRequest } from "./client";
+import type { PageMeta } from "./training";
 
 export type AttendanceListItem = {
   attendanceId: string;
@@ -36,25 +37,10 @@ export type AttendanceListItem = {
   trainerTrainingsPending: number;
 };
 
-/** `org` (admin accounts only) lists attendance across every trainer's trainings. */
-export function fetchAttendanceList(token: string, org = false, filters?: AdminFilters) {
-  const params = new URLSearchParams();
-  if (org) params.set("org", "true");
-  for (const [key, value] of adminFilterParams(filters)) params.set(key, value);
-  const query = params.toString();
-  return apiRequest<AttendanceListItem[]>(`/admin/attendance${query ? `?${query}` : ""}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
 export type AttendanceMode = "all" | "pending" | "confirmed";
 
-export type AttendancePage = {
+export type AttendancePage = PageMeta & {
   items: AttendanceListItem[];
-  /** Opaque "rows after this one" marker - used to walk every page for export; null on the last page. */
-  nextCursor: string | null;
-  /** All rows matching the mode / filters / search - only sent with page 1. */
-  total: number | null;
 };
 
 /** Server sort keys the paged list understands (see GET /admin/attendance/page). */

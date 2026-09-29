@@ -27,7 +27,7 @@ const ACTIVE_TAB: AdminDashboardTab = "home";
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
-  const { admin, pending, stats, loading, refreshing, error, refresh, handleLogout } = useAdminDashboard();
+  const { admin, pendingCount, stats, loading, refreshing, error, refresh, handleLogout } = useAdminDashboard();
   const { pickAndUpload, uploading } = useAdminPhotoUpload();
   const [showTrainingTypes, setShowTrainingTypes] = useState(false);
   const [showAudienceTypes, setShowAudienceTypes] = useState(false);
@@ -75,7 +75,7 @@ export default function AdminDashboardScreen() {
             <AdminFilterBar scope="home" />
           </View>
 
-          {pending.length > 0 && (
+          {pendingCount > 0 && (
             <Pressable
               style={styles.alertCard}
               onPress={() => router.push("/admin_pending_trainings")}
@@ -87,7 +87,7 @@ export default function AdminDashboardScreen() {
               </View>
               <View style={styles.alertText}>
                 <AppText weight={FontWeight.bold} color={Colors.black} style={styles.alertTitle}>
-                  {pending.length} training{pending.length === 1 ? "" : "s"} awaiting review
+                  {pendingCount} training{pendingCount === 1 ? "" : "s"} awaiting review
                 </AppText>
                 <AppText color={Colors.gray500} style={styles.alertSub}>
                   Tap to approve, reject or edit
@@ -218,7 +218,7 @@ export default function AdminDashboardScreen() {
 
         <AdminBottomNav
           activeTab={ACTIVE_TAB}
-          pendingCount={pending.length}
+          pendingCount={pendingCount}
           onSelectTab={() => {}}
         />
       </SafeAreaView>

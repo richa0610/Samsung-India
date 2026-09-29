@@ -19,6 +19,8 @@ export default function SessionsScreen() {
     refreshing,
     loadSessions,
     filteredSessions,
+    loadMore,
+    loadingMore,
     handleLaunchSession,
     handleReportSession,
     bottomTab,
@@ -48,6 +50,8 @@ export default function SessionsScreen() {
         activeTab={activeTab}
         onLaunch={handleLaunchSession}
         onReport={handleReportSession}
+        onLoadMore={loadMore}
+        loadingMore={loadingMore}
       />
 
       <DashboardBottomNav activeTab={bottomTab} onSelectTab={handleBottomNavSelect} />

@@ -130,22 +130,6 @@ def register_trainee_admin(
     return _trainee_to_admin_out(trainee)
 
 
-def list_trainees_admin(
-    db: Session, admin: Admin, common_db: Optional[Session] = None, tenant_id: Optional[str] = None
-) -> list[TraineeAdminOut]:
-    """Powers both the admin Trainee List and a trainer's own "Trainee List" (their More menu -
-    same endpoint, same response shape, scoped differently per caller). An admin-table account
-    (role="admin") is scoped by their admin_access grant, exactly like the Training List and
-    Attendance list (Trainee has its own company/zone/region columns, so no join is needed - see
-    access_scope_conditions). A trainer (agency-team, or an admin-table account with
-    role="trainer") is scoped to their own assigned/rostered trainees instead
-    (trainee_repository.trainer_owned_condition) - unrelated to company/zone, the same as how
-    their own trainings and attendance already work."""
-    conditions = dashboard_repository.trainee_authorization_conditions(resolve_scope(common_db, admin, tenant_id))
-    trainees = trainee_repository.list_scoped(db, conditions)
-    return [_trainee_to_admin_out(t) for t in trainees]
-
-
 def list_trainees_page(
     db: Session,
     admin: Admin,
@@ -163,9 +147,7 @@ def list_trainees_page(
     same rows `list_trainees_admin` authorizes, but counted, searched, sorted and paged in SQL."""
     conditions = dashboard_repository.trainee_authorization_conditions(resolve_scope(common_db, admin, tenant_id))
     try:
-        trainees, next_cursor, total = trainee_repository.list_page(
-            db, conditions, mode, search, sort, descending, cursor, limit, page
-        )
+        result = trainee_repository.list_page(db, conditions, mode, search, sort, descending, cursor, limit, page)
     except (ValueError, KeyError, TypeError):
         raise bad_request("Invalid page cursor")
-    return TraineePageResponse(items=[_trainee_to_admin_out(t) for t in trainees], nextCursor=next_cursor, total=total)
+    return TraineePageResponse(items=[_trainee_to_admin_out(t) for t in result.rows], **result.meta())

@@ -12,7 +12,7 @@ second-guess legitimate content.
 
 from typing import Annotated, Optional
 
-from pydantic import StringConstraints
+from pydantic import BaseModel, StringConstraints
 
 # Single-line free text (names, labels, cities, dropdown values).
 ShortStr = Annotated[str, StringConstraints(strip_whitespace=True, max_length=200)]
@@ -48,3 +48,19 @@ OptDateLikeStr = Optional[DateLikeStr]
 OptEmailLike = Annotated[
     Optional[str], StringConstraints(strip_whitespace=True, max_length=254)
 ]
+
+
+class PageMeta(BaseModel):
+    """The pagination fields every paged list response carries (repositories/keyset.Page.meta).
+
+    `nextCursor` - "the rows after this page" for keyset walks (export, load more); null on the
+    last page, and for orders that page by number only. `total` / `totalPages` - every row the
+    caller may see that matches the filters / search - sent with every numbered page, omitted
+    (null) on a cursor continuation. `page` - the page served (null for a cursor continuation);
+    `pageSize` - the rows per page actually applied (after the 1..200 clamp)."""
+
+    nextCursor: Optional[str] = None
+    total: Optional[int] = None
+    page: Optional[int] = None
+    pageSize: Optional[int] = None
+    totalPages: Optional[int] = None

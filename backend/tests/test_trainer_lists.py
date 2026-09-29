@@ -28,8 +28,8 @@ TRAINER1_TRAINEES = {
 BYPASS_SEARCHES = ("trainer2", "trainer3", "CONF-S_S1", "South", "Other Co", "TR-OTHER", "%", "_", "' OR '1'='1")
 
 
-def forged_cursor(value, row_id=10**9, **extra):
-    return base64.urlsafe_b64encode(json.dumps({"v": value, "id": row_id, **extra}).encode()).decode()
+def forged_cursor(value, row_id=10**9, s="timestamp", **extra):
+    return base64.urlsafe_b64encode(json.dumps({"s": s, "v": value, "id": row_id, **extra}).encode()).decode()
 
 
 class ListTestCase(TrainerWorldTestCase):
@@ -103,30 +103,28 @@ class TrainingListAndPendingTrainingList(ListTestCase):
         self.assertEqual(self.w.conference_keys(body["items"]), {"S_N1", "S_DEL", "S_S1", "S_BLANK", "S_N1V", "ADM"})
 
 
-class SessionsAndHomeAgenda(ListTestCase):
-    """GET /admin/trainings - the trainer Home and the Sessions screen (all / today / completed /
-    upcoming / ongoing are client-side views over this same authorized set)."""
+class HomeSummary(ListTestCase):
+    """GET /admin/trainings/summary - the trainer Home dashboard (counts in SQL, own trainings only).
+    Its numbers are proven equal to the old Python counting in test_phase3_home_summary.py."""
 
-    def test_all_sessions_and_date_ranges_stay_inside_the_trainers_own_trainings(self):
-        for query in ("all_sessions=true", "start=2026-01-01&end=2026-12-31", "start=2026-09-20&end=2026-09-20"):
+    def test_ranges_count_only_the_trainers_own_trainings(self):
+        for query in ("start=2026-01-01&end=2026-12-31", "start=2026-09-20&end=2026-09-20"):
             with self.subTest(query=query):
-                body = self.page("trainer1", f"/admin/trainings?{query}")
-                self.assertEqual(self.w.conference_keys(body["trainings"]), TRAINER1_TRAININGS)
-                self.assertEqual(body["totalSessions"], 3)
+                self.assertEqual(self.page("trainer1", f"/admin/trainings/summary?{query}")["totalSessions"], 3)
 
-    def test_counts_and_headcount_ignore_other_trainers_sessions(self):
+    def test_counts_and_recent_sessions_ignore_other_trainers(self):
         self.set_status(uid("S_S1"), "Completed")
         self.set_status(uid("S_N1"), "Completed")
-        body = self.page("trainer1", "/admin/trainings?all_sessions=true")
+        body = self.page("trainer1", "/admin/trainings/summary?start=2026-01-01&end=2026-12-31")
         self.assertEqual(body["completed"], 1)
         self.assertEqual(self.w.conference_keys(body["recentCompleted"]), {"S_N1"})
 
-    def test_admin_filter_params_cannot_widen_a_trainers_sessions(self):
-        body = self.page("trainer1", "/admin/trainings?all_sessions=true&trainers=trainer2&zones=south%20zone")
-        self.assertEqual(self.w.conference_keys(body["trainings"]), TRAINER1_TRAININGS)
+    def test_filter_style_params_cannot_widen_it(self):
+        body = self.page("trainer1", "/admin/trainings/summary?start=2026-01-01&end=2026-12-31&trainers=trainer2&zones=south%20zone")
+        self.assertEqual(body["totalSessions"], 3)
 
-    def test_the_org_wide_view_is_refused_to_trainers(self):
-        self.assertEqual(self.get("trainer1", "/admin/trainings?org=true&all_sessions=true").status_code, 403)
+    def test_bad_dates_are_422(self):
+        self.assertEqual(self.get("trainer1", "/admin/trainings/summary?start=20-09-2026").status_code, 422)
 
 
 class TraineeListAndPendingTraineeList(ListTestCase):
@@ -140,18 +138,18 @@ class TraineeListAndPendingTraineeList(ListTestCase):
         self.assertEqual(self.keys(body["items"]), TRAINER1_TRAINEES)
         self.assertEqual(body["total"], len(TRAINER1_TRAINEES))
 
-    def test_the_paged_list_matches_the_full_list_for_every_account(self):
+    def test_small_pages_and_one_big_page_agree_for_every_account(self):
         for who in ("trainer1", "trainer2", "adm_trainer", "coadmin", "coord", "super", "ungranted_trainer"):
             if who == "ungranted_trainer":
                 self.set_agency_role("trainer3", "manager")
                 who = "trainer3"
             with self.subTest(who=who):
-                full = self.get(who, "/admin/trainees")
-                paged = self.get(who, self.PAGE)
-                if full.status_code != 200:
-                    self.assertEqual(paged.status_code, full.status_code)
+                whole = self.get(who, self.PAGE)
+                if whole.status_code != 200:
+                    self.assertEqual(self.get(who, "/admin/trainees/page?limit=2").status_code, whole.status_code)
                     continue
-                self.assertEqual(self.keys(paged.json()["items"]), self.keys(full.json()))
+                walked = self.walk(who, "/admin/trainees/page?sort=traineeUid&dir=asc")
+                self.assertEqual(sorted(t["traineeUid"] for t in walked), sorted(self.keys(whole.json()["items"])))
 
     def test_pending_mode_is_the_pending_subset_of_the_authorized_set(self):
         self.alpha.query(Trainee).filter(Trainee.traineeUid.in_(["TR-S_N1-0", "TR-OTHER-TRAINER"])).update(
@@ -285,8 +283,8 @@ class TrainerDropdowns(ListTestCase):
 
 
 class AdminPendingApprovalsUseTheGrant(ListTestCase):
-    """GET /admin/trainings/pending and the org views used the legacy company/zone columns, which
-    showed everything when an admin's own `company` was blank. They now follow the grant."""
+    """The admin dashboard's pending-approval count and the admin lists follow the grant - not the
+    legacy company/zone columns, which showed everything when an admin's own `company` was blank."""
 
     def setUp(self):
         super().setUp()
@@ -298,12 +296,13 @@ class AdminPendingApprovalsUseTheGrant(ListTestCase):
         self.w.common.commit()
         self.w.admins["blankco"] = blank
 
-    def test_pending_approvals_follow_the_grant_not_the_company_column(self):
-        keys = {i["conferenceUid"].removeprefix("CONF-") for i in self.page("blankco", "/admin/trainings/pending")}
-        self.assertEqual(keys, {"S_N1", "S_DEL", "S_N1V"})
+    def test_the_pending_count_follows_the_grant_not_the_company_column(self):
+        # What the admin dashboard reads: the pending list's total (approval=pending&limit=1).
+        body = self.page("blankco", "/admin/trainings/page?approval=pending&limit=1")
+        self.assertEqual(body["total"], 3)  # S_N1, S_DEL, S_N1V (ADM is approved)
 
-    def test_org_views_follow_the_grant(self):
-        trainings = self.page("blankco", "/admin/trainings?org=true&all_sessions=true")["trainings"]
+    def test_the_admin_lists_follow_the_grant(self):
+        trainings = self.page("blankco", "/admin/trainings/page?limit=200")["items"]
         self.assertEqual(self.w.conference_keys(trainings), {"S_N1", "S_DEL", "S_N1V", "ADM"})  # ADM: Samsung / North too
-        attendance = self.page("blankco", "/admin/attendance?org=true")
+        attendance = self.page("blankco", "/admin/attendance/page?limit=200")["items"]
         self.assertEqual(self.w.conference_keys(attendance), {"S_N1", "S_DEL", "S_N1V"})

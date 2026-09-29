@@ -104,12 +104,9 @@ class TraineeLoginFailureRevealsNothing(FixesTestCase):
 
 
 class WebSocketFirstMessageAuth(FixesTestCase):
-    def joins(self, conference_key, token, url_token=False):
-        url = f"/ws/live/{uid(conference_key)}" + (f"?token={token}" if url_token else "")
+    def joins(self, conference_key, token):
         try:
-            with self.w.client.websocket_connect(url) as ws:
-                if url_token:
-                    return True
+            with self.w.client.websocket_connect(f"/ws/live/{uid(conference_key)}") as ws:
                 ws.send_json({"type": "auth", "token": token})
                 return ws.receive_json() == {"type": "ready"}
         except WebSocketDisconnect:
@@ -133,11 +130,13 @@ class WebSocketFirstMessageAuth(FixesTestCase):
             ws.send_json({"type": "auth", "token": self.w.token("coadmin")})
             self.assertEqual(ws.receive_json(), {"type": "ready"})
 
-    def test_url_tokens_still_work_until_retired(self):
-        self.assertTrue(self.joins("S_N1", self.w.token("trainer1"), url_token=True))
-        with patch.object(settings, "WS_ALLOW_QUERY_TOKEN", False):
-            self.assertFalse(self.joins("S_N1", self.w.token("trainer1"), url_token=True))
-            self.assertTrue(self.joins("S_N1", self.w.token("trainer1")))  # first-message path unaffected
+    def test_a_token_in_the_url_is_never_accepted(self):
+        # Every app build sends the token in the first message; a URL token (which proxies log)
+        # authenticates nothing - without the auth message the connection is closed.
+        with self.w.client.websocket_connect(f"/ws/live/{uid('S_N1')}?token={self.w.token('trainer1')}") as ws:
+            ws.send_json({"type": "hello"})
+            with self.assertRaises(WebSocketDisconnect):
+                ws.receive_json()
 
 
 class TokenRevocation(FixesTestCase):

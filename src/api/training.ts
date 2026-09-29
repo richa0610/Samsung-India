@@ -92,8 +92,8 @@ export type TrainingAgendaItem = {
   timestamp: string | null;
 };
 
-export type TrainerAgendaResponse = {
-  trainings: TrainingAgendaItem[];
+/** GET /admin/trainings/summary - the trainer Home dashboard, counted on the server. */
+export type TrainerSummary = {
   totalTrainees: number;
   totalSessions: number;
   completed: number;
@@ -253,12 +253,20 @@ export function createTraining(token: string, payload: TrainingCreatePayload) {
   });
 }
 
-export type TrainingPage = {
-  items: TrainingAgendaItem[];
-  /** Opaque marker for "the rows after this page"; null on the last page. */
+/** Pagination fields every paged list returns (backend schemas/_common.PageMeta). */
+export type PageMeta = {
+  /** Opaque marker for "the rows after this page"; null on the last page (and for page-number-only orders). */
   nextCursor: string | null;
-  /** All rows matching the filter / search - only sent with page 1. */
+  /** All rows matching the filter / search - sent with every numbered page, null on a cursor continuation. */
   total: number | null;
+  /** The page served (null for a cursor continuation), the rows per page applied, and the page count. */
+  page?: number | null;
+  pageSize?: number | null;
+  totalPages?: number | null;
+};
+
+export type TrainingPage = PageMeta & {
+  items: TrainingAgendaItem[];
 };
 
 /** Server sort keys the paged list understands (see GET /admin/trainings/page). */
@@ -274,17 +282,35 @@ export type TrainingSortKey =
   | "trainingHub"
   | "state"
   | "district"
-  | "conferenceStatus";
+  | "conferenceStatus"
+  /** The trainer Sessions screen's grouped order (live, upcoming soonest, completed newest) - page numbers only. */
+  | "session";
+
+/** The Sessions screen's filter options, from the trainings this account may see. */
+export function fetchTrainingFacets(token: string, range?: { start?: string; end?: string }) {
+  const params = new URLSearchParams();
+  if (range?.start) params.set("start", range.start);
+  if (range?.end) params.set("end", range.end);
+  const query = params.toString();
+  return apiRequest<{ trainingHubs: string[]; trainingTypes: string[] }>(
+    `/admin/trainings/facets${query ? `?${query}` : ""}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+}
 
 /** One page (default 50) of the admin org-wide Training / Pending list. The
  *  server does the filtering, searching, sorting and paging. */
 export function fetchTrainingsPage(
   token: string,
   options: {
-    /** "reviewed" = approved or rejected (admin list); "approved" = approved only (trainer's own list). */
-    approval: "pending" | "reviewed" | "approved";
+    /** "reviewed" = approved or rejected (admin list); "approved" = approved only (trainer's own list); omitted = all. */
+    approval?: "pending" | "reviewed" | "approved";
     filters?: AdminFilters;
     q?: string;
+    /** Sessions screen: its Today tab (YYYY-MM-DD), Completed tab and location (hub, or state without one). */
+    onDate?: string;
+    status?: "completed";
+    location?: string;
     sort?: TrainingSortKey;
     dir?: "asc" | "desc";
     /** "The rows after this one" - used to walk every page for export. */
@@ -295,7 +321,10 @@ export function fetchTrainingsPage(
   },
 ) {
   const params = new URLSearchParams();
-  params.set("approval", options.approval);
+  if (options.approval) params.set("approval", options.approval);
+  if (options.onDate) params.set("on_date", options.onDate);
+  if (options.status) params.set("status", options.status);
+  if (options.location) params.set("location", options.location);
   if (options.page && options.page > 1) params.set("page", String(options.page));
   if (options.q?.trim()) params.set("q", options.q.trim());
   if (options.sort) params.set("sort", options.sort);
@@ -308,27 +337,14 @@ export function fetchTrainingsPage(
   });
 }
 
-export function fetchTrainerAgenda(
-  token: string,
-  range?: {
-    start?: string;
-    end?: string;
-    all?: boolean;
-    org?: boolean;
-    /** Org view only: "pending" = awaiting review, "reviewed" = approved or rejected (filtered on the server). */
-    approval?: "pending" | "reviewed";
-    filters?: AdminFilters;
-  },
-) {
+/** The trainer Home dashboard's numbers for today (no range) or for start..end, plus the two
+ *  most recently completed sessions - counted in SQL on the server. */
+export function fetchTrainerSummary(token: string, range?: { start?: string; end?: string }) {
   const params = new URLSearchParams();
   if (range?.start) params.set("start", range.start);
   if (range?.end) params.set("end", range.end);
-  if (range?.all) params.set("all_sessions", "true");
-  if (range?.org) params.set("org", "true");
-  if (range?.org && range.approval) params.set("approval", range.approval);
-  for (const [key, value] of adminFilterParams(range?.filters)) params.set(key, value);
   const query = params.toString();
-  return apiRequest<TrainerAgendaResponse>(`/admin/trainings${query ? `?${query}` : ""}`, {
+  return apiRequest<TrainerSummary>(`/admin/trainings/summary${query ? `?${query}` : ""}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -628,19 +644,11 @@ export function fetchRequestedByOptions(token: string) {
   });
 }
 
-export type PendingSessionItem = {
-  conferenceUid: string;
-  title: string;
-  trainerName: string | null;
-  conferenceDate: string | null;
-  conferenceTime: string | null;
-  status: string;
-};
-
-export function fetchPendingTrainings(token: string) {
-  return apiRequest<PendingSessionItem[]>("/admin/trainings/pending", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+/** How many trainings in this admin's scope await review - the paged list's total with a
+ *  one-row page (the server reuses its cached count until the data changes). */
+export async function fetchPendingTrainingCount(token: string): Promise<number> {
+  const page = await fetchTrainingsPage(token, { approval: "pending", limit: 1 });
+  return page.total ?? 0;
 }
 
 export type AdminTrainingDetail = {

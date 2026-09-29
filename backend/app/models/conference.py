@@ -22,6 +22,8 @@ class Conference(Base):
         Index("ix_conference_company", "company"),
         Index("ix_conference_zone", "zone"),
         Index("ix_conference_trainer", "trainerEmployeeId"),
+        # A trainer's own lists: WHERE trainerEmployeeId = ? ORDER BY timestamp (newest first).
+        Index("ix_conference_trainer_timestamp", "trainerEmployeeId", "timestamp"),
     )
 
     id = Column(Integer, primary_key=True, index=True)

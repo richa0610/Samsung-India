@@ -16,7 +16,7 @@ statement costs one network round trip (~40 ms) however little work it does.
 from dataclasses import dataclass, field
 from typing import Collection, Optional
 
-from sqlalchemy import String, and_, case, cast, exists, false, func, literal, null, or_, select, union_all
+from sqlalchemy import String, and_, case, cast, exists, false, func, literal, not_, null, or_, select, true, union, union_all
 from sqlalchemy.orm import Session
 
 from app.core.constants import PASS_THRESHOLD_PERCENT
@@ -126,6 +126,68 @@ def trainee_authorization_conditions(scope: AccessScope) -> list:
     if scope.is_trainer:
         return [trainee_repository.trainer_owned_condition(scope.trainer_username)]
     return [false()]
+
+
+def trainer_summary_counts(
+    db: Session, trainer_username: str, start: Optional[str], end: Optional[str], today: str, today_ist: str
+) -> dict:
+    """The trainer Home dashboard's numbers, counted in SQL (two statements) instead of loading the
+    trainer's trainings into Python. Same definitions as before (tests/_legacy_trainer_agenda.py
+    is the reference they're proven equal to):
+
+      listed        today's trainings (no range given - the default view), else those in start..end
+      totalSessions listed, not cancelled                     completed  ... of those, Completed
+      pending       approved, not yet started / finished, not past - across ALL the trainer's
+                    trainings on the default view, else across the counted range
+      missed        approved, never started, date already past - within the counted range
+      ongoing       running now (Ongoing / Live) - all trainings on the default view, else the range
+      totalTrainees distinct trainees marked Present or with a submitted test - every training on
+                    the default view, else the listed ones"""
+    owned = conference_repository.trainer_condition(trainer_username)
+    default_view = start is None and end is None
+    date_bounds = [Conference.conferenceDate == today] if default_view else [
+        condition for condition in (
+            Conference.conferenceDate >= start if start else None,
+            Conference.conferenceDate <= end if end else None,
+        ) if condition is not None
+    ]
+    listed = and_(*date_bounds) if date_bounds else true()
+
+    status = func.lower(func.coalesce(Conference.conferenceStatus, ""))
+    approval = func.lower(func.coalesce(Conference.status, ""))
+    counted = and_(listed, status != "cancelled")
+    not_started_approved = and_(approval == "approved", status.notin_(("ongoing", "live", "completed", "cancelled")))
+    past = and_(func.coalesce(Conference.conferenceDate, "") != "", Conference.conferenceDate < today_ist)
+    scoped = true() if default_view else counted
+
+    def how_many(condition):
+        return func.coalesce(func.sum(case((condition, 1), else_=0)), 0)
+
+    total, completed, pending, missed, ongoing = db.execute(
+        select(
+            how_many(counted),
+            how_many(and_(counted, status == "completed")),
+            how_many(and_(scoped, not_started_approved, not_(past))),
+            how_many(and_(counted, not_started_approved, past)),
+            how_many(and_(scoped, status.in_(("ongoing", "live")))),
+        ).where(owned)
+    ).one()
+
+    trainings = select(Conference.conferenceUid).where(owned, *([] if default_view else [listed]))
+    trained = union(
+        select(Attendance.traineeUid).where(Attendance.conferenceUid.in_(trainings), Attendance.status == "Present"),
+        select(AssessmentResult.traineeUid).where(AssessmentResult.conferenceUid.in_(trainings), AssessmentResult.status == "Submitted"),
+    ).subquery()
+    total_trainees = db.scalar(select(func.count()).select_from(trained)) or 0
+
+    return {
+        "totalTrainees": int(total_trainees),
+        "totalSessions": int(total),
+        "completed": int(completed),
+        "pending": int(pending),
+        "missed": int(missed),
+        "ongoing": int(ongoing),
+    }
 
 
 def counted_condition():

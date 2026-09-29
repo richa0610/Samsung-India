@@ -48,6 +48,7 @@ from tests.tenant_fixtures import ALPHA, BETA, PASSWORD, TenantWorld, uid
 
 TRAININGS = "/admin/trainings/page?approval=pending&limit=200"
 ATTENDANCE = "/admin/attendance/page?mode=all&limit=200"
+TRAINEES = "/admin/trainees/page?limit=200"
 
 
 class WorldTestCase(unittest.TestCase):
@@ -79,9 +80,9 @@ class WorldTestCase(unittest.TestCase):
 # ======================================================================= regression: must keep holding
 class ExistingControlsStillHold(WorldTestCase):
     def test_a_valid_token_decides_the_tenant_not_the_header(self):
-        response = self.get("super", "/admin/trainees", ALPHA, extra={"X-Tenant-ID": BETA})
+        response = self.get("super", TRAINEES, ALPHA, extra={"X-Tenant-ID": BETA})
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(all(t["traineeUid"].startswith("TR-") and "B_N1" not in t["traineeUid"] for t in response.json()))
+        self.assertTrue(all(t["traineeUid"].startswith("TR-") and "B_N1" not in t["traineeUid"] for t in response.json()["items"]))
 
     def test_bad_credentials_are_rejected(self):
         def forged():
@@ -96,7 +97,7 @@ class ExistingControlsStillHold(WorldTestCase):
                  "trainee token": {"Authorization": f"Bearer {create_access_token('9000000001', ALPHA, 'trainee')}"}}
         for name, headers in cases.items():
             with self.subTest(name):
-                self.assertIn(self.w.client.get("/admin/trainees", headers=headers).status_code, (401, 403))
+                self.assertIn(self.w.client.get(TRAINEES, headers=headers).status_code, (401, 403))
 
     def test_an_admin_token_is_rejected_on_trainee_endpoints(self):
         self.assertEqual(self.get("super", "/sessions/current").status_code, 401)
@@ -157,7 +158,6 @@ class ExistingControlsStillHold(WorldTestCase):
         self.assertEqual(self.get("trainer1", f"/admin/trainings/{other}").status_code, 404)
         self.assertEqual(self.w.client.post(f"/admin/trainings/{other}/reject", json={"message": "x"}, headers=self.w.headers("trainer1")).status_code, 403)
         self.assertEqual(self.keys("trainer1", ATTENDANCE), {"S_N1", "S_DEL", "S_N1V"})       # own trainings only, no company-wide view
-        self.assertEqual(self.get("trainer1", "/admin/attendance?org=true").status_code, 403)
 
     def test_an_admin_can_operate_a_training_within_their_granted_scope(self):
         """"Admin also can start training like trainers": an admin-table account can now run
@@ -257,7 +257,7 @@ class TrainingListAccessControl(WorldTestCase):
         Attendance, here for the Training List's own cursor (what "Export All" walks): a
         hand-built cursor claiming to be far past every real row can reach at most everything
         the scope query itself allows - never another company's or zone's rows."""
-        cursor = base64.urlsafe_b64encode(json.dumps({"v": "2099-01-01T00:00:00", "id": 10**9}).encode()).decode()
+        cursor = base64.urlsafe_b64encode(json.dumps({"s": "timestamp", "v": "2099-01-01T00:00:00", "id": 10**9}).encode()).decode()
         response = self.get("coord", f"/admin/trainings/page?approval=pending&limit=200&cursor={cursor}")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.w.conference_keys(response.json()["items"]), {"S_N1", "S_DEL", "S_N1V"})
@@ -369,9 +369,7 @@ class AttendanceListAccessControl(WorldTestCase):
     """/admin/attendance/page (ATTENDANCE) is now scoped by the same admin_access grant and the
     same SQL condition builder as the Training List - dashboard_repository.access_scope_conditions
     - replacing the legacy apply_identity_scope (company column + data_scopes zone rows,
-    fail-open on a blank company). /admin/attendance?org=true (the non-paged cross-trainer view)
-    gets the equivalent Python-side check via AccessScope.allows_row, since it isn't built from a
-    SQL query."""
+    fail-open on a blank company). (The non-paged /admin/attendance view was removed in Phase 3.)"""
 
     def test_super_admin_sees_every_company(self):
         self.assertEqual(self.keys("super", ATTENDANCE), {"S_N1", "S_DEL", "S_S1", "S_BLANK", "S_N1V", "O_N1"})
@@ -405,15 +403,6 @@ class AttendanceListAccessControl(WorldTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.w.conference_keys(response.json()["items"]), {"S_N1", "S_DEL", "S_N1V"})
 
-    def test_the_non_paged_org_view_follows_the_same_scope(self):
-        """/admin/attendance?org=true - a second, non-paged read of the same data (no live
-        frontend caller today, but a real, callable endpoint) - Python-filtered via
-        AccessScope.allows_row rather than SQL, but the same grant, the same result."""
-        response = self.get("coord", "/admin/attendance?org=true")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.w.conference_keys(response.json()), {"S_N1", "S_DEL", "S_N1V"})
-        self.assertEqual(self.get("ungranted", "/admin/attendance?org=true").status_code, 403)
-
 
 # ======================================================================= landed: Trainee list access control
 class TraineeListAccessControl(WorldTestCase):
@@ -426,15 +415,15 @@ class TraineeListAccessControl(WorldTestCase):
     detail; this covers the remaining edge cases."""
 
     def trainees(self, who):
-        return {t["traineeUid"] for t in self.get(who, "/admin/trainees").json()}
+        return {t["traineeUid"] for t in self.get(who, TRAINEES).json()["items"]}
 
     def test_no_grant_sees_no_trainees(self):
         # get_current_admin (Phase B) denies an account with no grant at all before the request
         # reaches this list - see TrainingListAccessControl.test_no_grant_returns_nothing.
-        self.assertEqual(self.get("ungranted", "/admin/trainees").status_code, 403)
+        self.assertEqual(self.get("ungranted", TRAINEES).status_code, 403)
 
     def test_a_grant_in_another_tenant_does_not_leak_into_this_one(self):
-        self.assertEqual(self.get("betaonly", "/admin/trainees").status_code, 403)
+        self.assertEqual(self.get("betaonly", TRAINEES).status_code, 403)
 
     def test_super_admin_sees_every_company(self):
         special = {"TR-ASSIGNED-ONLY", "TR-ROSTER-ONLY", "TR-OTHER-TRAINER"}
@@ -446,7 +435,7 @@ class TraineeListAccessControl(WorldTestCase):
         """An admin-table account whose role is "trainer" (not "admin") - tenant membership
         only, no admin_access company/zone/region grant - goes through the same ownership rule
         an agency-team trainer does, not the admin scope branch."""
-        self.assertEqual(self.get("adm_trainer", "/admin/trainees").json(), [])  # assigned to no one, on no one's roster
+        self.assertEqual(self.get("adm_trainer", TRAINEES).json()["items"], [])  # assigned to no one, on no one's roster
 
 
 class TraineeRegistrationAuthorization(WorldTestCase):
@@ -590,30 +579,30 @@ class LoginTenantMembership(WorldTestCase):
         a 30-day token (see ACCESS_TOKEN_EXPIRE_MINUTES) must not keep working after the grant
         behind it is gone."""
         token = self.w.token("coadmin", ALPHA)
-        self.assertEqual(self.w.client.get("/admin/trainees", headers={"Authorization": f"Bearer {token}"}).status_code, 200)
+        self.assertEqual(self.w.client.get(TRAINEES, headers={"Authorization": f"Bearer {token}"}).status_code, 200)
 
         row = self.w.common.query(AdminAccess).filter_by(admin_id=self.w.admins["coadmin"].id).one()
         row.active = 0
         row.company_admin_key = None  # ck_admin_access_company_key requires this on deactivation
         self.w.common.commit()
 
-        self.assertEqual(self.w.client.get("/admin/trainees", headers={"Authorization": f"Bearer {token}"}).status_code, 403)
+        self.assertEqual(self.w.client.get(TRAINEES, headers={"Authorization": f"Bearer {token}"}).status_code, 403)
 
     def test_a_token_for_a_tenant_the_admin_does_not_belong_to_is_refused(self):
         token = create_access_token(subject="admin:betaonly", tenant_id=ALPHA, role="admin")  # minted with the tenant of their choice
-        self.assertEqual(self.w.client.get("/admin/trainees", headers={"Authorization": f"Bearer {token}"}).status_code, 403)
+        self.assertEqual(self.w.client.get(TRAINEES, headers={"Authorization": f"Bearer {token}"}).status_code, 403)
 
     def test_a_token_with_no_tenant_claim_is_rejected(self):
         token = jwt.encode({"sub": "admin:coadmin", "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp())},
                             settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-        self.assertEqual(self.w.client.get("/admin/trainees", headers={"Authorization": f"Bearer {token}"}).status_code, 401)
+        self.assertEqual(self.w.client.get(TRAINEES, headers={"Authorization": f"Bearer {token}"}).status_code, 401)
 
     def test_internal_calls_cannot_skip_authorization_through_a_real_request(self):
         """admin=None only ever means "no principal to check" for a direct Python call (the
         SQL-equivalence test suites use it deliberately) - it must not be reachable by manipulating
         what an actual HTTP request sends. There is no request field that becomes `admin=None`;
         the account is always resolved server-side from the verified token."""
-        response = self.w.client.get("/admin/trainees", headers={"Authorization": "Bearer "})
+        response = self.w.client.get(TRAINEES, headers={"Authorization": "Bearer "})
         self.assertIn(response.status_code, (401, 403))
 
 
@@ -624,7 +613,7 @@ class CrossEndpointRegressionAfterAuthChange(WorldTestCase):
     something a narrower, endpoint-specific test wouldn't catch."""
 
     ENDPOINTS = [
-        ("GET", TRAININGS), ("GET", ATTENDANCE), ("GET", "/admin/trainees"),
+        ("GET", TRAININGS), ("GET", ATTENDANCE), ("GET", TRAINEES),
         ("GET", "/admin/dashboard/stats?fresh=true"), ("GET", "/admin/profile"),
         ("GET", "/admin/access/scope"), ("GET", f"/admin/trainings/{uid('S_N1')}"),
     ]
@@ -643,7 +632,7 @@ class CrossEndpointRegressionAfterAuthChange(WorldTestCase):
 # ======================================================================= pending: approved end state
 class RoleScopes(WorldTestCase):
     def test_an_admin_with_no_grant_is_denied_everywhere(self):
-        for path in (TRAININGS, ATTENDANCE, "/admin/dashboard/stats?fresh=true", "/admin/trainees", "/admin/trainings/pending"):
+        for path in (TRAININGS, ATTENDANCE, "/admin/dashboard/stats?fresh=true", TRAINEES, "/admin/trainings/summary"):
             with self.subTest(path=path):
                 self.assertEqual(self.get("ungranted", path).status_code, 403)
 
@@ -661,7 +650,7 @@ class RoleScopes(WorldTestCase):
 
     def test_trainee_lists_follow_the_scope(self):
         def trainees(who):
-            return {t["traineeUid"] for t in self.get(who, "/admin/trainees").json()}
+            return {t["traineeUid"] for t in self.get(who, TRAINEES).json()["items"]}
 
         special = {"TR-ASSIGNED-ONLY", "TR-ROSTER-ONLY", "TR-OTHER-TRAINER"}  # Samsung / North / North 1
         pair = lambda k: {f"TR-{k}-0", f"TR-{k}-1"}
@@ -697,24 +686,24 @@ class RoleScopes(WorldTestCase):
         self.assertEqual(len(seen), self.attendance_rows({"S_N1", "S_DEL", "S_N1V"}))
 
     def test_a_trainer_sees_only_their_assigned_trainees(self):
-        response = self.get("trainer1", "/admin/trainees")
+        response = self.get("trainer1", TRAINEES)
         self.assertEqual(response.status_code, 200)
         expected = {f"TR-{k}-{i}" for k in ("S_N1", "S_DEL", "S_N1V") for i in (0, 1)} | {"TR-ASSIGNED-ONLY", "TR-ROSTER-ONLY"}
-        self.assertEqual({t["traineeUid"] for t in response.json()}, expected)  # not TR-OTHER-TRAINER, not other trainers' people
+        self.assertEqual({t["traineeUid"] for t in response.json()["items"]}, expected)  # not TR-OTHER-TRAINER, not other trainers' people
 
 class TenantResolutionAndStatus(WorldTestCase):
     def test_an_invalid_token_never_selects_a_tenant(self):
         with patch.object(tenant_manager, "get_engine", wraps=tenant_manager.get_engine) as spy:
-            response = self.w.client.get("/admin/trainees", headers={"Authorization": "Bearer not-a-jwt", "X-Tenant-ID": BETA})
+            response = self.w.client.get(TRAINEES, headers={"Authorization": "Bearer not-a-jwt", "X-Tenant-ID": BETA})
         self.assertEqual(response.status_code, 401)
         self.assertNotIn(BETA, [call.args[0] for call in spy.call_args_list])
 
     def test_a_suspended_tenant_is_refused_even_after_first_use(self):
-        self.assertEqual(self.get("super", "/admin/trainees").status_code, 200)  # warms the tenant's connection pool
+        self.assertEqual(self.get("super", TRAINEES).status_code, 200)  # warms the tenant's connection pool
         self.w.common.query(Tenant).filter_by(tenant_uid=ALPHA).update({"status": "suspended"})
         self.w.common.commit()
         getattr(tenant_manager, "clear_status_cache", lambda: None)()  # the step adds this so the test need not wait out the cache
-        self.assertEqual(self.get("super", "/admin/trainees").status_code, 403)
+        self.assertEqual(self.get("super", TRAINEES).status_code, 403)
 
 
 class MediaIsTenantAndScopeBound(WorldTestCase):
@@ -743,10 +732,12 @@ class LiveUpdatesAreTenantScoped(WorldTestCase):
     verified tenant database, so a client-supplied uid can never reach another tenant's row."""
 
     def accepted(self, who, tenant, conference_key, token=None):
-        url = f"/ws/live/{uid(conference_key)}?token={token or self.w.token(who, tenant)}"
+        """Joined only when the server confirms the room after the first-message auth."""
+        url = f"/ws/live/{uid(conference_key)}"
         try:
-            with self.w.client.websocket_connect(url):
-                return True
+            with self.w.client.websocket_connect(url) as ws:
+                ws.send_json({"type": "auth", "token": token or self.w.token(who, tenant)})
+                return ws.receive_json() == {"type": "ready"}
         except Exception:
             return False
 

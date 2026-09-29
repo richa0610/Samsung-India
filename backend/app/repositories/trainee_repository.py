@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy import String, cast, exists, false, func, or_
+from sqlalchemy import String, cast, exists, false, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.attendance import Attendance
@@ -60,13 +60,6 @@ def list_all(db: Session) -> list[Trainee]:
     return db.query(Trainee).order_by(Trainee.timestamp.desc()).all()
 
 
-def list_scoped(db: Session, conditions: list) -> list[Trainee]:
-    """Same list, restricted by `conditions` - built by the caller (see
-    trainee_admin_service.list_trainees_admin) from either the admin's admin_access scope
-    (access_scope_conditions) or a trainer's own ownership (trainer_owned_condition)."""
-    return db.query(Trainee).filter(*conditions).order_by(Trainee.timestamp.desc()).all()
-
-
 # Trainee List sort keys (the table's column keys) -> column. Nullable text sorts as "" so keyset
 # comparisons never see NULL; `timestamp` is NOT NULL.
 PAGE_SORT_COLUMNS = {
@@ -110,7 +103,7 @@ def list_page(
     cursor: Optional[str] = None,
     limit: int = 10,
     page: Optional[int] = None,
-) -> tuple[list[Trainee], Optional[str], Optional[int]]:
+) -> keyset.Page:
     """One page of the Trainee List: `conditions` (the caller's authorization), the Pending split
     (`mode="pending"` = approval status Pending, the same test the screen used client-side) and
     the search are all in the WHERE before counting, sorting and paging (keyset.paginate)."""
@@ -118,20 +111,16 @@ def list_page(
     column = PAGE_SORT_COLUMNS[sort]
     sort_expr = column if column is Trainee.timestamp else func.coalesce(column, "")
     mode_conditions = [func.lower(Trainee.status) == "pending"] if mode == "pending" else []
-    query = db.query(Trainee).filter(
-        *conditions, *mode_conditions, *keyset.search_conditions(PAGE_SEARCH_COLUMNS, search)
-    )
-    return keyset.paginate(
-        query,
+    stmt = select(Trainee).where(*conditions, *mode_conditions, *keyset.search_conditions(PAGE_SEARCH_COLUMNS, search))
+    order = keyset.SortOrder.keyset(
+        sort,
         sort_expr,
         Trainee.id,
         descending=descending,
-        cursor=cursor,
-        limit=limit,
-        page=page,
         cursor_value=lambda row: getattr(row, column.key),
-        datetime_sort=column is Trainee.timestamp,
+        datetime_value=column is Trainee.timestamp,
     )
+    return keyset.paginate(db, stmt, order, cursor=cursor, limit=limit, page=page)
 
 
 def trainer_owned_condition(trainer_username: str):
