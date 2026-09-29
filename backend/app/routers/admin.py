@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.exceptions import forbidden
 from app.core.rate_limit import rate_limit
 from app.core.ttl_cache import TTLCache
 from app.dependencies.auth import get_current_admin, require_admin_role
@@ -9,7 +10,7 @@ from app.dependencies.filters import ConferenceFilters, get_conference_filters
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.schemas.admin import AdminAccessScopeOut, AdminAuthSession, AdminDashboardStatsOut, AdminLoginRequest
-from app.services import admin_service, token_revocation
+from app.services import admin_service, media_migration, token_revocation
 from app.services.access_service import resolve_scope, scope_summary
 from app.utils.helpers import client_ip
 
@@ -44,6 +45,19 @@ def login(
 ):
     tenant_id = get_tenant_id_from_request(request)
     return admin_service.login(common_db, db, payload, tenant_id, ip_address=client_ip(request))
+
+
+@router.get("/maintenance/media-plan")
+def get_media_migration_plan(
+    request: Request,
+    admin: Admin = Depends(require_admin_role),
+    common_db: Session = Depends(get_common_db),
+) -> dict:
+    """READ-ONLY report of how pre-split uploads on this server would move into tenant folders
+    (services/media_migration.py) - for a host without a shell. Super Admin only; moves nothing."""
+    if not resolve_scope(common_db, admin, get_tenant_id_from_request(request)).is_super:
+        raise forbidden("This report requires a Super Admin account")
+    return media_migration.current_report(common_db)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

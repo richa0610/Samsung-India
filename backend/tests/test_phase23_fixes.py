@@ -367,3 +367,45 @@ class AttendanceResetRules(FixesTestCase):
         self.assertEqual(self.reset({"reason": "Marked the wrong person"}).status_code, 200)
         remarks = [r.remarks for r in self.alpha.query(LogsMaster).filter(LogsMaster.action == "RESET_ATTENDANCE")]
         self.assertEqual(remarks, [f"Reset attendance of TR-S_N1-0 for {uid('S_N1')}: Marked the wrong person"])
+
+
+class MediaPlanEndpoint(FixesTestCase):
+    """GET /admin/maintenance/media-plan - the migration report for a host without a shell."""
+
+    def setUp(self):
+        super().setUp()
+        import tempfile
+        from pathlib import Path
+
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name)
+        root = patch("app.services.media_migration.MEDIA_ROOT", self.root)
+        root.start()
+        self.addCleanup(root.stop)
+        for relative in ("trainee_photos/TR-S_N1-0.jpg", "trainee_photos/orphan.jpg"):
+            (self.root / relative).parent.mkdir(parents=True, exist_ok=True)
+            (self.root / relative).write_bytes(b"synthetic")
+        self.alpha.query(Trainee).filter(Trainee.traineeUid == "TR-S_N1-0").update({"profilePhoto": "trainee_photos/TR-S_N1-0.jpg"})
+        self.alpha.commit()
+
+    def test_a_super_admin_gets_the_plan_and_nothing_moves(self):
+        before = sorted(p.as_posix() for p in self.root.rglob("*"))
+        with patch.object(settings, "DEFAULT_TENANT_ID", ALPHA):
+            response = self.get("super", "/admin/maintenance/media-plan")
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertTrue(body["dryRun"])
+        actions = {e["path"]: (e["action"], e["tenants"]) for e in body["entries"]}
+        self.assertEqual(actions["trainee_photos/TR-S_N1-0.jpg"], ("MOVE", [ALPHA]))
+        self.assertEqual(actions["trainee_photos/orphan.jpg"][0], "SKIP_ORPHAN")
+        self.assertEqual(sorted(p.as_posix() for p in self.root.rglob("*")), before)
+
+    def test_everyone_else_is_refused(self):
+        for who in ("coadmin", "coord", "trainer1", "adm_trainer"):
+            with self.subTest(who=who):
+                self.assertEqual(self.get(who, "/admin/maintenance/media-plan").status_code, 403)
+        phone = self.alpha.query(Trainee).filter(Trainee.traineeUid == "TR-S_N1-0").one().phone
+        trainee = create_access_token(subject=str(phone), tenant_id=ALPHA, role="trainee")
+        response = self.w.client.get("/admin/maintenance/media-plan", headers={"Authorization": f"Bearer {trainee}"})
+        self.assertEqual(response.status_code, 401)

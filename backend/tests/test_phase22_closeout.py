@@ -28,7 +28,7 @@ from app.models.agency_team import AgencyTeam
 from app.models.attendance import Attendance
 from app.models.common.tenant_registry import Tenant
 from app.models.trainee import Trainee
-from scripts import plan_media_tenant_migration as planner
+from app.services import media_migration as planner
 from tests.tenant_fixtures import ALPHA, BETA, PASSWORD
 from tests.test_trainer_authorization import TrainerWorldTestCase
 
