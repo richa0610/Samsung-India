@@ -3,6 +3,7 @@
     cd backend
     venv/Scripts/python.exe scripts/encrypt_tenant_db_passwords.py            # dry run (default)
     venv/Scripts/python.exe scripts/encrypt_tenant_db_passwords.py --apply    # write
+    venv/Scripts/python.exe scripts/encrypt_tenant_db_passwords.py --rollback # back to plaintext
 
 Needs TENANT_SECRETS_KEYS set (the same value the running API will use - set it on Render
 FIRST, or the API can't decrypt what this writes). Plaintext rows are encrypted with the first
@@ -36,9 +37,22 @@ def apply(common_db: Session, rows: list[tuple[Tenant, str]]) -> None:
     common_db.commit()
 
 
+def rollback(common_db: Session) -> int:
+    """Undo: every encrypted row back to plaintext (needs a key that decrypts it) - the escape hatch
+    if the API's key turns out not to match. Returns how many rows changed."""
+    changed = 0
+    for tenant in common_db.query(Tenant):
+        if is_encrypted(tenant.database_password):
+            tenant.database_password = decrypt_secret(tenant.database_password)
+            changed += 1
+    common_db.commit()
+    return changed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Encrypt tenant database passwords at rest.")
     parser.add_argument("--apply", action="store_true", help="write the changes (default: dry run)")
+    parser.add_argument("--rollback", action="store_true", help="decrypt every row back to plaintext")
     args = parser.parse_args()
     if not encryption_enabled():
         sys.exit("TENANT_SECRETS_KEYS is not set - nothing to encrypt with.")
@@ -47,6 +61,9 @@ def main() -> None:
 
     common_db = CommonSessionLocal()
     try:
+        if args.rollback:
+            print(f"{rollback(common_db)} row(s) restored to plaintext.")
+            return
         rows = plan(common_db)
         for tenant, action in rows:
             print(f"{tenant.tenant_uid:30} {action}")

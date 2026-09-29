@@ -249,6 +249,17 @@ class TenantPasswordEncryption(unittest.TestCase):
             self.assertEqual(secret_box.decrypt_secret(tenant.database_password), PLAIN_DB_PASSWORD)
 
 
+class EncryptionRollback(TenantPasswordEncryption):
+    def test_rollback_restores_plaintext_and_is_idempotent(self):
+        db = self.common()
+        self.add_tenant(db, "ROLL_T", PLAIN_DB_PASSWORD)
+        encrypt_script.apply(db, encrypt_script.plan(db))
+        self.assertEqual(encrypt_script.rollback(db), 1)
+        db.expire_all()
+        self.assertEqual(db.query(Tenant).filter_by(tenant_uid="ROLL_T").one().database_password, PLAIN_DB_PASSWORD)
+        self.assertEqual(encrypt_script.rollback(db), 0)
+
+
 class TenantSchemaSyncOnFirstUse(unittest.TestCase):
     def test_a_missing_tenant_column_is_added_when_the_pool_is_created(self):
         legacy = declarative_base()
