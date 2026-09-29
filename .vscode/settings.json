@@ -3,5 +3,12 @@
     "source.fixAll": "explicit",
     "source.organizeImports": "explicit",
     "source.sortMembers": "explicit"
-  }
+  },
+  // Without this, VS Code defaults to its own bundled TypeScript instead of
+  // this project's (node_modules/typescript) - the bundled one can't
+  // resolve "expo/tsconfig.base" correctly, so every .ts/.tsx file shows
+  // phantom "Cannot use JSX" errors that a TS Server restart alone doesn't
+  // fix (it just relaunches the same wrong TypeScript instance).
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
 }
