@@ -1,7 +1,7 @@
 from typing import Optional
 
-from pydantic import model_validator
-from pydantic_settings import BaseSettings
+from pydantic import Field, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int
+    # bcrypt cost for NEW password hashes (core/security.py) - an existing hash keeps the cost it
+    # was made with. 10 = the cost used before this was configurable, so an environment that
+    # doesn't set it behaves exactly as before. Bounded so a typo can neither weaken hashing below
+    # that nor make every hash so slow it ties up the server (each +1 doubles the time; 12 already
+    # takes ~2 s on the production CPU).
+    BCRYPT_ROUNDS: int = Field(default=10, ge=10, le=14)
 
     # Network settings used by the local Uvicorn development server. Binding
     # to all interfaces lets phones on the same Wi-Fi reach this machine.
@@ -49,12 +55,20 @@ class Settings(BaseSettings):
     BACKEND_PORT: int = 8000
 
     ALLOW_ATTENDANCE_RETEST: bool = False
+    # QR codes shared before join codes were signed (the bare training ID) are accepted until this
+    # IST date (inclusive), then refused. Empty = signed codes only. See app/utils/join_code.py.
+    JOIN_CODE_LEGACY_UNTIL: str = "2026-10-31"
 
     # How many reverse proxies sit in front of this API and append the caller's address to
     # X-Forwarded-For. Production is behind Render's proxy only (1): the LAST entry is the one
     # Render added, so it's the real caller - everything before it is whatever the client sent
     # and is never trusted. 0 = no proxy (use the socket peer, e.g. local LAN testing).
     TRUSTED_PROXY_HOPS: int = 1
+    # Per-tenant cap on requests in progress (app/core/tenant_limit.py): below the 40 worker threads
+    # the app's regular endpoints share, so one tenant with a hung database can't take them all.
+    # Requests over the cap wait (without a thread) up to TENANT_QUEUE_WAIT_SECONDS, then get a 503.
+    TENANT_MAX_CONCURRENT_REQUESTS: int = 25
+    TENANT_QUEUE_WAIT_SECONDS: float = 15
 
     # Comma-separated Fernet keys that encrypt tenant database passwords at rest (core/secret_box.py).
     # The first key encrypts, any listed key decrypts. Empty = not configured yet: existing
@@ -89,6 +103,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
     @model_validator(mode="after")
     def _refuse_remote_database_when_testing(self):

@@ -97,11 +97,11 @@ export function usePostTest(
   useEffect(() => {
     let ignore = false;
     async function load() {
-      if (!token || !suiteUid) return;
+      if (!token || !suiteUid || !conferenceUid) return;
       setLoading(true);
       setError(null);
       try {
-        const data = await getAssessmentQuestions(token, suiteUid);
+        const data = await getAssessmentQuestions(token, suiteUid, conferenceUid);
         if (!ignore) {
           setQuestions(data.questions);
           setSuiteTitle(data.title ?? null);
@@ -131,7 +131,7 @@ export function usePostTest(
     return () => {
       ignore = true;
     };
-  }, [token, suiteUid, reloadKey]);
+  }, [token, suiteUid, conferenceUid, reloadKey]);
 
   const current = questions[questionIndex];
   const selectedOption = answers[questionIndex] ?? null;

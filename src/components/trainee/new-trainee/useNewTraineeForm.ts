@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
+import { Alert } from "react-native";
 
 import { fetchTrainers } from "@/api/training";
 import { SelectOption } from "@/components/ui/SearchableSelect";
-import { ApiError, registerNewTrainee } from "@/api/trainee";
+import type { PickedImage } from "@/api/auth";
+import { ApiError, registerNewTrainee, uploadNewTraineePhoto } from "@/api/trainee";
 import { STATES } from "@/data/states";
 import { useAuth } from "@/hooks/useAuth";
 import { formatDate } from "@/components/training/add-training/formatting";
@@ -63,7 +65,7 @@ export function useNewTraineeForm() {
   };
 
   // Trainee Profile
-  const [profilePhoto, setProfilePhoto] = useState<string | null>(null);
+  const [profilePhoto, setProfilePhoto] = useState<PickedImage | null>(null);
   const [traineeUid, setTraineeUid] = useState("");
   const [agencyId, setAgencyId] = useState("");
   const [fullName, setFullName] = useState("");
@@ -137,9 +139,9 @@ export function useNewTraineeForm() {
     setSubmitting(true);
     setNotice(null);
     try {
-      await registerNewTrainee(adminToken, {
+      const created = await registerNewTrainee(adminToken, {
         traineeUid: cleanText(traineeUid, 50),
-        profilePhoto,
+        profilePhoto: null, // the photo itself is uploaded below, once the trainee exists
         agencyId: agencyId || null,
         fullName: cleanText(fullName, 120),
         designation,
@@ -169,6 +171,15 @@ export function useNewTraineeForm() {
         username: cleanText(traineeUid, 50),
         password,
       });
+
+      if (profilePhoto) {
+        try {
+          await uploadNewTraineePhoto(adminToken, created.traineeUid, profilePhoto);
+        } catch {
+          // The trainee is saved either way; only the photo is missing.
+          Alert.alert("Trainee added", "The profile photo couldn't be uploaded. The trainee can add it from their own profile.");
+        }
+      }
 
       router.back();
     } catch (err) {

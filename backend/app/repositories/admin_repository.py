@@ -59,10 +59,16 @@ def list_admin_trainers_for_tenant(db: Session, tenant_uid: str, companies: Coll
     return query.distinct().all()
 
 
-def list_agency_trainers(db: Session, company: str | None = None) -> list[AgencyTeam]:
+def list_agency_trainers(
+    db: Session, company: str | None = None, companies: Collection[str] | None = None
+) -> list[AgencyTeam]:
+    """Partner-agency trainers, optionally of one `company` and/or narrowed to `companies`
+    (already trimmed and lower-cased; None = any company, empty = none)."""
     query = db.query(AgencyTeam).filter(AgencyTeam.role == "trainer")
     if company:
         query = query.filter(func.lower(AgencyTeam.company) == company.strip().lower())
+    if companies is not None:
+        query = query.filter(func.lower(func.trim(func.coalesce(AgencyTeam.company, ""))).in_(sorted(companies)))
     return query.all()
 
 

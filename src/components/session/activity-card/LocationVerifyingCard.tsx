@@ -14,7 +14,7 @@ export default function LocationVerifyingCard() {
           Verifying Location
         </AppText>
         <AppText variant="caption" color={Colors.headerBlue} weight={FontWeight.medium}>
-          Checking you're at the venue...
+          {"Checking you're at the venue..."}
         </AppText>
       </View>
     </View>

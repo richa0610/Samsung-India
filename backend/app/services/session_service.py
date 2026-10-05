@@ -28,8 +28,9 @@ from app.schemas.session import (
 )
 from app.services.module_flow import auto_advance_if_due, configured_modules
 from app.services.proctoring_settings_service import get_proctoring_settings
+from app.services import trainee_access
+from app.utils import join_code
 from app.utils.date_utils import duration, ist_now, parse_module_start, utc_now
-from app.utils.helpers import attendance_is_assigned
 from app.utils.status import title_status
 
 _LIVE_STATUSES = ("Ongoing", "Live")
@@ -91,7 +92,9 @@ def _select_current_conference(
     """
     if requested_conference_uid:
         req_conf = db.query(Conference).filter(Conference.conferenceUid == requested_conference_uid).first()
-        if req_conf:
+        # Honoured only for a session this trainee is on; any other ID falls through to the normal
+        # selection below instead of exposing that session's modules.
+        if req_conf and (trainee is None or trainee_access.has_taken_part(db, trainee, requested_conference_uid)):
             return req_conf, req_conf.conferenceStatus in _LIVE_STATUSES and not _session_is_over(req_conf), _conference_start(req_conf)
 
     # 1. Did the trainee actively participate in a session today?
@@ -221,8 +224,12 @@ def _join_info(conference: Conference) -> SessionJoinInfo:
     )
 
 
-def _conference_for_code(db: Session, code: str) -> Conference:
-    conference = conference_repository.get_by_uid(db, code)
+def _conference_for_code(db: Session, code: str, tenant_id: str) -> Conference:
+    """The training behind a scanned join code. The code's signature is checked first
+    (app/utils/join_code.py, bound to this tenant): a guessed or edited code, or one from another
+    tenant, is "not valid" exactly like an unknown training - no lookup, nothing revealed."""
+    conference_uid = join_code.verify(tenant_id, code)
+    conference = conference_repository.get_by_uid(db, conference_uid) if conference_uid else None
     if not conference:
         raise not_found("That training session code isn't valid")
     approved = title_status(conference.status) == "Approved"
@@ -233,9 +240,9 @@ def _conference_for_code(db: Session, code: str) -> Conference:
     return conference
 
 
-def get_join_info(db: Session, code: str) -> SessionJoinInfo:
-    """Public preview of the training behind a scanned QR code."""
-    return _join_info(_conference_for_code(db, code))
+def get_join_info(db: Session, code: str, tenant_id: str) -> SessionJoinInfo:
+    """Public preview of the training behind a scanned QR code (a valid signed code only)."""
+    return _join_info(_conference_for_code(db, code, tenant_id))
 
 
 def _set_attendance_audience(attendance: Attendance, audience: str) -> None:
@@ -253,7 +260,7 @@ def _set_attendance_audience(attendance: Attendance, audience: str) -> None:
 
 
 def join_session(
-    db: Session, trainee: Trainee, code: str, via_registration: bool = False
+    db: Session, trainee: Trainee, code: str, tenant_id: str, via_registration: bool = False
 ) -> SessionJoinInfo:
     """Binds the (already-authenticated) trainee to the scanned training so
     `GET /sessions/current` resolves to it, and auto-approves a trainee who
@@ -262,7 +269,9 @@ def join_session(
     `via_registration` is set only by the scan-QR-then-register flow - it's
     what tells a brand-new trainee (FRESH) apart from an existing one who just
     logged in and joined (UNASSIGNED)."""
-    conference = _conference_for_code(db, code)
+    conference = _conference_for_code(db, code, tenant_id)
+    # Serialize roster changes for this session (see conference_repository.lock_for_roster_change).
+    conference_repository.lock_for_roster_change(db, conference.conferenceUid)
     trainee.trainerEmployeeId = conference.trainerEmployeeId
     if title_status(trainee.status) != "Approved":
         trainee.status = "Approved"
@@ -309,23 +318,12 @@ def report_proctoring_lock(
     their attendance row so the trainer's Participant Master List shows it and
     the trainer can unlock them (training_service.unlock_proctoring). No schema
     change: uses the pre-existing `isTheftLocked` / `theftAttemptsLeft` /
-    `theftRemarks` columns (SCHEMA.md documents them for exactly this)."""
-    conference = conference_repository.get_by_uid(db, payload.conferenceUid)
-    if not conference:
-        raise not_found("Training not found")
+    `theftRemarks` columns (SCHEMA.md documents them for exactly this).
 
-    attendance = attendance_repository.get_for_conference_and_trainee(
-        db, conference.conferenceUid, trainee.traineeUid
-    )
-    if attendance is None:
-        attendance = Attendance(
-            conferenceUid=conference.conferenceUid,
-            trainerUid=conference.trainerEmployeeId,
-            traineeUid=trainee.traineeUid,
-            phone=trainee.phone,
-            status="Joined",
-        )
-        attendance_repository.create(db, attendance)
+    Only on a session the trainee is already on - a lock is reported from inside that session's
+    assessment. It never creates a roster row (that would let a lock report join any session,
+    around the QR join's own gate)."""
+    conference, attendance = trainee_access.rostered_conference(db, trainee, payload.conferenceUid)
 
     _, proctoring_max_warnings = get_proctoring_settings(tenant_id)
     attendance.isTheftLocked = 1
@@ -611,3 +609,14 @@ def get_session_history(db: Session, trainee: Trainee, limit: int) -> list[Sessi
             )
         )
     return items
+
+
+def session_is_over(conference: Conference) -> bool:
+    """Public name for `_session_is_over` - the rule trainee_access applies to open modules."""
+    return _session_is_over(conference)
+
+
+def session_is_running(conference: Conference) -> bool:
+    """Started and not over - the same rule the session screen uses: `Ongoing` or `Live`, in any
+    letter case (the status column isn't only written by this app)."""
+    return title_status(conference.conferenceStatus) in _LIVE_STATUSES and not _session_is_over(conference)

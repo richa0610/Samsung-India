@@ -7,11 +7,11 @@
  * Any change to the filter, search text, sort or rows-per-page returns to page 1.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
 import { TrainingAgendaItem, TrainingSortKey, fetchTrainingsPage } from "@/api/training";
-import { useAdminFilters } from "@/hooks/useAdminFilters";
+import { AdminFilterScope, useAdminFilters } from "@/hooks/useAdminFilters";
 import { useAuth } from "@/hooks/useAuth";
 import { subscribe } from "@/services/liveEvents";
 
@@ -64,13 +64,15 @@ export type PagedTrainingList = {
 };
 
 /** `otherwise` is the non-pending split: "reviewed" (admin - approved or rejected) or
- *  "approved" (a trainer's own Training List). The server scopes rows to the caller either way. */
+ *  "approved" (a trainer's own Training List). The server scopes rows to the caller either way.
+ *  `filterScope` is whose filter applies: the admin lists' ("lists") or the trainer's ("trainerLists"). */
 export function usePagedTrainingList(
   pendingOnly: boolean,
   otherwise: "reviewed" | "approved" = "reviewed",
+  filterScope: AdminFilterScope = "lists",
 ): PagedTrainingList {
   const { adminToken } = useAuth();
-  const { applied, appliedKey } = useAdminFilters("lists");
+  const { applied, appliedKey } = useAdminFilters(filterScope);
   const approval: "pending" | "reviewed" | "approved" = pendingOnly ? "pending" : otherwise;
 
   const [items, setItems] = useState<TrainingAgendaItem[]>([]);
@@ -119,8 +121,11 @@ export function usePagedTrainingList(
   const pageCache = useRef<{ listKey: string; pages: Map<number, TrainingAgendaItem[]> }>({ listKey, pages: new Map() });
 
   // A response only counts if it belongs to the latest request - a slow reply for
-  // an old page or search must never overwrite the newer one.
+  // an old page or search must never overwrite the newer one. The older request is also
+  // aborted, so it stops using the connection.
   const requestId = useRef(0);
+  const inFlight = useRef<AbortController | null>(null);
+  useEffect(() => () => inFlight.current?.abort(), []);
 
   const loadPage = useCallback(
     async (mode: "load" | "refresh" | "silent" = "load") => {
@@ -128,6 +133,7 @@ export function usePagedTrainingList(
       const id = ++requestId.current;
       if (pageCache.current.listKey !== listKey) pageCache.current = { listKey, pages: new Map() };
       const pages = pageCache.current.pages;
+      inFlight.current?.abort();
       if (mode === "refresh") {
         pages.clear();
         setRefreshing(true);
@@ -147,26 +153,19 @@ export function usePagedTrainingList(
         if (loadedOnce.current) setSearching(true);
         else setLoading(true);
       }
+      const controller = new AbortController();
+      inFlight.current = controller;
       try {
-        const result = await fetchTrainingsPage(adminToken, { ...requestOptions, page });
+        // Only the page asked for: a next page is fetched when it is opened (then kept, so going
+        // back to it is instant), never speculatively.
+        const result = await fetchTrainingsPage(adminToken, { ...requestOptions, page, signal: controller.signal });
         if (id !== requestId.current) return;
         pages.set(page, result.items);
         setItems(result.items);
         // The server sends the total with page 1 only; keep it while paging.
         if (result.total != null) setTotal(result.total);
-
-        // Silently pre-fetch the next page in background so tapping 'Next' renders instantly (0ms)
-        const nextPage = page + 1;
-        if (!pages.has(nextPage)) {
-          fetchTrainingsPage(adminToken, { ...requestOptions, page: nextPage })
-            .then((nextResult) => {
-              if (id === requestId.current && nextResult.items.length > 0) {
-                pages.set(nextPage, nextResult.items);
-              }
-            })
-            .catch(() => {});
-        }
       } catch {
+        if (controller.signal.aborted) return; // superseded by a newer request
         if (id === requestId.current && mode !== "silent") {
           setItems([]);
           setTotal(0);

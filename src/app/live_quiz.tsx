@@ -41,6 +41,7 @@ export default function LiveQuizScreen() {
     loadError,
     selectedOption,
     secondsLeft,
+    timerPaused,
     submitting,
     connected,
     conferenceUid,
@@ -138,6 +139,7 @@ export default function LiveQuizScreen() {
             secondsLeft={secondsLeft}
             selectedOption={selectedOption}
             locked={selectedOption != null}
+            paused={timerPaused}
             onSelect={selectOption}
           />
         ) : phase === "feedback" && feedback ? (

@@ -7,10 +7,9 @@ Two kinds of test live here:
     change authentication and scoping (valid-token rules, login contract, company scope on the
     paged attendance list, ...). They run normally.
 
-  * `@pending_phase_c(step)` tests - the approved end state that a LATER step introduces. Each one
-    was checked to fail today for the intended reason (see tests/_pending.py; run them for real
-    with PHASE_C_ENFORCE=1). Until the step lands they are expectedFailure, so the suite is green;
-    when it lands they flip to "unexpected success" and the decorator is removed.
+  * `@pending_phase_c(step)` (tests/_pending.py) marks a test whose behaviour a later step
+    introduces, as an expectedFailure until then. None is pending any more: the last two (step 10,
+    the per-tenant concurrency limit and the keep-alive off the event loop) now pass for real.
 
 Conventions the end state uses: an out-of-scope object (another company, zone, region or tenant's
 id) looks like it does not exist (404); an account with no access to the tenant at all is 403.
@@ -41,9 +40,8 @@ from app.models.admin_access import AdminAccess
 from app.models.common.tenant_registry import Tenant
 from app.models.conference import Conference
 from app.models.trainee import Trainee
-from app.routers import admin as admin_router
 from app.schemas.admin import AdminAuthSession
-from tests._pending import pending_phase_c
+from app.utils import join_code
 from tests.tenant_fixtures import ALPHA, BETA, PASSWORD, TenantWorld, uid
 
 TRAININGS = "/admin/trainings/page?approval=pending&limit=200"
@@ -55,7 +53,6 @@ class WorldTestCase(unittest.TestCase):
     def setUp(self):
         self.w = TenantWorld()
         rate_limit.reset()
-        admin_router._stats_cache.clear()
 
     def tearDown(self):
         self.w.close()
@@ -129,7 +126,7 @@ class ExistingControlsStillHold(WorldTestCase):
         self.assertEqual(claims["tenant_id"], ALPHA)
 
     def test_public_endpoints_still_resolve_the_tenant_from_the_header(self):
-        response = self.w.client.get(f"/sessions/join/{uid('B_N1')}", headers={"X-Tenant-ID": BETA})
+        response = self.w.client.get(f"/sessions/join/{join_code.make(BETA, uid('B_N1'))}", headers={"X-Tenant-ID": BETA})
         self.assertNotIn("isn't valid", response.text)  # found in BETA (it is simply not open to join yet)
 
     def test_company_admin_sees_the_whole_company_and_nothing_else(self):
@@ -494,8 +491,7 @@ class TraineeRegistrationAuthorization(WorldTestCase):
 
 class DashboardStatsAccessControl(WorldTestCase):
     """GET /admin/dashboard/stats: same admin_access scope as the Training/Attendance/Trainee
-    lists, replacing apply_identity_scope. The cache key already carries admin.id (see
-    stats_cache_key), so isolation between accounts never depended on the scope mechanism."""
+    lists, replacing apply_identity_scope. Computed on every request (no cache)."""
 
     def stats(self, who):
         response = self.get(who, "/admin/dashboard/stats?fresh=true")
@@ -888,22 +884,20 @@ class OneTenantCannotHurtTheOthers(unittest.TestCase):
         tenant_manager._sessionmakers.pop("SLOWT", None)
         self.w.close()
 
-    @pending_phase_c("step 10: per-tenant concurrency limit")
     def test_flooding_a_slow_tenant_does_not_slow_a_healthy_one(self):
         async def scenario():
             async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.w.app), base_url="http://t", timeout=60) as client:
-                await client.get(f"/sessions/join/{uid('S_N1')}", headers={"X-Tenant-ID": ALPHA})  # warm-up
+                await client.get(f"/sessions/join/{join_code.make(ALPHA, uid('S_N1'))}", headers={"X-Tenant-ID": ALPHA})  # warm-up
                 flood = [asyncio.create_task(client.get("/sessions/join/X", headers={"X-Tenant-ID": "SLOWT"})) for _ in range(60)]
                 await asyncio.sleep(0.3)
                 started = time.perf_counter()
-                await client.get(f"/sessions/join/{uid('S_N1')}", headers={"X-Tenant-ID": ALPHA})
+                await client.get(f"/sessions/join/{join_code.make(ALPHA, uid('S_N1'))}", headers={"X-Tenant-ID": ALPHA})
                 elapsed = time.perf_counter() - started
                 await asyncio.gather(*flood, return_exceptions=True)
                 return elapsed
 
         self.assertLess(asyncio.run(scenario()), 0.6)
 
-    @pending_phase_c("step 10: keep-alive off the event loop")
     def test_the_keep_alive_does_not_freeze_the_event_loop(self):
         from app.main import _db_keepalive_loop
 

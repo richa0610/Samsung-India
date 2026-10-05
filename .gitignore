@@ -62,3 +62,8 @@ backend/media/*
 backend/media/trainer_photos/*
 !backend/media/trainer_photos/default_male.png
 !backend/media/trainer_photos/default_female.png
+
+coverage.xml
+backend/coverage.xml
+*.log
+

@@ -3,14 +3,13 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.constants import PASS_THRESHOLD_PERCENT
 from app.core import rate_limit
 from app.core.exceptions import forbidden, unauthorized
 from app.core.media import resolve_trainer_avatar
 from app.core.security import create_access_token, verify_password
 from app.dependencies.filters import ConferenceFilters
 from app.repositories import admin_repository, dashboard_repository
-from app.services.access_service import norm, resolve_scope
+from app.services.access_service import granted_companies, norm, resolve_scope
 from app.schemas.admin import (
     AdminAuthSession,
     AdminDashboardStatsOut,
@@ -134,7 +133,7 @@ def build_admin_dashboard_stats(
     # name (a grant can span several), all of this tenant for a Super Admin, none for no grant.
     # Zone/region can't narrow it - no trainer record carries a zone of its own.
     if scope is not None:
-        trainer_companies = None if scope.is_super else {rule.company for rule in scope.rules}
+        trainer_companies = granted_companies(scope)
     else:
         # A direct internal call (never through the router): unscoped, as before, unless it
         # passes an explicit `filters.company`.

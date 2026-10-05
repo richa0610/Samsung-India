@@ -23,31 +23,26 @@ export interface TemporalRule {
 }
 
 /**
- * How long a detection must persist before it escalates to WARNING then
- * VIOLATION. Production-sensible defaults (not test_proctoring's later
- * "instant" tuning, which was for rapid manual testing during development).
+ * How long a detection must hold before it counts as a strike. The camera panel turns red with
+ * the reason (e.g. "SIDE-LOOK DETECTED") the moment it sees the problem; the SECURITY VIOLATION
+ * DETECTED strike only fires if the candidate is still in that position this much later.
+ */
+export const STRIKE_AFTER_MS = 2000;
+
+/**
+ * Per-detection timing. warningMs: null - there is no separate soft (non-strike) popup; the red
+ * camera panel is the warning. gapToleranceMs: 0 - returning to a normal position ends the
+ * occurrence, so the 2 seconds start again from zero the next time.
  */
 export const TEMPORAL_RULES: Record<DetectedEventType, TemporalRule> = {
-  // gapToleranceMs is intentionally generous (not near-zero, and not
-  // infinite): once a detection starts accumulating, a brief jitter/misread
-  // frame no longer throws the progress away, so natural head drift can't
-  // keep resetting the timer back to 0. It still eventually treats a
-  // genuine, sustained return to normal as "ended" (here: ~2s of clean
-  // frames) — a truly infinite tolerance would let one glance days later
-  // reuse a years-old start time and look like an instant, already-overdue
-  // violation, which is worse than the jitter problem it would "fix".
-  // warningMs: null disables the soft (non-strike) popup entirely — every
-  // detection now fires the real SECURITY VIOLATION DETECTED strike modal
-  // immediately (violationMs: 0) the first frame the camera catches it,
-  // rather than waiting for it to persist.
-  NO_FACE: { warningMs: null, violationMs: 0, gapToleranceMs: 0 },
-  MULTIPLE_FACES: { warningMs: null, violationMs: 0, gapToleranceMs: 0 },
-  LOOKING_LEFT: { warningMs: null, violationMs: 0, gapToleranceMs: 0 },
-  LOOKING_RIGHT: { warningMs: null, violationMs: 0, gapToleranceMs: 0 },
-  HEAD_TILT: { warningMs: null, violationMs: 0, gapToleranceMs: 0 },
+  NO_FACE: { warningMs: null, violationMs: STRIKE_AFTER_MS, gapToleranceMs: 0 },
+  MULTIPLE_FACES: { warningMs: null, violationMs: STRIKE_AFTER_MS, gapToleranceMs: 0 },
+  LOOKING_LEFT: { warningMs: null, violationMs: STRIKE_AFTER_MS, gapToleranceMs: 0 },
+  LOOKING_RIGHT: { warningMs: null, violationMs: STRIKE_AFTER_MS, gapToleranceMs: 0 },
+  HEAD_TILT: { warningMs: null, violationMs: STRIKE_AFTER_MS, gapToleranceMs: 0 },
 };
 
-/** Once a detection ends, how long before a new occurrence of the same type may start. */
+/** Once a detection that caused a strike ends, how long before a new occurrence of the same type may start. */
 export const COOLDOWN_MS = 1000;
 
 /** No violation fires for this long after the panel becomes active, so the candidate has time to get into frame. */

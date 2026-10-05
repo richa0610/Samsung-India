@@ -1,7 +1,8 @@
+from datetime import date, datetime, time, timedelta
 from typing import Optional
 
-from sqlalchemy import String, cast, exists, false, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import String, cast, exists, false, func, or_, select, union
+from sqlalchemy.orm import Session, aliased
 
 from app.models.attendance import Attendance
 from app.models.conference import Conference
@@ -15,6 +16,11 @@ def get_by_phone(db: Session, phone: int) -> Trainee | None:
 
 def get_by_uid(db: Session, trainee_uid: str) -> Trainee | None:
     return db.query(Trainee).filter(Trainee.traineeUid == trainee_uid).first()
+
+
+def get_authorized_by_uid(db: Session, trainee_uid: str, authorization_conditions: list) -> Trainee | None:
+    """The trainee `trainee_uid`, only if the caller's authorization conditions also allow them."""
+    return db.query(Trainee).filter(Trainee.traineeUid == trainee_uid, *authorization_conditions).first()
 
 
 def get_authorized_by_photo(db: Session, file_path: str, authorization_conditions: list) -> Trainee | None:
@@ -56,10 +62,6 @@ def get_by_uids(db: Session, trainee_uids: set[str]) -> list[Trainee]:
     return db.query(Trainee).filter(Trainee.traineeUid.in_(trainee_uids)).all()
 
 
-def list_all(db: Session) -> list[Trainee]:
-    return db.query(Trainee).order_by(Trainee.timestamp.desc()).all()
-
-
 # Trainee List sort keys (the table's column keys) -> column. Nullable text sorts as "" so keyset
 # comparisons never see NULL; `timestamp` is NOT NULL.
 PAGE_SORT_COLUMNS = {
@@ -91,6 +93,17 @@ PAGE_SEARCH_COLUMNS = (
     Trainee.status,
     Trainee.updatedBy,
 )
+
+
+def registered_between(start: Optional[date], end: Optional[date]) -> list:
+    """WHERE conditions for trainees registered from `start` through `end` (whole days, as the
+    list shows each one's `timestamp`). A plain range on the column, so its index still applies."""
+    conditions = []
+    if start:
+        conditions.append(Trainee.timestamp >= datetime.combine(start, time.min))
+    if end:
+        conditions.append(Trainee.timestamp < datetime.combine(end + timedelta(days=1), time.min))
+    return conditions
 
 
 def list_page(
@@ -139,9 +152,24 @@ def trainer_owned_condition(trainer_username: str):
     return or_(Trainee.trainerEmployeeId == trainer_username, on_their_roster)
 
 
-def list_uids_in_state(db: Session, state: str) -> set[str]:
-    rows = db.query(Trainee.traineeUid).filter(Trainee.state == state).all()
-    return {row.traineeUid for row in rows}
+def trainer_owned_list_condition(trainer_username: str):
+    """The same set as `trainer_owned_condition`, shaped for LISTING and COUNTING many trainees:
+    `traineeUid IN (derived table: assigned UNION on-their-roster)`. The derived table is built once
+    from the trainer's indexes (ix_trainee_trainer, ix_conference_trainer -> attendance by
+    conference), instead of the OR + EXISTS form, which can't use an index and runs its subquery
+    for every trainee in the tenant (perf/phase6_experiments.py owned: 564 -> 52 ms count, 580 ->
+    38 ms page, same 9,770 rows, 100k-attendance dataset). For checking ONE known trainee keep
+    `trainer_owned_condition` - its EXISTS probe is cheaper than building the whole set."""
+    if not (trainer_username or "").strip():
+        return false()
+    assigned = aliased(Trainee)
+    owned = union(
+        select(assigned.traineeUid.label("traineeUid")).where(assigned.trainerEmployeeId == trainer_username),
+        select(Attendance.traineeUid)
+        .join(Conference, Conference.conferenceUid == Attendance.conferenceUid)
+        .where(conference_repository.trainer_condition(trainer_username)),
+    ).subquery("owned_trainees")
+    return Trainee.traineeUid.in_(select(owned.c.traineeUid))
 
 
 def create(db: Session, trainee: Trainee) -> Trainee:

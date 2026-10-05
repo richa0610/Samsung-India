@@ -5,7 +5,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import { AdminDashboardStats, fetchAdminDashboardStats } from "@/api/admin";
 import { useAdminFilters } from "@/hooks/useAdminFilters";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,8 +13,7 @@ import { ApiError, fetchPendingTrainingCount } from "@/api/training";
 import { subscribe } from "@/services/liveEvents";
 
 export function useAdminDashboard() {
-  const router = useRouter();
-  const { admin, adminToken, adminLogout } = useAuth();
+  const { admin, adminToken } = useAuth();
   const { applied, appliedKey } = useAdminFilters("home");
 
   // How many trainings await review (the banner and the tab badge only ever show the number).
@@ -77,11 +76,6 @@ export function useAdminDashboard() {
     };
   }, [load]);
 
-  const handleLogout = () => {
-    adminLogout();
-    router.replace("/trainer_login");
-  };
-
   return {
     admin,
     pendingCount,
@@ -90,6 +84,5 @@ export function useAdminDashboard() {
     refreshing,
     error,
     refresh: () => load(true),
-    handleLogout,
   };
 }

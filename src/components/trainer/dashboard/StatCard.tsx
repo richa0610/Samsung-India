@@ -1,7 +1,7 @@
 import { Colors } from "@/theme/colors";
 import { Shadows } from "@/theme/shadows";
 import { ReactNode } from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import AppText from "@/components/ui/AppText";
 
 type StatCardProps = {
@@ -13,6 +13,7 @@ type StatCardProps = {
   subtext?: string;
   subtextColor?: string;
   isActive?: boolean;
+  onPress?: () => void;
 };
 
 export default function StatCard({
@@ -24,9 +25,20 @@ export default function StatCard({
   subtext,
   subtextColor = Colors.gray400,
   isActive = false,
+  onPress,
 }: StatCardProps) {
   return (
-    <View style={[styles.card, isActive && styles.activeCard]}>
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
+        styles.card,
+        isActive && styles.activeCard,
+        pressed && styles.pressedCard,
+      ]}
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={`${title}: ${value}`}
+    >
       <View style={[styles.iconWrapper, { backgroundColor: iconBg }]}>
         {icon}
       </View>
@@ -39,7 +51,7 @@ export default function StatCard({
           {subtext}
         </AppText>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -60,6 +72,10 @@ const styles = StyleSheet.create({
   activeCard: {
     borderColor: Colors.mainColour1,
     borderWidth: 1.6,
+  },
+  pressedCard: {
+    opacity: 0.75,
+    transform: [{ scale: 0.96 }],
   },
   iconWrapper: {
     width: 32,

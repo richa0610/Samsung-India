@@ -10,6 +10,7 @@ module.exports = defineConfig([
       ".expo/*",
       "node_modules/*",
       "backend/*",
+      ".venv/*",
       "scripts/*",
       "eslint-report.txt",
     ],

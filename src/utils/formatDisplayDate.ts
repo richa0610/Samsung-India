@@ -17,13 +17,15 @@ export function getTodayFormattedDate(): string {
   return `${day} ${month} ${year}`;
 }
 
-export function formatMonthToToday(): string {
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-  const sDay = String(firstDay.getDate()).padStart(2, "0");
-  const sMonth = firstDay.toLocaleDateString("en-GB", { month: "short" });
-  const eDay = String(now.getDate()).padStart(2, "0");
-  const eMonth = now.toLocaleDateString("en-GB", { month: "short" });
-  return `${sDay} ${sMonth} - ${eDay} ${eMonth}`;
+/** Today's date in India (IST, UTC+5:30) as "YYYY-MM-DD", whatever the device's own time zone -
+ *  the same "today" the server uses for the trainer's Home and Sessions. */
+export function istToday(): string {
+  return new Date(Date.now() + 330 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+/** This month so far in India - its 1st through today ("YYYY-MM-DD") - the default date range of
+ *  the trainer's lists and Sessions screen. */
+export function monthToTodayRange(): { start: string; end: string } {
+  const today = istToday();
+  return { start: `${today.slice(0, 7)}-01`, end: today };
+}

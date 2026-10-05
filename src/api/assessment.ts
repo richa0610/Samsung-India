@@ -32,9 +32,12 @@ export type AssessmentQuestionsResponse = {
   questions: AssessmentQuestion[];
 };
 
-export function getAssessmentQuestions(token: string, suiteUid: string) {
+/** The questions of a test the trainee is taking now - the server checks the session is theirs,
+ *  they're marked Present and this test's module is open. */
+export function getAssessmentQuestions(token: string, suiteUid: string, conferenceUid: string) {
   if (USE_MOCK_DATA) return mock.getAssessmentQuestions(token, suiteUid);
-  return apiRequest<AssessmentQuestionsResponse>(`/assessments/${suiteUid}/questions`, {
+  const query = `conferenceUid=${encodeURIComponent(conferenceUid)}`;
+  return apiRequest<AssessmentQuestionsResponse>(`/assessments/${encodeURIComponent(suiteUid)}/questions?${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

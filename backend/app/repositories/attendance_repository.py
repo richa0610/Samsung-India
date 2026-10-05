@@ -14,12 +14,14 @@ from app.repositories import keyset
 from app.utils.date_utils import utc_now
 
 
-def get_for_conference_and_trainee(db: Session, conference_uid: str, trainee_uid: str) -> Optional[Attendance]:
-    return (
-        db.query(Attendance)
-        .filter(Attendance.conferenceUid == conference_uid, Attendance.traineeUid == trainee_uid)
-        .first()
-    )
+def get_for_conference_and_trainee(
+    db: Session, conference_uid: str, trainee_uid: str, *, lock: bool = False
+) -> Optional[Attendance]:
+    """`lock=True` holds the row (SELECT ... FOR UPDATE) until the transaction ends."""
+    query = db.query(Attendance).filter(Attendance.conferenceUid == conference_uid, Attendance.traineeUid == trainee_uid)
+    if lock:
+        query = query.with_for_update()
+    return query.first()
 
 
 def get_by_check_in_photo(db: Session, file_path: str) -> Optional[Attendance]:
@@ -32,44 +34,8 @@ def list_for_conference(db: Session, conference_uid: str) -> list[Attendance]:
     return db.query(Attendance).filter(Attendance.conferenceUid == conference_uid).all()
 
 
-def list_for_conferences(db: Session, conference_uids: list[str]) -> list[Attendance]:
-    if not conference_uids:
-        return []
-    return (
-        db.query(Attendance)
-        .filter(Attendance.conferenceUid.in_(conference_uids))
-        .order_by(Attendance.timestamp.desc())
-        .all()
-    )
-
-
-def list_present_pairs(db: Session, conference_uids: list[str]) -> list[tuple[str, str]]:
-    """(conferenceUid, traineeUid) pairs for trainees marked Present - used to
-    compute real headcounts, as opposed to the planned `batchSize`."""
-    if not conference_uids:
-        return []
-    rows = (
-        db.query(Attendance.conferenceUid, Attendance.traineeUid)
-        .filter(Attendance.conferenceUid.in_(conference_uids), Attendance.status == "Present")
-        .all()
-    )
-    return [(row.conferenceUid, row.traineeUid) for row in rows]
-
-
 def list_for_trainee(db: Session, trainee_uid: str) -> list[Attendance]:
     return db.query(Attendance).filter(Attendance.traineeUid == trainee_uid).all()
-
-
-def count_by_status(db: Session, status: str) -> int:
-    """Org-wide count, all conferences - the admin dashboard's Audience card."""
-    return db.query(Attendance).filter(Attendance.status == status).count()
-
-
-def list_attended_trainee_uids(db: Session) -> set[str]:
-    """Trainees marked Present in at least one training - the population the
-    dashboard ranks (a brand-new trainee who's never attended is excluded)."""
-    rows = db.query(Attendance.traineeUid).filter(Attendance.status == "Present").distinct().all()
-    return {row.traineeUid for row in rows}
 
 
 def create(db: Session, attendance: Attendance) -> Attendance:
@@ -246,6 +212,11 @@ _PAGE_COLUMNS = (
 )
 
 
+# Sorts that read trainee columns - with these (or any search, which looks in the trainee's name
+# and employee id too) the trainee join is part of which rows match and in what order.
+_TRAINEE_SORTS = frozenset({"participantHoId", "participantName", "phone", "reportingManagerOfPromoter"})
+
+
 def list_page(
     db: Session,
     conditions: list,
@@ -261,17 +232,32 @@ def list_page(
     `conditions`) LEFT JOIN trainee, filtered by `mode`, searched, then counted, sorted and paged
     in SQL (keyset.paginate). Both joins are on unique keys (conference.conferenceUid,
     trainee.traineeUid), so a row can never appear twice. Only the columns the list shows are
-    selected (no ORM entities, no relationship loading)."""
+    selected (no ORM entities, no relationship loading).
+
+    Without a search or a trainee-column sort, the trainee join can't change which rows match or
+    their order, so it is deferred: the count and the sort/limit run on attendance JOIN conference
+    alone, and the trainee (and display) columns are joined onto the page's rows only, in the same
+    statement (keyset.paginate `enrich`). Measured on the 100k-attendance perf dataset, a trainer's
+    first page: 140 -> ~30 ms for the page, 54 -> ~20 ms for the count (perf/results)."""
     sort = sort if sort in SORT_COLUMNS else "markedAt"
     sort_expr, kind = SORT_COLUMNS[sort]
+    deferred = not (search or "").strip() and sort not in _TRAINEE_SORTS
 
-    stmt = (
-        select(*_PAGE_COLUMNS, sort_expr.label("sort_value"))
-        .select_from(Attendance)
-        .join(Conference, Conference.conferenceUid == Attendance.conferenceUid)
-        .outerjoin(Trainee, Trainee.traineeUid == Attendance.traineeUid)
-        .where(*conditions)
-    )
+    if deferred:
+        stmt = (
+            select(Attendance.id.label("id"), sort_expr.label("sort_value"))
+            .select_from(Attendance)
+            .join(Conference, Conference.conferenceUid == Attendance.conferenceUid)
+            .where(*conditions)
+        )
+    else:
+        stmt = (
+            select(*_PAGE_COLUMNS, sort_expr.label("sort_value"))
+            .select_from(Attendance)
+            .join(Conference, Conference.conferenceUid == Attendance.conferenceUid)
+            .outerjoin(Trainee, Trainee.traineeUid == Attendance.traineeUid)
+            .where(*conditions)
+        )
     if mode == "confirmed":
         stmt = stmt.where(Attendance.status == "Present")
     elif mode == "pending":
@@ -286,7 +272,17 @@ def list_page(
         cursor_value=lambda row: row.sort_value,
         datetime_value=kind == "datetime",
     )
-    return keyset.paginate(db, stmt, order, cursor=cursor, limit=limit, page=page, entities=False)
+    enrich = None
+    if deferred:
+        def enrich(page_rows):
+            return (
+                select(*_PAGE_COLUMNS, page_rows.c.sort_value)
+                .select_from(page_rows)
+                .join(Attendance, Attendance.id == page_rows.c.id)
+                .join(Conference, Conference.conferenceUid == Attendance.conferenceUid)
+                .outerjoin(Trainee, Trainee.traineeUid == Attendance.traineeUid)
+            )
+    return keyset.paginate(db, stmt, order, cursor=cursor, limit=limit, page=page, entities=False, enrich=enrich)
 
 
 def tallies_for_trainees(db: Session, conditions: list, trainee_uids: set[str]) -> dict[str, tuple[int, int, int]]:

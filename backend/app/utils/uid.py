@@ -1,5 +1,6 @@
-"""Sequential, human-readable entity identifiers: ``<PREFIX>26<5-digit seq>``
-(e.g. ``CONF2610001``). Replaces the old ``uuid4().hex`` UIDs.
+"""Sequential, human-readable entity identifiers: ``<PREFIX><YY><5-digit seq>``
+(e.g. ``TRN2610001``, YY = the current year in IST). Replaces the old ``uuid4().hex`` UIDs.
+Trainings don't use this: their public ID is non-sequential (app/utils/conference_id.py).
 
 The running counter per prefix lives in the ``uid_sequence`` table so every
 insert path shares one source of truth - the ORM ``before_insert`` hooks in
@@ -10,7 +11,8 @@ insert path shares one source of truth - the ORM ``before_insert`` hooks in
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-YEAR = "26"
+from app.utils.date_utils import ist_now
+
 START = 10001
 
 
@@ -30,4 +32,4 @@ def next_uid(connection: Connection, prefix: str) -> str:
         text("SELECT next_val - 1 FROM uid_sequence WHERE prefix = :p"),
         {"p": prefix},
     ).scalar()
-    return f"{prefix}{YEAR}{seq:05d}"
+    return f"{prefix}{ist_now().year % 100:02d}{seq:05d}"

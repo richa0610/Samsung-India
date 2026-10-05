@@ -4,13 +4,14 @@
  * Attendance lists. The server authorizes the rows (an admin's grant, or a trainer's
  * assigned / rostered trainees), counts, searches, sorts and pages them
  * (GET /admin/trainees/page), so the phone only ever holds the current page.
- * Any change to the search text, sort or rows-per-page returns to page 1.
+ * Any change to the registration date range, search text, sort or rows-per-page returns to page 1.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
 import { TraineeListItem, TraineeSortKey, fetchTraineesPage } from "@/api/trainee";
+import { AdminFilterScope, useAdminFilters } from "@/hooks/useAdminFilters";
 import { useAuth } from "@/hooks/useAuth";
 import { PAGE_SIZE_OPTIONS } from "@/hooks/usePagedTrainingList";
 import { subscribe } from "@/services/liveEvents";
@@ -53,8 +54,11 @@ export type PagedTraineeList = {
   exportAll: () => Promise<TraineeListItem[]>;
 };
 
-export function usePagedTraineeList(pendingOnly: boolean): PagedTraineeList {
+/** `filterScope`'s date range narrows the list to trainees registered in it (the trainer's
+ *  lists use "trainerLists"; only its From/To dates apply to trainees). */
+export function usePagedTraineeList(pendingOnly: boolean, filterScope: AdminFilterScope = "lists"): PagedTraineeList {
   const { adminToken } = useAuth();
+  const { applied } = useAdminFilters(filterScope);
   const mode: "all" | "pending" = pendingOnly ? "pending" : "all";
 
   const [items, setItems] = useState<TraineeListItem[]>([]);
@@ -71,9 +75,11 @@ export function usePagedTraineeList(pendingOnly: boolean): PagedTraineeList {
   const sortKey = sort ? SERVER_SORT_KEYS[sort.key] : undefined;
   const sortDir = sort?.direction;
 
+  const start = applied.start || undefined;
+  const end = applied.end || undefined;
   const requestOptions = useMemo(
-    () => ({ mode, q: search, sort: sortKey, dir: sortDir, limit: pageSize }),
-    [mode, search, sortKey, sortDir, pageSize],
+    () => ({ mode, q: search, sort: sortKey, dir: sortDir, limit: pageSize, start, end }),
+    [mode, search, sortKey, sortDir, pageSize, start, end],
   );
   const listKey = useMemo(() => JSON.stringify(requestOptions), [requestOptions]);
 
@@ -82,25 +88,32 @@ export function usePagedTraineeList(pendingOnly: boolean): PagedTraineeList {
   const page = chosenPage.listKey === listKey ? chosenPage.page : 1;
   const setPage = useCallback((next: number) => setChosenPage({ listKey, page: Math.max(next, 1) }), [listKey]);
 
-  // Only the latest request may update the screen - a slow reply for an old page or search is dropped.
+  // Only the latest request may update the screen - a slow reply for an old page or search is
+  // dropped, and the older request is aborted so it stops using the connection.
   const requestId = useRef(0);
+  const inFlight = useRef<AbortController | null>(null);
+  useEffect(() => () => inFlight.current?.abort(), []);
 
   const loadPage = useCallback(
     async (loadMode: "load" | "refresh" | "silent" = "load") => {
       if (!adminToken) return;
       const id = ++requestId.current;
+      inFlight.current?.abort();
+      const controller = new AbortController();
+      inFlight.current = controller;
       if (loadMode === "refresh") setRefreshing(true);
       else if (loadMode === "load") {
         if (loadedOnce.current) setSearching(true);
         else setLoading(true);
       }
       try {
-        const result = await fetchTraineesPage(adminToken, { ...requestOptions, page });
+        const result = await fetchTraineesPage(adminToken, { ...requestOptions, page, signal: controller.signal });
         if (id !== requestId.current) return;
         setItems(result.items);
         // The server sends the total with page 1 only; keep it while paging.
         if (result.total != null) setTotal(result.total);
       } catch {
+        if (controller.signal.aborted) return; // superseded by a newer request
         if (id === requestId.current && loadMode !== "silent") {
           setItems([]);
           setTotal(0);

@@ -1,12 +1,13 @@
 import { useRouter } from "expo-router";
 
+import TrainerListFilterBar, { TRAINER_LIST_FILTERS } from "@/components/trainer/TrainerListFilterBar";
 import { TraineeListView } from "@/components/trainee/TraineeListView";
 import { usePagedTraineeList } from "@/hooks/usePagedTraineeList";
 
 export default function PendingTraineeScreen() {
   const router = useRouter();
   // Only trainees awaiting approval, a page at a time.
-  const paged = usePagedTraineeList(true);
+  const paged = usePagedTraineeList(true, TRAINER_LIST_FILTERS);
 
   return (
     <TraineeListView
@@ -18,8 +19,9 @@ export default function PendingTraineeScreen() {
       onRefresh={paged.refresh}
       paged={paged}
       onBack={() => router.back()}
+      topContent={<TrainerListFilterBar />}
       exportFileName="pending-trainee-list"
-      emptyLabel="No pending trainees. Everything registered so far has already been reviewed."
+      emptyLabel="No pending trainees registered in these dates. Change the range above to see other dates."
     />
   );
 }

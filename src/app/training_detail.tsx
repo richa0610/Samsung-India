@@ -58,17 +58,23 @@ export default function TrainingDetailScreen() {
         // attempted modules - so skip straight to the outcome instead of an
         // empty-looking module list, same idea as the Home screen's "Session
         // Completed" card once a session closes.
-        <View style={styles.centered}>
-          <View style={styles.missedIconWrap}>
-            <Ionicons name="close-circle" size={40} color={Colors.danger} />
-          </View>
-          <AppText variant="body" weight={FontWeight.bold} color={Colors.black} align="center">
-            Session Missed
-          </AppText>
-          <AppText variant="caption" color={Colors.gray600} align="center">
-            You missed this training. Try to join your next scheduled session on time.
-          </AppText>
-        </View>
+        <StatusNotice
+          icon="close-circle"
+          color={Colors.danger}
+          bg={Colors.dangerBgSoft}
+          title="Session Missed"
+          message="You missed this training. Try to join your next scheduled session on time."
+        />
+      ) : detail.status === "Ongoing" ? (
+        // Still running: its full breakdown (modules, scores, answer review)
+        // is shown once the trainer has completed it.
+        <StatusNotice
+          icon="time"
+          color={Colors.blueAccent}
+          bg={Colors.blue50}
+          title="Training In Progress"
+          message="This training is still going on. Its full details will be available here once it's completed."
+        />
       ) : (
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.summaryCard}>
@@ -135,6 +141,35 @@ export default function TrainingDetailScreen() {
   );
 }
 
+/** A whole-screen outcome in place of the module list (a missed or still-running training). */
+function StatusNotice({
+  icon,
+  color,
+  bg,
+  title,
+  message,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  bg: string;
+  title: string;
+  message: string;
+}) {
+  return (
+    <View style={styles.centered}>
+      <View style={[styles.noticeIconWrap, { backgroundColor: bg }]}>
+        <Ionicons name={icon} size={40} color={color} />
+      </View>
+      <AppText variant="body" weight={FontWeight.bold} color={Colors.black} align="center">
+        {title}
+      </AppText>
+      <AppText variant="caption" color={Colors.gray600} align="center">
+        {message}
+      </AppText>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   banner: { paddingBottom: 20 },
@@ -143,11 +178,10 @@ const styles = StyleSheet.create({
   bannerTitle: { fontSize: 17 },
   bannerSubtitle: { fontSize: 12, opacity: 0.9, marginTop: 2 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 24 },
-  missedIconWrap: {
+  noticeIconWrap: {
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: Colors.dangerBgSoft,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 4,

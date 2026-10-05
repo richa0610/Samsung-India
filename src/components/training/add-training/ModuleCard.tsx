@@ -54,7 +54,7 @@ export function ModuleCard({ moduleKey: key, form }: { moduleKey: ModuleKey; for
         </View>
         <View style={s.half}>
           <View style={s.questionsLabelRow}>
-            <AppText style={s.fieldLabel} weight={FontWeight.medium}>Questions</AppText>
+            <AppText style={s.questionsLabelText} weight={FontWeight.medium}>Questions</AppText>
             {moduleState.assessmentSuiteUid && (
               <View style={s.maxBadge}>
                 <AppText style={s.maxBadgeText} color={Colors.white}>Max: {selectedSuite?.noOfQuestion ?? 0}</AppText>

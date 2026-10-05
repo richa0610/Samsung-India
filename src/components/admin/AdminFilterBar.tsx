@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { AdminAccessScope, fetchAdminAccessScope } from "@/api/admin";
-import { AdminFilters, EMPTY_ADMIN_FILTERS, defaultAdminFilters, monthToDateAdminFilters } from "@/api/adminFilters";
+import { AdminFilters, monthToDateAdminFilters } from "@/api/adminFilters";
 import { fetchSessionTypes, fetchTrainers, fetchTrainingTypes } from "@/api/training";
 import { REGIONS_BY_ZONE, ZONES } from "@/components/training/add-training/constants";
 import { MonthCard, useMonthYear } from "@/components/calendar/date-range";
@@ -45,7 +45,8 @@ function formatRange(start: string, end: string): string | null {
 const asOptions = (values: string[]): SelectOption[] => values.map((value) => ({ label: value, value }));
 
 /** "Select Range" toggle + collapsible filter panel for the admin pages. The
- *  dashboard ("home") has its own filter; the Training and Attendance lists share one. */
+ *  dashboard ("home") has its own filter; the admin Training and Attendance lists share one,
+ *  and the trainer's lists another ("trainerLists", date range only). */
 export default function AdminFilterBar({
   scope = "lists",
   dateOnly = false,
@@ -55,7 +56,7 @@ export default function AdminFilterBar({
   dateOnly?: boolean;
 }) {
   const { adminToken } = useAuth();
-  const { applied, apply, clear } = useAdminFilters(scope);
+  const { applied, apply, clear, defaults } = useAdminFilters(scope);
   const [open, setOpen] = useState(false);
   const [pickerFor, setPickerFor] = useState<"start" | "end" | null>(null);
   const [draft, setDraft] = useState<AdminFilters>(applied);
@@ -68,11 +69,12 @@ export default function AdminFilterBar({
   const [accessScope, setAccessScope] = useState<AdminAccessScope | null>(null);
 
   useEffect(() => {
-    if (!open || !adminToken) return;
+    // A date-only bar never shows the trainer / type / zone pickers, so it doesn't load their options.
+    if (!open || !adminToken || dateOnly) return;
     fetchTrainers(adminToken).then(setTrainerOptions).catch(() => setTrainerOptions([]));
     fetchSessionTypes(adminToken).then(setSessionTypeOptions).catch(() => setSessionTypeOptions([]));
     fetchTrainingTypes(adminToken).then(setTrainingTypeOptions).catch(() => setTrainingTypeOptions([]));
-    if (!dateOnly) fetchAdminAccessScope(adminToken).then(setAccessScope).catch(() => setAccessScope(null));
+    fetchAdminAccessScope(adminToken).then(setAccessScope).catch(() => setAccessScope(null));
   }, [open, adminToken, dateOnly]);
 
   const today = useMemo(() => new Date(), []);
@@ -127,8 +129,8 @@ export default function AdminFilterBar({
 
   const handleClear = () => {
     clear();
-    // Home goes back to today; other scopes reset to fully empty.
-    setDraft(scope === "home" ? defaultAdminFilters() : EMPTY_ADMIN_FILTERS);
+    // Back to the scope's own starting point: today (home), this month (trainer lists), or empty.
+    setDraft(defaults);
     setOpen(false);
   };
 

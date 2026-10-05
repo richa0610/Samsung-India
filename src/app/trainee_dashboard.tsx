@@ -37,6 +37,7 @@ export default function TraineeDashboardScreen() {
     dashboard,
     refreshing,
     handleRefresh,
+    handleMetricCardPress,
     confirmLogoutOpen,
     requestLogout,
     cancelLogout,
@@ -108,6 +109,7 @@ export default function TraineeDashboardScreen() {
           scheduledCount={metrics?.scheduled ?? 0}
           ongoingCount={metrics?.ongoing ?? 0}
           notStartedCount={metrics?.notStarted ?? 0}
+          onPressCard={handleMetricCardPress}
         />
 
         <Global_Percentage

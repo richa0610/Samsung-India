@@ -307,9 +307,9 @@ export function fetchTrainingsPage(
     approval?: "pending" | "reviewed" | "approved";
     filters?: AdminFilters;
     q?: string;
-    /** Sessions screen: its Today tab (YYYY-MM-DD), Completed tab and location (hub, or state without one). */
+    /** Sessions screen: its Today tab (YYYY-MM-DD), status filter and location (hub, or state without one). */
     onDate?: string;
-    status?: "completed";
+    status?: string;
     location?: string;
     sort?: TrainingSortKey;
     dir?: "asc" | "desc";
@@ -318,6 +318,8 @@ export function fetchTrainingsPage(
     /** 1-based page number - jump straight to a numbered page. */
     page?: number;
     limit?: number;
+    /** Aborts the request when a newer one replaces it. */
+    signal?: AbortSignal;
   },
 ) {
   const params = new URLSearchParams();
@@ -334,6 +336,7 @@ export function fetchTrainingsPage(
   for (const [key, value] of adminFilterParams(options.filters)) params.set(key, value);
   return apiRequest<TrainingPage>(`/admin/trainings/page?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: options.signal,
   });
 }
 
@@ -347,6 +350,19 @@ export function fetchTrainerSummary(token: string, range?: { start?: string; end
   return apiRequest<TrainerSummary>(`/admin/trainings/summary${query ? `?${query}` : ""}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+}
+
+/** The deep link a training's QR code / share message carries (see `scheme` in app.json). */
+export const joinLink = (joinCode: string) => `samsungindia://join/${joinCode}`;
+
+/** The training's signed join code - what its QR code and share link must carry; a bare training
+ *  ID is not accepted by the server. Only the training's trainer (or an admin covering it) gets it. */
+export async function fetchJoinLink(token: string, conferenceUid: string): Promise<string> {
+  const { joinCode } = await apiRequest<{ conferenceUid: string; joinCode: string }>(
+    `/admin/trainings/${encodeURIComponent(conferenceUid)}/join-code`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  return joinLink(joinCode);
 }
 
 export function fetchSessionDashboard(token: string, conferenceUid: string) {
@@ -510,8 +526,10 @@ export function broadcastLiveQuestion(token: string, conferenceUid: string, ques
   return liveQuizAction(token, conferenceUid, "broadcast", { questionId });
 }
 
-export function stopLiveTimer(token: string, conferenceUid: string) {
-  return liveQuizAction(token, conferenceUid, "stop-timer");
+/** Stop Timer (`paused` true) or Play Timer (false) for the trainer and every trainee. The button
+ *  pressed, not a toggle - pressing Stop on an already-stopped clock changes nothing. */
+export function stopLiveTimer(token: string, conferenceUid: string, paused: boolean) {
+  return liveQuizAction(token, conferenceUid, "stop-timer", { paused });
 }
 
 export function showLiveLeaderboard(token: string, conferenceUid: string) {

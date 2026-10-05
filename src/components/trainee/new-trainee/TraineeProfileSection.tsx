@@ -36,7 +36,9 @@ export function TraineeProfileSection({ form }: { form: NewTraineeForm }) {
         aspect: [1, 1],
       });
       if (!result.canceled && result.assets?.[0]) {
-        form.setProfilePhoto(result.assets[0].uri);
+        const asset = result.assets[0];
+        const type = asset.mimeType ?? "image/jpeg";
+        form.setProfilePhoto({ uri: asset.uri, name: asset.fileName ?? `photo.${type.split("/")[1] ?? "jpg"}`, type });
       }
     } finally {
       setPicking(false);
@@ -51,7 +53,7 @@ export function TraineeProfileSection({ form }: { form: NewTraineeForm }) {
         <AppText style={styles.photoLabel} color={Colors.gray600}>Profile Photo</AppText>
         <View style={styles.avatarWrap}>
           <Image
-            source={form.profilePhoto ? { uri: form.profilePhoto } : require("@/assets/images/profile.webp")}
+            source={form.profilePhoto ? { uri: form.profilePhoto.uri } : require("@/assets/images/profile.webp")}
             style={styles.avatar}
           />
         </View>

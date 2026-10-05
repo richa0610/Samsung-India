@@ -1,5 +1,6 @@
-import Starter1 from "@/components/test/starter1";
+import TraineeLoginScreen from "@/components/auth/trainee-login/TraineeLoginScreen";
 
 export default function ParticipantLoginScreen() {
-  return <Starter1 />;
+  return <TraineeLoginScreen />;
 }
+

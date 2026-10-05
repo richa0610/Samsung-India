@@ -54,13 +54,22 @@ export default function LightTimePickerModal({
   const hourScrollRef = useRef<ScrollView>(null);
   const minuteScrollRef = useRef<ScrollView>(null);
 
-  useEffect(() => {
+  // Each time the picker opens (or its value changes while open) it starts from `value`: adjusted
+  // during render against the last opening seen, rather than in an effect that renders twice.
+  const [openedWith, setOpenedWith] = useState<{ visible: boolean; value?: string }>({ visible, value });
+  if (openedWith.visible !== visible || openedWith.value !== value) {
+    setOpenedWith({ visible, value });
     if (visible) {
       const parsed = parseInitialTime(value);
       setHour(parsed.hour);
       setMinute(parsed.minute);
       setPeriod(parsed.period);
+    }
+  }
 
+  useEffect(() => {
+    if (visible) {
+      const parsed = parseInitialTime(value);
       setTimeout(() => {
         hourScrollRef.current?.scrollTo({ y: Math.max(0, (parsed.hour - 1) * 36 - 36), animated: true });
         minuteScrollRef.current?.scrollTo({ y: Math.max(0, parsed.minute * 36 - 36), animated: true });

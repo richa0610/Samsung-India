@@ -1,3 +1,5 @@
+import { monthToTodayRange } from "@/utils/formatDisplayDate";
+
 export type AdminFilters = {
   /** YYYY-MM-DD, inclusive. */
   start: string;
@@ -28,10 +30,10 @@ export function defaultAdminFilters(): AdminFilters {
   return { ...EMPTY_ADMIN_FILTERS, start: today, end: today };
 }
 
-/** What the filter panel pre-fills for the dashboard: 1st of this month through today. */
+/** 1st of this month through today (India date): the trainer lists' starting filter, and what the
+ *  filter panel pre-fills for the admin dashboard. */
 export function monthToDateAdminFilters(): AdminFilters {
-  const now = new Date();
-  return { ...EMPTY_ADMIN_FILTERS, start: toIso(new Date(now.getFullYear(), now.getMonth(), 1)), end: toIso(now) };
+  return { ...EMPTY_ADMIN_FILTERS, ...monthToTodayRange() };
 }
 
 export function adminFiltersActive(filters: AdminFilters): boolean {

@@ -6,7 +6,7 @@ from app.core.security import hash_password
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.repositories import admin_repository
-from app.services.access_service import norm, resolve_scope
+from app.services.access_service import granted_companies, norm, resolve_scope
 from app.schemas.catalog import SelectOptionOut
 from app.schemas.trainer_profile import TrainerProfileOut, TrainerProfileUpdate
 from app.utils.validators import validate_aadhar_upload, validate_profile_photo_upload
@@ -38,10 +38,11 @@ def list_trainers(
     company only. Without it, both the `admin` and `agencyteam` trainer
     rows are merged (the Add Training form's behaviour).
 
-    Scoped to the caller: an admin-panel account sees this tenant's trainers; a trainer sees the
-    trainers of their own company only (the only ones they may assign a training to - see
-    training_service._authorize_trainer_assignment), or just themselves when their company is
-    unknown; anyone else sees none. Admin-table trainers are always limited to this tenant."""
+    Scoped to the caller - exactly the trainers they may assign (placement_rules): a trainer sees
+    the trainers of their own company only, or just themselves when their company is unknown; an
+    admin-panel account sees the trainers of the companies its grant covers (every company for a
+    Super Admin - access_service.granted_companies); anyone else sees none. Admin-table trainers
+    are always limited to this tenant."""
     scope = resolve_scope(common_db, principal, tenant_id)
     if scope.is_trainer:
         own_company = norm(principal.company)
@@ -56,13 +57,16 @@ def list_trainers(
             ]
     elif not scope.is_admin_panel:
         trainers = []
-    elif company:
-        trainers = admin_repository.list_agency_trainers(db, company=company)
     else:
-        trainers = [
-            *admin_repository.list_admin_trainers_for_tenant(common_db, tenant_id),
-            *admin_repository.list_agency_trainers(db),
-        ]
+        granted = granted_companies(scope)
+        if company:
+            allowed = granted is None or norm(company) in granted
+            trainers = admin_repository.list_agency_trainers(db, company=company) if allowed else []
+        else:
+            trainers = [
+                *admin_repository.list_admin_trainers_for_tenant(common_db, tenant_id, granted),
+                *admin_repository.list_agency_trainers(db, companies=granted),
+            ]
 
     seen: set[str] = set()
     options: list[SelectOptionOut] = []
@@ -78,12 +82,27 @@ def list_trainers(
     return sorted(options, key=lambda o: o.name or o.label)
 
 
-def get_trainer_name(common_db: Session, db: Session, username: str, tenant_id: str | None) -> dict:
+def get_trainer_name(
+    common_db: Session, db: Session, principal: Admin | AgencyTeam, username: str, tenant_id: str | None
+) -> dict:
+    """A trainer's display name - only for a trainer the caller's Trainer picker would list
+    (list_trainers' rule); any other username is "not found", so this can't be used to discover
+    other companies' trainers."""
     trainer = find_trainer(common_db, db, username, tenant_id)
-    if not trainer:
+    if not trainer or not _may_see_trainer(resolve_scope(common_db, principal, tenant_id), principal, trainer):
         raise not_found("Trainer not found")
 
     return {"username": trainer.username, "name": trainer.name}
+
+
+def _may_see_trainer(scope, principal: Admin | AgencyTeam, trainer: Admin | AgencyTeam) -> bool:
+    if scope.is_trainer:
+        own_company = norm(principal.company)
+        return trainer.username == scope.trainer_username or (bool(own_company) and norm(trainer.company) == own_company)
+    if scope.is_admin_panel:
+        granted = granted_companies(scope)
+        return granted is None or norm(trainer.company) in granted
+    return False
 
 
 def _admin_to_profile(admin: Admin) -> TrainerProfileOut:
@@ -209,8 +228,6 @@ _ADMIN_FIELD_MAP = {
     "permanentPincode": "permanentPinCode",
     "permanentLandmark": "permanentLandmark",
     "aadharNumber": "aadharNo",
-    "aadharFile": "aadharImage",
-    "profilePicture": "profilePhoto",
     "about": "about",
     "resume": "resume",
     "otherDocument": "otherDocument",
@@ -230,7 +247,6 @@ _ADMIN_FIELD_MAP = {
     "offerLetter": "offerLetter",
     "letterhead": "letterHead",
     "promocode": "promoCode",
-    "username": "username",
     "remarks": "remarks",
 }
 
@@ -249,13 +265,23 @@ _AGENCY_FIELD_MAP = {
     "permanentState": "permanentState",
     "permanentPincode": "permanentPinCode",
     "permanentLandmark": "permanentLandmark",
-    "profilePicture": "profilePhoto",
     "designation": "designation",
     "companyEmail": "officialEmail",
-    "username": "username",
 }
 
 
+_OFFICIAL_FIELDS = (
+    "jobStatus", "joinedOn", "designation", "salary", "companyEmail",
+    "visitingCard", "idCard", "offerLetter", "letterhead", "promocode",
+)
+
+
+# Never writable through PATCH /admin/profile, whatever the form sends:
+#   aadharFile / profilePicture - stored file paths; only the upload endpoints set them. Writable
+#     paths would let an account point its "own" Aadhaar/photo at someone else's file and then read
+#     it (media access trusts an account's own paths).
+#   username - the login identity, and what trainings are owned by (conference.trainerEmployeeId);
+#     the profile screen shows it read-only.
 def _apply_profile_update(target: Admin | AgencyTeam, updates: dict, field_map: dict) -> None:
     for source, value in updates.items():
         if source == "mobileNumber":
@@ -288,6 +314,10 @@ def update_profile(
     # Official Info section's form happens to include a `role` field) -
     # never applied here regardless of what's sent.
     updates.pop("role", None)
+    # The Official Information (HR) fields - salary, job status, designation, joining date,
+    # official email and documents - are set by admins, not by the account holder.
+    for field in _OFFICIAL_FIELDS:
+        updates.pop(field, None)
 
     if isinstance(admin, Admin):
         _apply_profile_update(admin, updates, _ADMIN_FIELD_MAP)

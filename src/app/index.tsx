@@ -1,5 +1,5 @@
-import RoleSelectionScreen from "@/components/auth/RoleSelectionScreen";
+import LoginLandingScreen from "@/components/auth/LoginLandingScreen";
 
 export default function HomeScreen() {
-  return <RoleSelectionScreen />;
+  return <LoginLandingScreen />;
 }

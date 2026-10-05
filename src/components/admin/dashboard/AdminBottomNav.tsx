@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { Href, usePathname, useRouter } from "expo-router";
 import { Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -35,9 +35,16 @@ const ATTENDANCE_ITEMS: AdminMenuSheetItem[] = [
   { key: "pending", label: "Pending Attendance", icon: "hourglass-outline" },
 ];
 
+/** Where each menu item leads. */
+const SHEET_ROUTES: Record<SheetTab, Record<string, Href & string>> = {
+  training: { new: "/add_training", pending: "/admin_pending_trainings", list: "/admin_training_list" },
+  attendance: { list: "/admin_attendance_list", confirmed: "/admin_confirmed_attendance", pending: "/admin_pending_attendance" },
+};
+
 export default function AdminBottomNav({ activeTab, pendingCount = 0, onSelectTab }: AdminBottomNavProps) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const pathname = usePathname();
   const [openSheet, setOpenSheet] = useState<SheetTab | null>(null);
 
   const trainingItems: AdminMenuSheetItem[] = [
@@ -47,17 +54,12 @@ export default function AdminBottomNav({ activeTab, pendingCount = 0, onSelectTa
   ];
 
   const handleSheetItem = (key: string) => {
-    const sheet = openSheet;
+    const route = openSheet ? SHEET_ROUTES[openSheet][key] : undefined;
     setOpenSheet(null);
-    if (sheet === "training") {
-      if (key === "new") router.push("/add_training");
-      else if (key === "pending") router.push("/admin_pending_trainings");
-      else router.push("/admin_training_list");
-    } else if (sheet === "attendance") {
-      if (key === "confirmed") router.push("/admin_confirmed_attendance");
-      else if (key === "pending") router.push("/admin_pending_attendance");
-      else router.push("/admin_attendance_list");
-    }
+    // Already on that page: just close the menu. Pushing it again would stack a second copy of the
+    // same screen on top, which reloads everything (and Back would land on the identical copy).
+    if (!route || route === pathname) return;
+    router.push(route);
   };
 
   const handlePressTab = (tab: AdminDashboardTab) => {

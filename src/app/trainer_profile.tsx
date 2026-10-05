@@ -10,6 +10,7 @@ import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { useAuth } from "@/hooks/useAuth";
+import { useStaffLogout } from "@/hooks/useStaffLogout";
 import {
   DocumentsSection,
   LocalAddressSection,
@@ -23,22 +24,13 @@ import {
 
 export default function TrainerProfileScreen() {
   const router = useRouter();
-  const { admin, adminLogout } = useAuth();
+  const { admin } = useAuth();
   const form = useTrainerProfileForm();
   const [bottomTab, setBottomTab] = useState<DashboardTab>("profile");
   const [moreOpen, setMoreOpen] = useState(false);
-  // Same confirm-before-logout flow as the Trainer Dashboard's power button
-  // (see useTrainerDashboardScreen) - opening the popup here is separate
-  // from actually logging out, which only happens on confirm.
-  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
-
-  const requestLogout = () => setConfirmLogoutOpen(true);
-  const cancelLogout = () => setConfirmLogoutOpen(false);
-  const confirmLogout = () => {
-    setConfirmLogoutOpen(false);
-    adminLogout();
-    router.replace("/trainer_login");
-  };
+  // Same confirm-before-logout as the dashboards, but Back here still returns to the
+  // previous screen rather than asking to log out.
+  const { confirmLogoutOpen, requestLogout, cancelLogout, confirmLogout } = useStaffLogout({ confirmOnBack: false });
 
   const handleBottomNavSelect = (tab: DashboardTab) => {
     setBottomTab(tab);

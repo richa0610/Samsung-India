@@ -31,6 +31,7 @@ from app.schemas.admin import (
 from app.services.activity_log_service import log_activity
 from app.services.training_service import _audience_class
 from app.utils.status import title_status
+from tests import _legacy_queries as legacy_queries
 
 
 def login(
@@ -94,7 +95,7 @@ def build_admin_dashboard_stats(
     """Org-wide (every trainer, every conference in this tenant) summary for
     the admin dashboard's four overview cards - unlike the trainer agenda
     and session-dashboard endpoints, which are all scoped to one trainer."""
-    all_conferences = conference_repository.list_all(db)
+    all_conferences = legacy_queries.conference_list_all(db)
     # A cancelled training is excluded from every number on this dashboard -
     # its attendance and test results included.
     cancelled_uids = {c.conferenceUid for c in all_conferences if title_status(c.conferenceStatus) == "Cancelled"}
@@ -344,7 +345,7 @@ def build_admin_dashboard_stats(
 
     results = [
         r
-        for r in assessment_repository.list_all_submitted_results(db)
+        for r in legacy_queries.list_all_submitted_results(db)
         if r.conferenceUid not in cancelled_uids and (not filtering or r.conferenceUid in kept_uids)
     ]
     attempts = len(results)

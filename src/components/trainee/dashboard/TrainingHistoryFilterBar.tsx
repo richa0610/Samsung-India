@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Pressable, StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
@@ -22,6 +23,9 @@ type TrainingHistoryFilterBarProps = {
   onToDateChange: (value: string) => void;
   status: string;
   onStatusChange: (value: string) => void;
+  /** Opened from a Dashboard metric card: that card's name, shown as a removable filter. */
+  cardLabel?: string | null;
+  onClearCard?: () => void;
   onClear: () => void;
   hasFilter: boolean;
 };
@@ -37,11 +41,30 @@ export default function TrainingHistoryFilterBar({
   onToDateChange,
   status,
   onStatusChange,
+  cardLabel,
+  onClearCard,
   onClear,
   hasFilter,
 }: TrainingHistoryFilterBarProps) {
   return (
     <View style={styles.card}>
+      {cardLabel ? (
+        <View style={styles.cardFilterRow}>
+          <AppText style={styles.sectionLabel}>Dashboard Card</AppText>
+          <Pressable
+            onPress={onClearCard}
+            style={styles.cardChip}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove the ${cardLabel} filter`}
+          >
+            <AppText style={styles.cardChipText} weight={FontWeight.bold} color={Colors.mainColour1}>
+              {cardLabel}
+            </AppText>
+            <Ionicons name="close" size={12} color={Colors.mainColour1} />
+          </Pressable>
+        </View>
+      ) : null}
       <View style={styles.headerRow}>
         <AppText style={styles.sectionLabel}>Date Range</AppText>
         {hasFilter && (
@@ -98,6 +121,23 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   clearText: { fontSize: 11 },
+  cardFilterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  cardChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Colors.mainColour1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  cardChipText: { fontSize: 11 },
   dateRow: {
     flexDirection: "row",
     gap: 10,

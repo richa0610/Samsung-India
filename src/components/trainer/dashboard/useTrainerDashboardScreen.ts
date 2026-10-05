@@ -1,10 +1,10 @@
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { BackHandler } from "react-native";
 
 import { TrainingAgendaItem, fetchTrainerSummary } from "@/api/training";
 import { DatePreset, DateRange, rangeForPreset } from "@/components/trainer/DateDrop";
 import { useAuth } from "@/hooks/useAuth";
+import { useStaffLogout } from "@/hooks/useStaffLogout";
 import { subscribe } from "@/services/liveEvents";
 import { DashboardTab } from "./DashboardBottomNav";
 import { DashboardStats } from "./dashboardUtils";
@@ -29,7 +29,8 @@ export type TrainerDashboardTab = DashboardTab;
 
 export function useTrainerDashboardScreen() {
   const router = useRouter();
-  const { admin, adminToken, adminLogout } = useAuth();
+  const { admin, adminToken } = useAuth();
+  const { confirmLogoutOpen, requestLogout, cancelLogout, confirmLogout } = useStaffLogout();
 
   const [activeTab, setActiveTab] = useState<TrainerDashboardTab>("home");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -54,9 +55,6 @@ export function useTrainerDashboardScreen() {
   const [recentCompleted, setRecentCompleted] = useState<TrainingAgendaItem[]>([]);
   const [loadingAgenda, setLoadingAgenda] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // Shared by the header's power button AND the hardware/gesture back
-  // button below - either one opens the same confirmation.
-  const [confirmLogoutOpen, setConfirmLogoutOpen] = useState(false);
 
   const loadAgenda = useCallback(
     async (mode: "load" | "refresh" | "silent" = "load") => {
@@ -105,20 +103,6 @@ export function useTrainerDashboardScreen() {
     }, [loadAgenda]),
   );
 
-  // Hardware/gesture back on this screen asks for confirmation instead of
-  // leaving straight away - same popup and destination as the header's
-  // power button. Only registered while this screen is actually focused,
-  // so it doesn't swallow back-presses on other screens.
-  useFocusEffect(
-    useCallback(() => {
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-        setConfirmLogoutOpen(true);
-        return true;
-      });
-      return () => subscription.remove();
-    }, []),
-  );
-
   const applyDateRange = (range: DateRange, preset: DatePreset) => {
     // Just update the filter and stay on the dashboard - the agenda/stats
     // re-fetch on their own because `loadAgenda`/`loadMonthAgenda` depend on
@@ -130,16 +114,6 @@ export function useTrainerDashboardScreen() {
     setDatePreset(preset);
     setFilterApplied(true);
     setDateDropOpen(false);
-  };
-
-  const requestLogout = () => setConfirmLogoutOpen(true);
-
-  const cancelLogout = () => setConfirmLogoutOpen(false);
-
-  const confirmLogout = () => {
-    setConfirmLogoutOpen(false);
-    adminLogout();
-    router.replace("/");
   };
 
   const handleLaunch = (conferenceUid: string) => {
@@ -155,24 +129,37 @@ export function useTrainerDashboardScreen() {
     if (tab === "home") {
       // Return to home view
     } else if (tab === "plan") {
-      // Only carry the calendar range over if the trainer actually applied
-      // one - otherwise `dateRange` is still just its "today" default, and
-      // forwarding it would make the Sessions screen's "All" tab silently
-      // show only today's sessions instead of everything.
-      router.push(
-        filterApplied
-          ? {
-              pathname: "/sessions",
-              params: { start: toApiDate(dateRange.start), end: toApiDate(dateRange.end) },
-            }
-          : "/sessions",
-      );
+      router.push("/sessions");
     } else if (tab === "today") {
       router.push({ pathname: "/sessions", params: { tab: "today" } });
     } else if (tab === "profile") {
       router.push("/trainer_profile");
     } else if (tab === "more") {
       setMenuOpen(true);
+    }
+  };
+
+  const handleStatCardPress = (cardKey: "total" | "completed" | "planned" | "missed" | "ongoing") => {
+    const dateParams = {
+      start: toApiDate(dateRange.start),
+      end: toApiDate(dateRange.end),
+    };
+
+    if (cardKey === "total") {
+      router.push({
+        pathname: "/sessions",
+        params: { ...dateParams, tab: "all", status: "total" },
+      });
+    } else if (cardKey === "completed") {
+      router.push({
+        pathname: "/sessions",
+        params: { ...dateParams, tab: "completed", status: "completed" },
+      });
+    } else {
+      router.push({
+        pathname: "/sessions",
+        params: { ...dateParams, tab: "all", status: cardKey },
+      });
     }
   };
 
@@ -196,6 +183,7 @@ export function useTrainerDashboardScreen() {
     cancelLogout,
     confirmLogout,
     handleLaunch,
+    handleStatCardPress,
     closePanels,
     handleBottomNavSelect,
   };

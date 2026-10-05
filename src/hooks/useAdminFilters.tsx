@@ -1,11 +1,12 @@
 import { ReactNode, createContext, useCallback, useContext, useMemo, useState } from "react";
 
-import { AdminFilters, EMPTY_ADMIN_FILTERS, defaultAdminFilters } from "@/api/adminFilters";
+import { AdminFilters, EMPTY_ADMIN_FILTERS, defaultAdminFilters, monthToDateAdminFilters } from "@/api/adminFilters";
 
-/** "home" is the admin dashboard's own filter; "lists" is shared by the Training and
- *  Attendance list pages; "trainee" is the trainee dashboard's date range. Setting
+/** "home" is the admin dashboard's own filter; "lists" is shared by the admin Training and
+ *  Attendance list pages; "trainerLists" by every list in the trainer's flow (Training,
+ *  Attendance and Trainee lists); "trainee" is the trainee dashboard's date range. Setting
  *  one never changes the others. */
-export type AdminFilterScope = "home" | "lists" | "trainee";
+export type AdminFilterScope = "home" | "lists" | "trainerLists" | "trainee";
 
 type ScopedFilters = Record<AdminFilterScope, AdminFilters>;
 
@@ -17,16 +18,20 @@ type AdminFiltersContextValue = {
 
 const AdminFiltersContext = createContext<AdminFiltersContextValue | null>(null);
 
-// Only the dashboard ("home") starts pre-filtered (to today) - the
-// list pages and the trainee dashboard start unfiltered (showing everything)
-// until the user explicitly applies a range.
-const defaultForScope = (scope: AdminFilterScope): AdminFilters =>
-  scope === "home" ? defaultAdminFilters() : EMPTY_ADMIN_FILTERS;
+// The admin dashboard ("home") starts on today and the trainer's lists on this month so far (1st to
+// today); the admin list pages and the trainee dashboard start unfiltered (showing everything)
+// until the user applies a range. Clearing a filter returns it to this starting point.
+const defaultForScope = (scope: AdminFilterScope): AdminFilters => {
+  if (scope === "home") return defaultAdminFilters();
+  if (scope === "trainerLists") return monthToDateAdminFilters();
+  return EMPTY_ADMIN_FILTERS;
+};
 
 export function AdminFiltersProvider({ children }: { children: ReactNode }) {
   const [filters, setFilters] = useState<ScopedFilters>(() => ({
     home: defaultForScope("home"),
     lists: defaultForScope("lists"),
+    trainerLists: defaultForScope("trainerLists"),
     trainee: defaultForScope("trainee"),
   }));
 
@@ -56,6 +61,8 @@ export function useAdminFilters(scope: AdminFilterScope) {
       appliedKey: JSON.stringify(applied),
       apply: (next: AdminFilters) => apply(scope, next),
       clear: () => clear(scope),
+      /** What `clear` returns this scope to. */
+      defaults: defaultForScope(scope),
     }),
     [applied, apply, clear, scope],
   );

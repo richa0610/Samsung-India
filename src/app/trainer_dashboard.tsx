@@ -30,6 +30,7 @@ export default function TrainerDashboardScreen() {
     cancelLogout,
     confirmLogout,
     handleLaunch,
+    handleStatCardPress,
     closePanels,
     handleBottomNavSelect,
   } = useTrainerDashboardScreen();
@@ -51,6 +52,7 @@ export default function TrainerDashboardScreen() {
           onOpenProfile={() => router.push("/trainer_profile")}
           onLogout={requestLogout}
           onSelectSession={handleLaunch}
+          onPressStatCard={handleStatCardPress}
         />
 
         <DashboardBottomNav activeTab={activeTab} onSelectTab={handleBottomNavSelect} />

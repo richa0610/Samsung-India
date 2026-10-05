@@ -8,6 +8,7 @@ owns O_N1; B_N1 lives in BETA.
 
 import base64
 import json
+from datetime import datetime
 
 from app.models.admin import Admin
 from app.models.attendance import Attendance
@@ -175,6 +176,37 @@ class TraineeListAndPendingTraineeList(ListTestCase):
 
     def test_a_malformed_cursor_is_a_clean_400(self):
         self.assertEqual(self.get("trainer1", self.PAGE + "&cursor=not-a-cursor").status_code, 400)
+
+    def register_on(self, when, *trainee_uids):
+        self.alpha.query(Trainee).filter(Trainee.traineeUid.in_(trainee_uids)).update(
+            {"timestamp": datetime.fromisoformat(when)}, synchronize_session=False
+        )
+        self.alpha.commit()
+
+    def test_the_registration_date_range_narrows_the_list_whole_days_inclusive(self):
+        self.register_on("2026-01-15 10:00:00", *TRAINER1_TRAINEES)
+        self.register_on("2026-10-01 00:00:00", "TR-S_N1-0")      # first moment of the range
+        self.register_on("2026-10-31 23:59:59", "TR-S_N1-1")      # last moment of the range
+        self.register_on("2026-11-01 00:00:00", "TR-S_DEL-0")     # just after it
+        self.register_on("2026-10-10 12:00:00", "TR-OTHER-TRAINER")   # in range, but not trainer1's
+        body = self.page("trainer1", self.PAGE + "&start=2026-10-01&end=2026-10-31")
+        self.assertEqual(self.keys(body["items"]), {"TR-S_N1-0", "TR-S_N1-1"})
+        self.assertEqual(body["total"], 2)
+        pending = self.page("trainer1", self.PAGE + "&mode=pending&start=2026-10-01&end=2026-10-31")
+        self.assertLessEqual(self.keys(pending["items"]), {"TR-S_N1-0", "TR-S_N1-1"})
+        walked = self.walk("trainer1", "/admin/trainees/page?start=2026-10-01&end=2026-10-31&sort=name&dir=asc")
+        self.assertEqual(self.keys(walked), {"TR-S_N1-0", "TR-S_N1-1"})   # the cursor keeps the range
+
+    def test_either_end_of_the_range_may_be_left_open(self):
+        self.register_on("2026-01-15 10:00:00", *TRAINER1_TRAINEES)
+        self.register_on("2026-11-01 00:00:00", "TR-S_DEL-0")
+        self.assertEqual(self.keys(self.page("trainer1", self.PAGE + "&start=2026-10-01")["items"]), {"TR-S_DEL-0"})
+        self.assertEqual(self.keys(self.page("trainer1", self.PAGE + "&end=2026-10-31")["items"]), TRAINER1_TRAINEES - {"TR-S_DEL-0"})
+
+    def test_bad_registration_dates_are_422(self):
+        for query in ("&start=2026-13-01", "&end=yesterday", "&start=' OR '1'='1"):
+            with self.subTest(query=query):
+                self.assertEqual(self.get("trainer1", self.PAGE + query).status_code, 422)
 
     def test_another_tenant_never_appears(self):
         body = self.page("trainer1", self.PAGE, **{"X-Tenant-ID": BETA})

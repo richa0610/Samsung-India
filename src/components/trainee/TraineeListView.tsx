@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -25,6 +26,8 @@ type TraineeListViewProps = {
   emptyLabel: string;
   /** Server-driven mode: the list loads a page at a time and the server searches / sorts. */
   paged?: PagedTraineeList;
+  /** Shown above the table, e.g. the date filter bar (as in the Training / Attendance lists). */
+  topContent?: ReactNode;
 };
 
 export function TraineeListView({
@@ -38,6 +41,7 @@ export function TraineeListView({
   exportFileName,
   emptyLabel,
   paged,
+  topContent,
 }: TraineeListViewProps) {
   const insets = useSafeAreaInsets();
   const columns = useTraineeListColumns();
@@ -77,6 +81,7 @@ export function TraineeListView({
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.mainColour1]} tintColor={Colors.mainColour1} />}
       >
+        {topContent}
         {loading ? (
           <View style={styles.centered}>
             <ActivityIndicator color={Colors.mainColour1} />

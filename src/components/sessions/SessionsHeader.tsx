@@ -5,12 +5,11 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { SelectOption } from "@/components/ui/SearchableSelect";
 import { Colors } from "@/theme/colors";
-import { formatMonthToToday } from "@/utils";
 import SessionsFilterPanel from "./SessionsFilterPanel";
 import { SessionFilters, SessionTab } from "./sessionsUtils";
 
 type SessionsHeaderProps = {
-  dateRangeText?: string;
+  dateRangeText: string;
   activeTab: SessionTab;
   onSelectTab: (tab: SessionTab) => void;
   onSearchChange?: (text: string) => void;
@@ -21,7 +20,7 @@ type SessionsHeaderProps = {
 };
 
 export default function SessionsHeader({
-  dateRangeText = formatMonthToToday(),
+  dateRangeText,
   activeTab,
   onSelectTab,
   onSearchChange,

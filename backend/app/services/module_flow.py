@@ -210,12 +210,7 @@ def auto_advance_if_due(db: Session, conference: Conference) -> bool:
     # UPDATE only succeeds for whichever request's transaction gets there
     # first (MySQL row-locks it until commit); the loser matches 0 rows and
     # backs off without logging anything.
-    claimed = (
-        db.query(Conference)
-        .filter(Conference.conferenceUid == conference.conferenceUid, Conference.activeModuleId.is_(None))
-        .update({"activeModuleId": next_module}, synchronize_session=False)
-    )
-    if not claimed:
+    if not conference_repository.claim_active_module(db, conference.conferenceUid, None, next_module):
         return False
 
     conference.activeModuleId = next_module

@@ -20,6 +20,7 @@ from app.schemas.session import TrainingDetailOut, TrainingModuleDetail, Trainin
 from app.services import session_service
 from app.services.module_flow import configured_modules, live_quiz_suite_uid
 from app.services.trainee_dashboard_service import _fmt_score, _trainee_status_for
+from app.services import trainee_access
 
 
 def _suite_for_module(conference: Conference, module_key: str) -> str | None:
@@ -54,6 +55,20 @@ def _attendance_module(attendance, overall_status: str) -> TrainingModuleDetail:
     )
 
 
+def _reviewable_questions(
+    questions: list[Question], answers_by_qid: dict, module_key: str, submitted: bool, session_over: bool
+) -> list[Question]:
+    """The questions - with their correct answers - this trainee may review. Once the training is
+    over, all of them. Until then only what can't help them, or anyone they'd tell, answer it: a
+    module they've submitted, and in the Live Quiz just the questions that reached them (answered
+    or timed out - the live screen already showed those answers), never one still to be asked."""
+    if session_over:
+        return questions
+    if module_key == "LIVE_QUIZ":
+        return [q for q in questions if str(q.id) in answers_by_qid]
+    return questions if submitted else []
+
+
 def _assessment_module(
     db: Session, conference_uid: str, trainee_uid: str, module_key: str, suite_uid: str | None, session_over: bool
 ) -> TrainingModuleDetail:
@@ -68,7 +83,7 @@ def _assessment_module(
     }
 
     attempts: list[TrainingQuestionAttempt] = []
-    for q in questions:
+    for q in _reviewable_questions(questions, answers_by_qid, module_key, result is not None, session_over):
         answer = answers_by_qid.get(str(q.id))
         selected_id = answer.selectedOption if answer else None
         options = _question_options(q)
@@ -110,7 +125,9 @@ def _assessment_module(
 
 def get_training_detail(db: Session, trainee: Trainee, conference_uid: str) -> TrainingDetailOut:
     conference = conference_repository.get_by_uid(db, conference_uid)
-    if not conference:
+    # Only a session this trainee took part in (on its roster, or with a result there) - any other
+    # ID looks the same as one that doesn't exist.
+    if not conference or not trainee_access.has_taken_part(db, trainee, conference_uid):
         raise not_found("Training not found")
 
     attendance = attendance_repository.get_for_conference_and_trainee(db, conference_uid, trainee.traineeUid)

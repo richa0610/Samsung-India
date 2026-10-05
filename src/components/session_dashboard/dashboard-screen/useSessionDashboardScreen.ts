@@ -1,5 +1,5 @@
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Share } from "react-native";
 
 import { ApiError } from "@/api/client";
@@ -9,6 +9,7 @@ import {
   broadcastLiveQuestion,
   checkTrainingSchedule,
   endTraining,
+  fetchJoinLink,
   fetchSessionDashboard,
   markAttendance,
   restartModule,
@@ -106,30 +107,79 @@ export function useSessionDashboardScreen() {
       .catch(() => {});
   }, []);
 
+  // Background refreshes (the 5s poll and every Live Quiz nudge - one per trainee answer) are
+  // coalesced: while one is on its way, further ones only mark "refresh again once it's back", so a
+  // burst of nudges costs at most one request in flight plus one follow-up, never a pile of them.
+  // User actions (start/stop/restart module) pass mode="action", which never skips or gets coalesced,
+  // incrementing requestId so any in-flight background poll cannot overwrite the fresh state.
+  const inFlight = useRef(false);
+  const refreshAgain = useRef(false);
+  const requestId = useRef(0);
+  // A finished session's dashboard no longer changes by itself: it isn't polled (pull to refresh
+  // and actions still reload it).
+  const finished = useRef(false);
+  // The follow-up refresh calls the latest `loadData` through this ref (kept current below).
+  const loadDataRef = useRef<(mode?: "load" | "refresh" | "silent" | "action") => Promise<void>>(async () => {});
+
+  const showDashboard = useCallback((res: SessionDashboard) => {
+    setData(res);
+    setGeneratedAt(new Date());
+    finished.current = res.conferenceStatus === "Completed" || res.conferenceStatus === "Cancelled";
+  }, []);
+
+  // A Live Quiz button's reply is the dashboard as of that press - newer than any background
+  // refresh still on its way, so it supersedes them (their replies are dropped) rather than being
+  // overwritten a moment later, which would flip e.g. Stop Timer back to its old label.
+  const showActionResult = useCallback(
+    (res: SessionDashboard) => {
+      ++requestId.current;
+      inFlight.current = false;
+      showDashboard(res);
+    },
+    [showDashboard],
+  );
+
   const loadData = useCallback(
-    async (mode: "load" | "refresh" | "silent" = "load") => {
+    async (mode: "load" | "refresh" | "silent" | "action" = "load") => {
       if (!adminToken) return;
+      if (mode === "silent" && inFlight.current) {
+        refreshAgain.current = true;
+        return;
+      }
+      const id = ++requestId.current;
+      inFlight.current = true;
       if (mode === "refresh") setRefreshing(true);
       else if (mode === "load") setLoading(true);
 
       try {
         const res = await fetchSessionDashboard(adminToken, conferenceUid);
-        setData(res);
-        setGeneratedAt(new Date());
+        if (id === requestId.current) showDashboard(res);
       } catch {
         // Fallback / gracefully keep state
       } finally {
         if (mode === "refresh") setRefreshing(false);
         else if (mode === "load") setLoading(false);
+        if (id === requestId.current) {
+          inFlight.current = false;
+          if (refreshAgain.current) {
+            refreshAgain.current = false;
+            loadDataRef.current("silent");
+          }
+        }
       }
     },
-    [adminToken, conferenceUid],
+    [adminToken, conferenceUid, showDashboard],
   );
+  useEffect(() => {
+    loadDataRef.current = loadData;
+  }, [loadData]);
 
   useFocusEffect(
     useCallback(() => {
       loadData();
-      const interval = setInterval(() => loadData("silent"), 5000);
+      const interval = setInterval(() => {
+        if (!finished.current) loadData("silent");
+      }, 5000);
       return () => clearInterval(interval);
     }, [loadData]),
   );
@@ -148,8 +198,7 @@ export function useSessionDashboardScreen() {
     if (broadcastingQuestionId != null || !adminToken) return;
     setBroadcastingQuestionId(questionId);
     try {
-      const updated = await broadcastLiveQuestion(adminToken, conferenceUid, questionId);
-      setData(updated);
+      showActionResult(await broadcastLiveQuestion(adminToken, conferenceUid, questionId));
     } catch (err) {
       Alert.alert(
         "Broadcast Failed",
@@ -159,13 +208,20 @@ export function useSessionDashboardScreen() {
       setBroadcastingQuestionId(null);
     }
   };
+  // Stop Timer / Play Timer - pauses (or resumes) the question for the trainer and every trainee.
+  // Sends the button the trainer sees, so the server never blindly toggles from a stale screen.
   const handleStopLiveTimer = async () => {
     if (stoppingTimer || !adminToken) return;
+    const pause = data?.liveStudio?.timerRemainingMs == null;
     setStoppingTimer(true);
     try {
-      setData(await stopLiveTimer(adminToken, conferenceUid));
-    } catch {
-      // Fallback / gracefully keep state.
+      showActionResult(await stopLiveTimer(adminToken, conferenceUid, pause));
+    } catch (err) {
+      Alert.alert(
+        pause ? "Couldn't stop the timer" : "Couldn't restart the timer",
+        err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
+      );
+      await loadData("action"); // show where the quiz really is now
     } finally {
       setStoppingTimer(false);
     }
@@ -174,7 +230,7 @@ export function useSessionDashboardScreen() {
     if (showingLeaderboard || !adminToken) return;
     setShowingLeaderboard(true);
     try {
-      setData(await showLiveLeaderboard(adminToken, conferenceUid));
+      showActionResult(await showLiveLeaderboard(adminToken, conferenceUid));
     } catch {
       // Fallback / gracefully keep state.
     } finally {
@@ -185,7 +241,7 @@ export function useSessionDashboardScreen() {
     if (showingLobby || !adminToken) return;
     setShowingLobby(true);
     try {
-      setData(await showLiveLobby(adminToken, conferenceUid));
+      showActionResult(await showLiveLobby(adminToken, conferenceUid));
     } catch {
       // Fallback / gracefully keep state.
     } finally {
@@ -194,13 +250,15 @@ export function useSessionDashboardScreen() {
   };
 
   const handleCopyLink = async () => {
+    if (!adminToken) return;
     try {
-      // Same deep link the QR encodes - opens the app on the join screen
+      // Same signed deep link the QR encodes - opens the app on the join screen
       // (samsungindia:// scheme, see app.json). Tapping it in a chat app
       // on an Android device with the app installed opens it directly.
-      await Share.share({ message: `Join the training session: samsungindia://join/${conferenceUid}` });
-    } catch {
-      // Ignored
+      const link = await fetchJoinLink(adminToken, conferenceUid);
+      await Share.share({ message: `Join the training session: ${link}` });
+    } catch (err) {
+      if (err instanceof ApiError) Alert.alert("Couldn't share", err.message);
     }
   };
 
@@ -285,7 +343,7 @@ export function useSessionDashboardScreen() {
       setScheduleOverride(null);
       setPendingScheduleReason(undefined);
       setHasStarted(true);
-      loadData("silent");
+      loadData("action");
     } catch (err) {
       const body = err instanceof ApiError ? (err.body as { code?: string } | null) : null;
       // OUTSIDE_VENUE offers the one-time "update the venue location?"
@@ -429,12 +487,37 @@ export function useSessionDashboardScreen() {
     setStartingModuleKey(moduleKey);
     try {
       await startModule(adminToken, conferenceUid, moduleKey);
-      await loadData("silent");
+      // Optimistically flip the module to Running so the UI immediately
+      // reflects the active module without flickering back to "Start".
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          activeModuleId: moduleKey,
+          executionFlow: (prev.executionFlow || []).map((item) => {
+            if (item.moduleKey === moduleKey) {
+              return {
+                ...item,
+                status: "Running",
+                startedAt: item.startedAt || new Date().toISOString(),
+                canStart: false,
+                canRestart: false,
+              };
+            }
+            return {
+              ...item,
+              canStart: false,
+            };
+          }),
+        };
+      });
+      await loadData("action");
     } catch (err) {
       Alert.alert(
         "Couldn't start the module",
         err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
       );
+      await loadData("action");
     } finally {
       setStartingModuleKey(null);
     }
@@ -446,14 +529,37 @@ export function useSessionDashboardScreen() {
   const confirmStopActiveModule = async () => {
     setConfirmEndModuleOpen(false);
     if (!adminToken) return;
+    const activeKey = data?.activeModuleId;
     try {
       await stopActiveModule(adminToken, conferenceUid);
-      loadData("silent");
+      if (activeKey) {
+        setData((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            activeModuleId: null,
+            executionFlow: (prev.executionFlow || []).map((item) => {
+              if (item.moduleKey === activeKey) {
+                return {
+                  ...item,
+                  status: "Completed",
+                  endedAt: item.endedAt || new Date().toISOString(),
+                  canStart: false,
+                  canRestart: true,
+                };
+              }
+              return item;
+            }),
+          };
+        });
+      }
+      await loadData("action");
     } catch (err) {
       Alert.alert(
         "Couldn't end the module",
         err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
       );
+      await loadData("action");
     }
   };
 
@@ -462,12 +568,37 @@ export function useSessionDashboardScreen() {
     setRestartingModuleKey(moduleKey);
     try {
       await restartModule(adminToken, conferenceUid, moduleKey);
-      await loadData("silent");
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          activeModuleId: moduleKey,
+          executionFlow: (prev.executionFlow || []).map((item) => {
+            if (item.moduleKey === moduleKey) {
+              return {
+                ...item,
+                status: "Running",
+                startedAt: new Date().toISOString(),
+                endedAt: null,
+                elapsedSeconds: 0,
+                canStart: false,
+                canRestart: false,
+              };
+            }
+            return {
+              ...item,
+              canStart: false,
+            };
+          }),
+        };
+      });
+      await loadData("action");
     } catch (err) {
       Alert.alert(
         "Couldn't restart the module",
         err instanceof ApiError ? err.message : "Something went wrong. Please try again.",
       );
+      await loadData("action");
     } finally {
       setRestartingModuleKey(null);
     }
@@ -494,7 +625,11 @@ export function useSessionDashboardScreen() {
     try {
       await endTraining(adminToken, conferenceUid, photo, attendanceSheet, totalPax);
       setShowCheckOutModal(false);
-      router.replace("/trainer_dashboard");
+      if (isAdmin) {
+        router.replace("/admin_training_list");
+      } else {
+        router.replace("/trainer_dashboard");
+      }
     } catch (err) {
       Alert.alert(
         "Couldn't end the session",

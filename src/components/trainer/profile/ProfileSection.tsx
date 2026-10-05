@@ -12,7 +12,8 @@ type ProfileSectionProps = {
   title: string;
   editing: boolean;
   saving?: boolean;
-  onToggleEdit: () => void;
+  /** Omitted for a view-only section: no EDIT button. */
+  onToggleEdit?: () => void;
   children: React.ReactNode;
 };
 
@@ -26,7 +27,7 @@ export function ProfileSection({ icon, title, editing, saving, onToggleEdit, chi
             {title}
           </AppText>
         </View>
-        <Pressable style={styles.editButton} onPress={onToggleEdit} disabled={saving} hitSlop={4}>
+        {onToggleEdit && <Pressable style={styles.editButton} onPress={onToggleEdit} disabled={saving} hitSlop={4}>
           {saving ? (
             <ActivityIndicator size="small" color={Colors.gray600} />
           ) : (
@@ -35,7 +36,7 @@ export function ProfileSection({ icon, title, editing, saving, onToggleEdit, chi
               <AppText style={styles.editButtonText} color={Colors.gray600}>{editing ? "SAVE" : "EDIT"}</AppText>
             </>
           )}
-        </Pressable>
+        </Pressable>}
       </View>
       {children}
     </AppCard>

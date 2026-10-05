@@ -158,6 +158,19 @@ def resolve_scope(common_db: Session, principal: object, tenant_id: Optional[str
     return AccessScope.denied(tenant, "unknown principal")
 
 
+def granted_companies(scope: AccessScope) -> Optional[frozenset[str]]:
+    """The companies (normalized) an admin-panel grant covers: None = every company (a Super
+    Admin), otherwise the companies its rules name - empty for no admin-panel access. Zone/region
+    can't narrow it: no trainer record carries a zone of its own. The one rule for "which
+    companies' trainers may this admin see or assign" (trainer dropdowns, assignment, the
+    dashboard's trainer pool)."""
+    if not scope.is_admin_panel:
+        return frozenset()
+    if scope.is_super:
+        return None
+    return frozenset(rule.company for rule in scope.rules)
+
+
 def reject_outside_scope(scope: AccessScope, company: Optional[str], zone: Optional[str], region: Optional[str]) -> None:
     """For an admin-panel account creating or moving a record (a training, a trainee): the
     company/zone/region it will carry must be inside the caller's grant - the same `allows_row`

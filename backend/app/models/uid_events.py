@@ -1,6 +1,7 @@
 """``before_insert`` hooks that fill each model's identifier column with a
-sequential ``<PREFIX>26NNNNN`` value (see ``app/utils/uid.py``) whenever one
-wasn't set explicitly. Registered for every table whose UID used to default
+sequential ``<PREFIX><YY>NNNNN`` value (see ``app/utils/uid.py``) whenever one
+wasn't set explicitly - except a training (conference), whose public ID is
+``app/utils/conference_id.py``'s non-sequential format. Registered for every table whose UID used to default
 to ``uuid4().hex``.
 
 Imported for its side effects by ``app/models/__init__.py`` (last, after all
@@ -21,11 +22,11 @@ from app.models.logs_master import LogsMaster
 from app.models.quiz import Assessment, AssessmentResult, AssessmentSuite
 from app.models.trainee import Trainee
 from app.models.venue import Venue
+from app.utils.conference_id import new_conference_uid
 from app.utils.uid import next_uid
 
 # (model, uid attribute, prefix)
 REGISTRY = [
-    (Conference, "conferenceUid", "CONF"),
     (LogsMaster, "logsUid", "LOG"),
     (Trainee, "traineeUid", "TRN"),
     (Venue, "venueUid", "VEN"),
@@ -52,3 +53,12 @@ def _register(model, attr, prefix):
 
 for _model, _attr, _prefix in REGISTRY:
     _register(_model, _attr, _prefix)
+
+
+@event.listens_for(Conference, "before_insert")
+def _fill_conference_uid(mapper, connection, target):
+    """A training's public ID: CONF + YY + opaque company / trainer codes + random digits
+    (app/utils/conference_id.py) - not the sequential counter the other tables use, so training
+    IDs can't be listed by counting."""
+    if not target.conferenceUid:
+        target.conferenceUid = new_conference_uid(connection, target.company, target.trainerEmployeeId)

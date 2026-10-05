@@ -15,6 +15,7 @@ from app.dependencies.filters import ConferenceFilters
 from app.models.admin import Admin
 from app.repositories import assessment_repository, attendance_repository, conference_repository, trainee_repository
 from app.schemas.training import AttendanceListItemOut
+from tests import _legacy_queries as legacy_queries
 
 
 def legacy_list_attendance(
@@ -26,15 +27,15 @@ def legacy_list_attendance(
     same as list_trainer_trainings - this lives in the trainer's own More
     menu, not a cross-trainer admin view."""
     if org:
-        conferences = [c for c in conference_repository.list_all(db) if filters is None or filters.matches(c)]
+        conferences = [c for c in legacy_queries.conference_list_all(db) if filters is None or filters.matches(c)]
     else:
-        conferences = conference_repository.list_all_for_trainer(db, admin.username)
+        conferences = legacy_queries.conference_list_all_for_trainer(db, admin.username)
     conference_by_uid = {c.conferenceUid: c for c in conferences}
     conference_uids = list(conference_by_uid.keys())
     if not conference_uids:
         return []
 
-    attendance_rows = attendance_repository.list_for_conferences(db, conference_uids)
+    attendance_rows = legacy_queries.attendance_list_for_conferences(db, conference_uids)
 
     trainee_uids = {a.traineeUid for a in attendance_rows}
     trainees_by_uid = {t.traineeUid: t for t in trainee_repository.get_by_uids(db, trainee_uids)}

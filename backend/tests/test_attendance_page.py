@@ -306,10 +306,6 @@ class SearchTests(AttendancePageTestCase):
 
 class StatementBudgetTests(AttendancePageTestCase):
     def count_statements(self, **kwargs):
-        # Measures an uncached request; count reuse itself is tested in test_phase3_pagination.
-        from app.repositories import keyset
-
-        keyset.clear_count_cache()
         seen = []
 
         def listener(conn, cursor, statement, params, context, executemany):

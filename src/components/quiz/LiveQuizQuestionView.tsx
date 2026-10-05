@@ -12,13 +12,30 @@ type Props = {
   secondsLeft: number;
   selectedOption: string | null;
   locked: boolean;
+  /** The trainer stopped the timer: the clock is frozen and answering waits for Play. */
+  paused?: boolean;
   onSelect: (optionId: string) => void;
 };
 
-export default function LiveQuizQuestionView({ question, secondsLeft, selectedOption, locked, onSelect }: Props) {
+export default function LiveQuizQuestionView({
+  question,
+  secondsLeft,
+  selectedOption,
+  locked,
+  paused = false,
+  onSelect,
+}: Props) {
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      <QuizTimer remainingSeconds={secondsLeft} size={116} />
+      <QuizTimer remainingSeconds={secondsLeft} size={116} borderColor={paused ? Colors.gray500 : undefined} />
+
+      {paused && (
+        <View style={styles.pausedBanner} accessibilityRole="alert">
+          <AppText color={Colors.white} weight={FontWeight.bold} style={styles.pausedText}>
+            Paused by trainer - answers open again when the timer restarts
+          </AppText>
+        </View>
+      )}
 
       <View style={styles.card}>
         <AppText style={styles.questionText} color={Colors.black} weight={FontWeight.bold}>
@@ -32,7 +49,7 @@ export default function LiveQuizQuestionView({ question, secondsLeft, selectedOp
               letter={String.fromCharCode(65 + index)}
               text={option.text}
               isSelected={selectedOption === option.id}
-              disabled={locked}
+              disabled={locked || paused}
               onSelect={() => onSelect(option.id)}
             />
           ))}
@@ -54,4 +71,6 @@ const styles = StyleSheet.create({
   questionText: { fontSize: 15, lineHeight: 21 },
   options: { gap: 10 },
   lockedNote: { fontSize: 12, marginTop: 4 },
+  pausedBanner: { backgroundColor: Colors.gray600, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  pausedText: { fontSize: 12, textAlign: "center" },
 });

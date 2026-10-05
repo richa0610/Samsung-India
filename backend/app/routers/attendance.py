@@ -1,15 +1,9 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, UploadFile
-from sqlalchemy.orm import Session
-
-from app.dependencies.auth import get_current_trainee
-from app.dependencies.database import get_db, get_tenant_id_from_request
 import json
-import math
 import uuid
-from typing import Optional
 
 from fastapi import (
     APIRouter,
+    BackgroundTasks,
     Depends,
     File,
     Form,
@@ -23,9 +17,9 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.media import ALLOWED_IMAGE_CONTENT_TYPES, MAX_UPLOAD_BYTES, media_subdir
 from app.dependencies.auth import get_current_trainee
+from app.dependencies.database import get_db, get_tenant_id_from_request
 from app.models.attendance import Attendance
 from app.models.attendance_log import AttendanceLog
-from app.models.conference import Conference
 from app.models.trainee import Trainee
 from app.schemas.attendance import (
     AttendanceOut,
@@ -61,11 +55,8 @@ def check_in(
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    conference = (
-        db.query(Conference)
-        .filter(Conference.conferenceUid == payload.conferenceUid)
-        .first()
-    )
+    # Exists, running, Attendance module open - and locked, so this trainee's row is created once.
+    conference = attendance_service.open_check_in(db, payload.conferenceUid)
     # A geofenced session must be checked into through the secure endpoint,
     # which carries the trainee's coordinates - the plain check-in has none to
     # validate, so refuse it here rather than silently letting it bypass.
@@ -228,11 +219,8 @@ async def check_in_secure(
             detail="Photo must be 5MB or smaller",
         )
 
-    conference = (
-        db.query(Conference)
-        .filter(Conference.conferenceUid == conferenceUid)
-        .first()
-    )
+    # Exists, running, Attendance module open - and locked, so this trainee's row is created once.
+    conference = attendance_service.open_check_in(db, conferenceUid)
 
     # Geofence: a geofenced session rejects a check-in from outside the venue
     # radius. Checked before any DB write so a failed attempt changes nothing.

@@ -172,6 +172,19 @@ def add_result(db: Session, result: AssessmentResult) -> None:
     db.add(result)
 
 
+def has_submitted_result(db: Session, conference_uid: str, trainee_uid: str) -> bool:
+    return (
+        db.query(AssessmentResult.id)
+        .filter(
+            AssessmentResult.conferenceUid == conference_uid,
+            AssessmentResult.traineeUid == trainee_uid,
+            AssessmentResult.status == "Submitted",
+        )
+        .first()
+        is not None
+    )
+
+
 def get_latest_result(
     db: Session, conference_uid: str, trainee_uid: str, suite_uid: str
 ) -> Optional[AssessmentResult]:
@@ -212,19 +225,6 @@ def list_results_for_conferences(db: Session, conference_uids: list[str]) -> lis
     )
 
 
-def list_submitted_pairs(db: Session, conference_uids: list[str]) -> list[tuple[str, str]]:
-    """(conferenceUid, traineeUid) pairs for Submitted results - used to
-    compute real headcounts alongside attendance_repository.list_present_pairs."""
-    if not conference_uids:
-        return []
-    rows = (
-        db.query(AssessmentResult.conferenceUid, AssessmentResult.traineeUid)
-        .filter(AssessmentResult.conferenceUid.in_(conference_uids), AssessmentResult.status == "Submitted")
-        .all()
-    )
-    return [(row.conferenceUid, row.traineeUid) for row in rows]
-
-
 def list_results_for_trainee(db: Session, trainee_uid: str) -> list[AssessmentResult]:
     return (
         db.query(AssessmentResult)
@@ -232,12 +232,6 @@ def list_results_for_trainee(db: Session, trainee_uid: str) -> list[AssessmentRe
         .order_by(AssessmentResult.submittedAt.desc())
         .all()
     )
-
-
-def list_all_submitted_results(db: Session) -> list[AssessmentResult]:
-    """Every Submitted result row, all trainees - the dashboard groups these by
-    trainee and keeps only the Standard Test + Live Quiz suites for ranking."""
-    return db.query(AssessmentResult).filter(AssessmentResult.status == "Submitted").all()
 
 
 def latest_post_test_results_for_pairs(db: Session, pairs: set[tuple[str, str]]) -> dict[tuple[str, str], object]:

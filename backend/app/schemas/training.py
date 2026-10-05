@@ -157,6 +157,13 @@ class TrainingAdminUpdate(TrainingCreate):
     message: OptTextStr = None
 
 
+class JoinCodeOut(BaseModel):
+    """The signed code a training's QR code and share link carry (app/utils/join_code.py)."""
+
+    conferenceUid: str
+    joinCode: str
+
+
 class TrainingOut(BaseModel):
     conferenceUid: str
     conferenceStatus: str
@@ -436,6 +443,12 @@ class AuditLogEntry(BaseModel):
 
 class LiveBroadcastRequest(BaseModel):
     questionId: int
+
+
+class LiveTimerRequest(BaseModel):
+    # The button the trainer pressed: True = Stop Timer, False = Play Timer.
+    # Omitted (older apps send no body) = toggle.
+    paused: Optional[bool] = None
 
 
 class LiveStudioQuestionOut(BaseModel):

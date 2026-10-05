@@ -24,7 +24,13 @@ class Attendance(Base):
     # Serves the admin Attendance List and dashboard: rows of a set of trainings,
     # filtered / grouped by status (e.g. "Present") and paired with the trainee.
     # (conferenceUid, traineeUid) and each column alone are already indexed.
-    __table_args__ = (Index("ix_attendance_conf_status_trainee", "conferenceUid", "status", "traineeUid"),)
+    # ix_attendance_status_trainee: the trainee Dashboard ranking's "everyone ever marked Present"
+    # (DISTINCT traineeUid WHERE status = 'Present') as a covering index range instead of a scan of
+    # every attendance row - 174 -> 20 ms for that step on 100k rows (perf/phase6_experiments.py).
+    __table_args__ = (
+        Index("ix_attendance_conf_status_trainee", "conferenceUid", "status", "traineeUid"),
+        Index("ix_attendance_status_trainee", "status", "traineeUid"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
 

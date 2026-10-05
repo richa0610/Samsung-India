@@ -8,6 +8,7 @@ import QRCode from "react-native-qrcode-svg";
 
 import AppModal from "@/components/ui/AppModal";
 import AppText from "@/components/ui/AppText";
+import { useJoinLink } from "@/hooks/useJoinLink";
 import { Colors } from "@/theme/colors";
 import { FontWeight } from "@/theme/fontWeight";
 
@@ -17,19 +18,17 @@ type SessionQRModalProps = {
   conferenceUid: string;
 };
 
-// Deep link the OS routes to this app (see `scheme` in app.json). Scanning
-// it with a phone camera / Google Lens opens the app straight on the join
-// screen; the same string works as a tappable link shared over chat.
-const joinLink = (code: string) => `samsungindia://join/${code}`;
-
 export default function SessionQRModal({ visible, onClose, conferenceUid }: SessionQRModalProps) {
   const [copied, setCopied] = useState(false);
   const [sharing, setSharing] = useState(false);
   // react-native-qrcode-svg exposes toDataURL() on this ref.
   const qrRef = useRef<{ toDataURL: (cb: (base64: string) => void) => void } | null>(null);
-  const link = joinLink(conferenceUid);
+  // The QR carries the server-signed join link (a deep link the OS routes to this app); a bare
+  // training ID would not be accepted, so nothing is shown until the signed link arrives.
+  const { link, loading, failed, retry } = useJoinLink(conferenceUid, visible);
 
   const handleCopy = async () => {
+    if (!link) return;
     await Clipboard.setStringAsync(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
@@ -39,7 +38,7 @@ export default function SessionQRModal({ visible, onClose, conferenceUid }: Sess
   // trainer can send it over WhatsApp, Telegram, email, Drive, Nearby Share,
   // etc. The recipient scans it live or via the app's "scan from gallery".
   const handleShare = () => {
-    if (!qrRef.current || sharing) return;
+    if (!link || !qrRef.current || sharing) return;
     setSharing(true);
     qrRef.current.toDataURL(async (base64: string) => {
       try {
@@ -75,19 +74,33 @@ export default function SessionQRModal({ visible, onClose, conferenceUid }: Sess
         <View style={styles.qrBox}>
           {/* quietZone = the mandatory white border around a QR; without it
               scanners (esp. decoding a saved image) can't lock onto it. */}
-          <QRCode
-            value={link}
-            size={230}
-            quietZone={16}
-            ecl="Q"
-            getRef={(c) => (qrRef.current = c)}
-          />
+          {link ? (
+            <QRCode
+              value={link}
+              size={230}
+              quietZone={16}
+              ecl="Q"
+              getRef={(c) => (qrRef.current = c)}
+            />
+          ) : (
+            <View style={styles.qrPlaceholder}>
+              {loading ? (
+                <ActivityIndicator color={Colors.mainColour1} />
+              ) : failed ? (
+                <Pressable onPress={retry} hitSlop={8} accessibilityRole="button">
+                  <AppText style={styles.retryText} weight={FontWeight.medium}>
+                    {"Couldn't load the QR code. Tap to retry."}
+                  </AppText>
+                </Pressable>
+              ) : null}
+            </View>
+          )}
         </View>
 
         <Pressable
-          style={[styles.shareBtn, sharing && styles.shareBtnDim]}
+          style={[styles.shareBtn, (sharing || !link) && styles.shareBtnDim]}
           onPress={handleShare}
-          disabled={sharing}
+          disabled={sharing || !link}
         >
           {sharing ? (
             <ActivityIndicator size="small" color={Colors.white} />
@@ -99,7 +112,7 @@ export default function SessionQRModal({ visible, onClose, conferenceUid }: Sess
           )}
         </Pressable>
 
-        <Pressable style={styles.copyBtn} onPress={handleCopy} hitSlop={6}>
+        <Pressable style={styles.copyBtn} onPress={handleCopy} hitSlop={6} disabled={!link}>
           <Ionicons
             name={copied ? "checkmark" : "copy-outline"}
             size={14}
@@ -146,6 +159,8 @@ const styles = StyleSheet.create({
     minWidth: 160,
   },
   shareBtnDim: { opacity: 0.6 },
+  qrPlaceholder: { width: 262, height: 262, alignItems: "center", justifyContent: "center", padding: 16 },
+  retryText: { fontSize: 12, color: Colors.mainColour1, textAlign: "center" },
   shareText: { fontSize: 13.5, color: Colors.white },
   copyBtn: {
     marginTop: 6,

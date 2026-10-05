@@ -1,6 +1,6 @@
 import json
-from collections import Counter, defaultdict
-from datetime import date, datetime
+from collections import defaultdict
+from datetime import datetime
 from typing import Optional
 
 from fastapi import BackgroundTasks, HTTPException, UploadFile, status as http_status
@@ -27,6 +27,7 @@ from app.repositories import (
 from app.routers.ws import manager as ws_manager
 from app.services import conference_access
 from app.services.access_service import AccessScope, own_trainings_username, resolve_scope
+from app.utils import join_code
 from app.utils.date_utils import ist_now, ist_to_iso, parse_module_start, to_utc_iso, utc_now
 from app.utils.helpers import geofence_enabled, within_geofence
 from app.utils.status import title_status
@@ -36,10 +37,12 @@ from app.schemas.training import (
     AttendanceConfig,
     AttendanceListItemOut,
     AttendanceMarkRequest,
+    AttendancePageResponse,
     AttendanceResetRequest,
     AudienceBreakdown,
     AuditLogEntry,
     ExecutionFlowItem,
+    JoinCodeOut,
     ModuleConfig,
     ProctoringUnlockRequest,
     SessionDashboardOut,
@@ -51,14 +54,13 @@ from app.schemas.training import (
     TopPerformer,
     TraineeRow,
     TrainerSummaryOut,
-    TrainingPageResponse,
-    AttendancePageResponse,
     TrainingAdminUpdate,
     TrainingAgendaItem,
     TrainingCreate,
     TrainingDetailOut,
     TrainingFacetsOut,
     TrainingOut,
+    TrainingPageResponse,
 )
 from app.services import live_quiz_service
 from app.services import placement_rules
@@ -644,12 +646,16 @@ def update_training(
 
     decision = None
     if payload.approvalStatus and payload.approvalStatus != title_status(conference.status):
+        _ensure_approval_open(conference)
         if payload.approvalStatus in ("Approved", "Rejected") and not (payload.message or "").strip():
             raise bad_request("Add a message explaining why you are approving or rejecting this training.")
         conference.status = payload.approvalStatus
         decision = payload.approvalStatus
 
     if payload.trainingStatus and payload.trainingStatus != title_status(conference.conferenceStatus):
+        # A finished training is final - its status can't be changed to anything else.
+        if title_status(conference.conferenceStatus) == "Completed":
+            raise conflict("A completed training's status can't be changed")
         conference.conferenceStatus = payload.trainingStatus
 
     if payload.message and payload.message.strip():
@@ -678,6 +684,11 @@ def update_training(
         conferenceStatus=conference.conferenceStatus,
         status=conference.status,
     )
+
+
+# A concurrent request changed the session between reading and writing it (see
+# conference_repository.claim_active_module / claim_end); this one backs off.
+_SESSION_CHANGED = "The session was just changed by another action - refresh and try again"
 
 
 def _get_owned_conference(
@@ -729,23 +740,14 @@ def list_all_performers(
     ]
 
 
-def _real_trainee_uids_by_conference(db: Session, conference_uids: list[str]) -> dict[str, set[str]]:
+def _real_headcounts(db: Session, conference_uids: list[str]) -> dict[str, int]:
     """Real headcount per conference - the same "who actually showed up or
     attempted the test" definition used by the single-session dashboard
     (see `_build_dashboard`) - rather than the planned `batchSize` field,
     which is just whatever capacity number the trainer typed in at
-    creation time and never reflects who was actually trained."""
-    by_conference: dict[str, set[str]] = defaultdict(set)
-    if not conference_uids:
-        return by_conference
-
-    for conference_uid, trainee_uid in attendance_repository.list_present_pairs(db, conference_uids):
-        by_conference[conference_uid].add(trainee_uid)
-
-    for conference_uid, trainee_uid in assessment_repository.list_submitted_pairs(db, conference_uids):
-        by_conference[conference_uid].add(trainee_uid)
-
-    return by_conference
+    creation time and never reflects who was actually trained. Counted in SQL
+    (dashboard_repository.count_trained_by_conference)."""
+    return dashboard_repository.count_trained_by_conference(db, conference_uids)
 
 
 def _venue_names_for(db: Session, conferences: list[Conference]) -> dict[str, str]:
@@ -755,7 +757,7 @@ def _venue_names_for(db: Session, conferences: list[Conference]) -> dict[str, st
     return {v.venueUid: v.name for v in catalog_repository.get_venues_by_uids(db, venue_uids) if v.name}
 
 
-def _updated_by_names_for(db: Session, conferences: list[Conference]) -> dict[str, str]:
+def _updated_by_names_for(db: Session, conferences: list[Conference], common_db: Optional[Session] = None) -> dict[str, str]:
     """`conference.updatedBy` stores whoever last saved the row as a bare
     username (a trainer's phone number, or an admin's login) - resolve those
     to display names in one batch, the same way `_venue_names_for` resolves
@@ -766,6 +768,14 @@ def _updated_by_names_for(db: Session, conferences: list[Conference]) -> dict[st
     if not usernames:
         return {}
     names: dict[str, str] = {}
+
+    # The request's own Common DB session when the caller has one (no extra connection).
+    if common_db is not None:
+        names.update({a.username: a.name for a in admin_repository.get_admins_by_usernames(common_db, usernames) if a.name})
+        for agent in admin_repository.get_agents_by_usernames(db, usernames):
+            if agent.name:
+                names.setdefault(agent.username, agent.name)
+        return names
 
     from app.database.common import CommonSessionLocal
 
@@ -832,13 +842,13 @@ def trainer_summary(
     whatever the range. Only the trainer's own trainings, verified server-side."""
     username = own_trainings_username(common_db, admin, tenant_id)
     counts = dashboard_repository.trainer_summary_counts(
-        db, username, start, end, today=date.today().isoformat(), today_ist=ist_now().date().isoformat()
+        db, username, start, end, today=ist_now().date().isoformat(), today_ist=ist_now().date().isoformat()
     )
     total = counts["totalSessions"]
     recent = conference_repository.list_recent_completed_for_trainer(db, username, 2)
-    trainee_uids_by_conference = _real_trainee_uids_by_conference(db, [c.conferenceUid for c in recent])
+    headcounts = _real_headcounts(db, [c.conferenceUid for c in recent])
     venue_name_by_uid = _venue_names_for(db, recent)
-    updated_by_name_by_username = _updated_by_names_for(db, recent)
+    updated_by_name_by_username = _updated_by_names_for(db, recent, common_db)
     return TrainerSummaryOut(
         **counts,
         executedPercentage=round(counts["completed"] / total * 100) if total else 0,
@@ -846,7 +856,7 @@ def trainer_summary(
         recentCompleted=[
             _to_agenda_item(
                 conference,
-                len(trainee_uids_by_conference.get(conference.conferenceUid, set())),
+                headcounts.get(conference.conferenceUid, 0),
                 venue_name_by_uid,
                 updated_by_name_by_username,
             )
@@ -903,7 +913,9 @@ def list_trainings_page(
         else AccessScope.denied(tenant_id or "", "no scope context")
     )
     conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
-    conditions += conference_repository.session_conditions(on_date, status, location)
+    conditions += conference_repository.session_conditions(
+        on_date, status, location, today=ist_now().date().isoformat()
+    )
     if scope is not None:
         conditions += dashboard_repository.conference_authorization_conditions(scope)
     try:
@@ -912,14 +924,14 @@ def list_trainings_page(
         raise bad_request("Invalid page cursor")
 
     conferences = result.rows
-    trainee_uids_by_conference = _real_trainee_uids_by_conference(db, [c.conferenceUid for c in conferences])
+    headcounts = _real_headcounts(db, [c.conferenceUid for c in conferences])
     venue_name_by_uid = _venue_names_for(db, conferences)
-    updated_by_name_by_username = _updated_by_names_for(db, conferences)
+    updated_by_name_by_username = _updated_by_names_for(db, conferences, common_db)
     return TrainingPageResponse(
         items=[
             _to_agenda_item(
                 conference,
-                len(trainee_uids_by_conference.get(conference.conferenceUid, set())),
+                headcounts.get(conference.conferenceUid, 0),
                 venue_name_by_uid,
                 updated_by_name_by_username,
             )
@@ -947,6 +959,13 @@ def training_facets(
     )
 
 
+def _ensure_approval_open(conference: Conference) -> None:
+    """Approval is decided before a training runs: a Completed or Cancelled one can't be
+    approved or rejected any more."""
+    if title_status(conference.conferenceStatus) in ("Completed", "Cancelled"):
+        raise conflict("A completed or cancelled training can't be approved or rejected")
+
+
 def approve_training(
     db: Session,
     admin: Admin,
@@ -957,6 +976,7 @@ def approve_training(
     tenant_id: str = None,
 ) -> TrainingOut:
     conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
+    _ensure_approval_open(conference)
     conference.status = "Approved"
     conference.updatedBy = admin.username
     if reason:
@@ -992,6 +1012,7 @@ def reject_training(
     tenant_id: str = None,
 ) -> TrainingOut:
     conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
+    _ensure_approval_open(conference)
     conference.status = "Rejected"
     conference.updatedBy = admin.username
     if reason:
@@ -1204,6 +1225,15 @@ def _build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut
             else None
         ),
     )
+
+
+def get_join_code(
+    db: Session, admin: Admin, conference_uid: str, common_db: Session = None, tenant_id: str = None
+) -> JoinCodeOut:
+    """The signed join code for this training's QR code / share link - only for whoever may run the
+    session (the same check as its dashboard). Bound to this tenant."""
+    conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
+    return JoinCodeOut(conferenceUid=conference.conferenceUid, joinCode=join_code.make(tenant_id, conference.conferenceUid))
 
 
 def get_session_dashboard(
@@ -1492,7 +1522,8 @@ async def start_training(
     # A session can only be started on (or after) its scheduled date - not
     # ahead of time. `conferenceDate` is stored as "YYYY-MM-DD", so a plain
     # string compare against today's ISO date is correct.
-    if conference.conferenceDate and conference.conferenceDate > date.today().isoformat():
+    # Dates are India dates: compared with today in IST, not the server clock's (UTC) date.
+    if conference.conferenceDate and conference.conferenceDate > ist_now().date().isoformat():
         raise bad_request("This session can only be started on its scheduled date")
 
     _resolve_start_geofence(
@@ -1592,6 +1623,8 @@ def start_module(
     if any("STOPPED" not in logs_by_module[modules[i]] for i in range(index)):
         raise conflict("Finish the earlier modules first")
 
+    if not conference_repository.claim_active_module(db, conference.conferenceUid, None, module_key):
+        raise conflict(_SESSION_CHANGED)
     conference.activeModuleId = module_key
     if module_key == "LIVE_QUIZ":
         conference.liveQuizState = LIVE_QUIZ_STATE_IDLE
@@ -1635,6 +1668,8 @@ def restart_module(
     if not ran_before:
         raise bad_request("That module hasn't run yet - start it instead")
 
+    if not conference_repository.claim_active_module(db, conference.conferenceUid, None, module_key):
+        raise conflict(_SESSION_CHANGED)
     conference.activeModuleId = module_key
     if module_key == "LIVE_QUIZ":
         conference.liveQuizState = LIVE_QUIZ_STATE_IDLE
@@ -1668,6 +1703,9 @@ def stop_active_module(
         raise conflict("No module is currently running")
 
     current = conference.activeModuleId
+    # Claim first (finish_quiz below commits): of two concurrent Stop taps only one stops it.
+    if not conference_repository.claim_active_module(db, conference.conferenceUid, current, None):
+        raise conflict(_SESSION_CHANGED)
     if current == "LIVE_QUIZ":
         live_quiz_service.finish_quiz(db, conference)
     log_module_action(db, conference.conferenceUid, current, "STOPPED", admin.username)
@@ -1700,14 +1738,18 @@ def advance_module(
 
     modules = configured_modules(conference)
     current = conference.activeModuleId
-    if current:
-        log_module_action(db, conference.conferenceUid, current, "STOPPED", admin.username)
-
     next_module = None
     if current in modules:
         next_index = modules.index(current) + 1
         if next_index < len(modules):
             next_module = modules[next_index]
+
+    # Claim the move first - before anything is logged or scored (finish_quiz commits) - so of two
+    # concurrent Next taps only one advances the flow.
+    if not conference_repository.claim_active_module(db, conference.conferenceUid, current, next_module):
+        raise conflict(_SESSION_CHANGED)
+    if current:
+        log_module_action(db, conference.conferenceUid, current, "STOPPED", admin.username)
 
     # Score the Live Quiz the moment the flow leaves it (finish_quiz is
     # idempotent, so end_training re-calling it is harmless).
@@ -1744,6 +1786,10 @@ async def end_training(
     conference = _get_owned_conference(db, admin, conference_uid, common_db, tenant_id)
     if conference.conferenceEndsOn is not None:
         raise conflict("This session has already ended")
+    # Only a session that was started (by its trainer or an admin - start_training sets Ongoing)
+    # can be ended; a Scheduled one is cancelled instead, never "ended" without having run.
+    if title_status(conference.conferenceStatus) != "Ongoing":
+        raise conflict("This session hasn't been started yet")
     if total_pax < 0:
         raise bad_request("Total Pax can't be negative")
 
@@ -1761,6 +1807,12 @@ async def end_training(
         size_error_detail="Attendance sheet must be 5MB or smaller",
     )
 
+    # Claim the end atomically before writing anything: of two concurrent End requests only one
+    # proceeds (same transaction - a failed write below rolls the claim back).
+    ends_on = utc_now().strftime("%Y-%m-%d %H:%M:%S")
+    if not conference_repository.claim_end(db, conference.conferenceUid, ends_on):
+        raise conflict("This session has already ended")
+
     photo_dir = media_subdir("trainer_checkout_photos", tenant_id)
     (photo_dir / f"{conference.conferenceUid}.{photo_ext}").write_bytes(photo_bytes)
     conference.conferenceImage = f"trainer_checkout_photos/{conference.conferenceUid}.{photo_ext}"
@@ -1775,7 +1827,7 @@ async def end_training(
         log_module_action(db, conference.conferenceUid, conference.activeModuleId, "STOPPED", admin.username)
         conference.activeModuleId = None
 
-    conference.conferenceEndsOn = utc_now().strftime("%Y-%m-%d %H:%M:%S")
+    conference.conferenceEndsOn = ends_on
     conference.conferenceStatus = "Completed"
     conference.actualEndedAt = utc_now()
     conference.confirmedPax = str(total_pax)

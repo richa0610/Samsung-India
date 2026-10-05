@@ -40,27 +40,3 @@ class SubmitResult(BaseModel):
     percentage: float
     correctCount: int
     totalQuestions: int
-
-
-class LeaderboardUserOut(BaseModel):
-    rank: int
-    traineeUid: str
-    name: str
-    score: str
-    accuracy: str
-    percentage: float
-    timeTaken: str
-    isYou: bool
-
-
-class LeaderboardResponse(BaseModel):
-    title: Optional[str] = None
-    totalQuestions: int = 0
-    userRank: Optional[int] = None
-    userScore: Optional[float] = None
-    userAccuracy: Optional[float] = None
-    timeTakenFormatted: Optional[str] = None
-    correctCount: Optional[int] = None
-    incorrectCount: Optional[int] = None
-    leaderboard: List[LeaderboardUserOut]
-

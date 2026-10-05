@@ -14,13 +14,14 @@ from app.models.conference import Conference
 from app.repositories import assessment_repository, attendance_repository
 from app.utils.date_utils import ist_now
 from app.utils.status import title_status
+from tests import _legacy_queries as legacy_queries
 
 
 def _trainee_uids(db: Session, conference_uids: list[str]) -> set[str]:
     uids: set[str] = set()
-    for _conference, trainee in attendance_repository.list_present_pairs(db, conference_uids):
+    for _conference, trainee in legacy_queries.list_present_pairs(db, conference_uids):
         uids.add(trainee)
-    for _conference, trainee in assessment_repository.list_submitted_pairs(db, conference_uids):
+    for _conference, trainee in legacy_queries.list_submitted_pairs(db, conference_uids):
         uids.add(trainee)
     return uids
 

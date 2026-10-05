@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { BackHandler } from "react-native";
 
 import { CurrentSession, TraineeDashboard, getCurrentSession, getTraineeDashboard } from "@/api/session";
+import { TraineeMetricCardKey } from "@/components/trainee/dashboard/TraineeMetricsGrid";
 import { useAdminFilters } from "@/hooks/useAdminFilters";
 import { useAuth } from "@/hooks/useAuth";
 import { canNavigate } from "@/utils/navigationGuard";
@@ -49,6 +50,19 @@ export function useTraineeDashboard() {
     load().finally(() => setRefreshing(false));
   }, [load]);
 
+  // A metric card opens Training History holding exactly the trainings that card counted, over
+  // the dashboard's own date range - like the trainer's Home stat cards open their Sessions list.
+  const handleMetricCardPress = (card: TraineeMetricCardKey) => {
+    router.push({
+      pathname: "/training_history",
+      params: {
+        ...(card !== "total" && { card }),
+        ...(applied.start && { start: applied.start }),
+        ...(applied.end && { end: applied.end }),
+      },
+    });
+  };
+
   const requestLogout = () => setConfirmLogoutOpen(true);
 
   // Hardware/gesture back asks for confirmation instead of navigating
@@ -78,6 +92,7 @@ export function useTraineeDashboard() {
     loading,
     refreshing,
     handleRefresh,
+    handleMetricCardPress,
     confirmLogoutOpen,
     requestLogout,
     cancelLogout,

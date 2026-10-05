@@ -26,6 +26,7 @@ type TrainerDashboardScrollContentProps = {
   onOpenProfile: () => void;
   onLogout: () => void;
   onSelectSession: (conferenceUid: string) => void;
+  onPressStatCard?: (cardKey: "total" | "completed" | "planned" | "missed" | "ongoing") => void;
 };
 
 export default function TrainerDashboardScrollContent({
@@ -42,6 +43,7 @@ export default function TrainerDashboardScrollContent({
   onOpenProfile,
   onLogout,
   onSelectSession,
+  onPressStatCard,
 }: TrainerDashboardScrollContentProps) {
   const router = useRouter();
 
@@ -63,7 +65,7 @@ export default function TrainerDashboardScrollContent({
 
       <Calendar range={dateRange} preset={datePreset} onApply={onApplyDateRange} />
 
-      <SummaryStatsRow stats={stats} />
+      <SummaryStatsRow stats={stats} onPressCard={onPressStatCard} />
 
       <TrainingEfficiencyCard stats={stats} />
 

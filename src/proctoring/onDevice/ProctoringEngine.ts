@@ -116,7 +116,9 @@ export class ProctoringEngine {
         }
       } else {
         this.active.delete(eventType);
-        this.cooldownUntil.set(eventType, nowMs + COOLDOWN_MS);
+        // Only after a strike: an occurrence that ended before reaching one leaves no cooldown, so
+        // turning away again restarts the full STRIKE_AFTER_MS countdown straight away.
+        if (state.emittedSeverity) this.cooldownUntil.set(eventType, nowMs + COOLDOWN_MS);
       }
     }
   }

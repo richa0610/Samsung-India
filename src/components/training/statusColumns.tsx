@@ -41,7 +41,7 @@ export function conferenceStatusColumn(): DataTableColumn<TrainingAgendaItem> {
   return {
     key: "status",
     header: "Status",
-    minWidth: 70,
+    minWidth: 80,
     render: (row) => {
       const presentation = presentationFor(row);
       return <StatusPill label={presentation.label} tone={presentation.tone} />;

@@ -137,6 +137,7 @@ const styles = StyleSheet.create({
   inputCompact: {
     height: 38,
     paddingHorizontal: Spacing.md,
+    paddingVertical: 0,
     fontSize: Fonts.xs,
   },
 

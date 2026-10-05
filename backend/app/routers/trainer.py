@@ -31,7 +31,7 @@ def get_trainer_name(
     _admin: Admin = Depends(get_current_admin),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return trainer_service.get_trainer_name(common_db, db, username, tenant_id)
+    return trainer_service.get_trainer_name(common_db, db, _admin, username, tenant_id)
 
 
 @router.get("/profile", response_model=TrainerProfileOut)

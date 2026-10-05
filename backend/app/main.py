@@ -9,6 +9,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from app.core.config import settings
+from app.core.tenant_limit import TenantConcurrencyLimit
 from app.core.log_redaction import install_token_redaction
 from app.core.media import MEDIA_ROOT
 from app.database.common import common_engine
@@ -122,15 +123,22 @@ DB_KEEPALIVE_INTERVAL_SECONDS = 120
 _keepalive_task: "asyncio.Task | None" = None
 
 
+def _ping_databases() -> None:
+    try:
+        with common_engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except SQLAlchemyError as exc:
+        logger.warning("Common DB keep-alive ping failed: %s", exc)
+    tenant_manager.ping_all()
+
+
 async def _db_keepalive_loop() -> None:
+    """Pings every database now and then so idle pooled connections aren't dropped. The pings
+    are blocking database calls, so they run on a worker thread - on the event loop, one slow or
+    unreachable tenant database would freeze every async request and WebSocket until it timed out."""
     while True:
         await asyncio.sleep(DB_KEEPALIVE_INTERVAL_SECONDS)
-        try:
-            with common_engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-        except SQLAlchemyError as exc:
-            logger.warning("Common DB keep-alive ping failed: %s", exc)
-        tenant_manager.ping_all()
+        await asyncio.to_thread(_ping_databases)
 
 
 @app.on_event("startup")
@@ -150,17 +158,6 @@ def on_shutdown():
 
 MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 
-# Origins allowed to call this API from a browser (native app requests are
-# unaffected - see ALLOWED_ORIGINS in core/config.py). Configure via the
-# ALLOWED_ORIGINS env var; defaults to common local Expo web dev ports.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.allowed_origins_list,
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 
 class _ApiGZipMiddleware(GZipMiddleware):
     """gzip for API JSON (the admin lists are large and compress ~5-10x), but
@@ -175,6 +172,25 @@ class _ApiGZipMiddleware(GZipMiddleware):
 
 
 app.add_middleware(_ApiGZipMiddleware, minimum_size=1024)
+# A tenant over its cap waits here, before routing takes a worker thread.
+app.add_middleware(
+    TenantConcurrencyLimit,
+    limit=settings.TENANT_MAX_CONCURRENT_REQUESTS,
+    wait_seconds=settings.TENANT_QUEUE_WAIT_SECONDS,
+)
+# Middleware runs in the REVERSE order of add_middleware(): the last one added is the outermost.
+# CORS is added last so it is outermost: a browser's preflight (OPTIONS) is answered here without
+# touching the tenant limit, and every response - the tenant limit's 503 "busy" and gzipped ones
+# included - carries the CORS headers, so a browser can read it instead of reporting a CORS error.
+# Origins allowed to call this API from a browser (native app requests are unaffected - see
+# ALLOWED_ORIGINS in core/config.py); defaults to common local Expo web dev ports.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins_list,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 app.include_router(trainee_router)
 app.include_router(session_router)

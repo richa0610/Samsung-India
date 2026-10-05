@@ -33,7 +33,7 @@ from app.repositories import (
     conference_repository,
     trainee_repository,
 )
-from app.services import conference_access
+from app.services import conference_access, trainee_access
 from app.routers.ws import manager as ws_manager
 from app.utils.date_utils import utc_now
 from app.schemas.session import (
@@ -85,6 +85,21 @@ def _question_explanation(question: Question) -> Optional[str]:
     except (ValueError, TypeError):
         pass
     return (question.descriptions or None) if hasattr(question, "descriptions") else None
+
+
+def _timer_paused(conference: Conference) -> bool:
+    """The trainer pressed Stop Timer: the clock is frozen (`liveTimerRemainingMs` holds what was
+    left, `liveTimerEndsAt` is stale) and answers are locked until Play. Only while a question is
+    live - a value left behind by a quiz ended or restarted mid-pause is not a pause."""
+    return conference.liveQuizState == LIVE_QUIZ_STATE_QUESTION_LIVE and conference.liveTimerRemainingMs is not None
+
+
+def _timer_expired(conference: Conference) -> bool:
+    """The live question's time is up. A paused clock has only run out if it was stopped with
+    nothing left - its stale `liveTimerEndsAt` passing during the pause doesn't count."""
+    if _timer_paused(conference):
+        return conference.liveTimerRemainingMs <= 0
+    return bool(conference.liveTimerEndsAt) and _now_ms() >= conference.liveTimerEndsAt
 
 
 def _broadcast_ms(conference: Conference, question: Question) -> Optional[int]:
@@ -155,7 +170,7 @@ def build_live_studio(db: Session, conference: Conference) -> Optional[LiveStudi
         # timerRemainingMs as the frozen display value instead of counting
         # down from this.
         timerEndsAt=conference.liveTimerEndsAt or None,
-        timerRemainingMs=conference.liveTimerRemainingMs,
+        timerRemainingMs=conference.liveTimerRemainingMs if _timer_paused(conference) else None,
         serverNowMs=_now_ms(),
         participants=participants,
         totalResponses=responders.get(conference.liveQuestionId or "", 0),
@@ -233,24 +248,33 @@ def stop_timer(
     background_tasks: BackgroundTasks,
     common_db: Session = None,
     tenant_id: str = None,
+    paused: Optional[bool] = None,
 ):
-    """Toggles the current question's clock between running and paused -
-    this is the trainer's Stop Timer / Play Timer button. Pausing freezes
-    the countdown at whatever time is left (never dropping it to 0);
-    pressing it again resumes from exactly that point rather than
-    restarting the question."""
+    """The trainer's Stop Timer / Play Timer button, for the trainer and every
+    trainee at once. `paused` is the button pressed: True freezes the current
+    question's countdown at whatever time is left (never dropping it to 0);
+    False resumes from exactly that point rather than restarting the question.
+    Asking for the state it's already in changes nothing, so a press made from
+    a stale screen - or by a second trainer/admin on the same session - can't
+    flip it the other way. None (an older app that sends no body) toggles."""
     conference = _owned_live_conference(db, admin, conference_uid, common_db, tenant_id)
     if conference.liveQuizState != LIVE_QUIZ_STATE_QUESTION_LIVE:
         raise conflict("No question is currently live")
 
-    if conference.liveTimerRemainingMs is not None:
-        # Paused -> resume: pick the clock back up with whatever was left.
-        conference.liveTimerEndsAt = _now_ms() + conference.liveTimerRemainingMs
-        conference.liveTimerRemainingMs = None
+    is_paused = _timer_paused(conference)
+    pause = (not is_paused) if paused is None else paused
+    if pause == is_paused:
+        return _dashboard(db, admin, conference_uid, common_db, tenant_id)
+
+    now = _now_ms()
+    if pause:
+        # Freeze at whatever's left, clamped to 0 so a press after the
+        # deadline already passed can't store a negative.
+        conference.liveTimerRemainingMs = max(0, (conference.liveTimerEndsAt or now) - now)
     else:
-        # Running -> pause: freeze at whatever's left, clamped to 0 so a
-        # press after the deadline already passed can't store a negative.
-        conference.liveTimerRemainingMs = max(0, (conference.liveTimerEndsAt or _now_ms()) - _now_ms())
+        # Pick the clock back up with whatever was left.
+        conference.liveTimerEndsAt = now + conference.liveTimerRemainingMs
+        conference.liveTimerRemainingMs = None
 
     conference_repository.save(db, conference)
     _nudge(background_tasks, conference_uid, tenant_id)
@@ -367,9 +391,7 @@ def finish_quiz(db: Session, conference: Conference) -> None:
 # --- Trainee: live view + per-question answer ------------------------------
 
 def get_live_quiz_view(db: Session, trainee: Trainee, conference_uid: str) -> LiveQuizView:
-    conference = conference_repository.get_by_uid(db, conference_uid)
-    if not conference:
-        raise not_found("Training not found")
+    conference, _attendance = trainee_access.present_conference(db, trainee, conference_uid)
 
     state = conference.liveQuizState or LIVE_QUIZ_STATE_IDLE
     suite_uid = live_quiz_suite_uid(conference)
@@ -396,8 +418,12 @@ def get_live_quiz_view(db: Session, trainee: Trainee, conference_uid: str) -> Li
             )
 
     timer_ends_at = None
+    timer_remaining_ms = None
     if state == LIVE_QUIZ_STATE_QUESTION_LIVE:
-        timer_ends_at = conference.liveTimerEndsAt or None
+        if _timer_paused(conference):
+            timer_remaining_ms = conference.liveTimerRemainingMs
+        else:
+            timer_ends_at = conference.liveTimerEndsAt or None
 
     return LiveQuizView(
         state=state,
@@ -405,6 +431,7 @@ def get_live_quiz_view(db: Session, trainee: Trainee, conference_uid: str) -> Li
         suiteUid=suite_uid,
         question=question_out,
         timerEndsAt=timer_ends_at,
+        timerRemainingMs=timer_remaining_ms,
         serverNowMs=_now_ms(),
         alreadyAnswered=already_answered,
     )
@@ -413,18 +440,19 @@ def get_live_quiz_view(db: Session, trainee: Trainee, conference_uid: str) -> Li
 def submit_live_answer(
     db: Session, trainee: Trainee, payload: LiveAnswerRequest, background_tasks: BackgroundTasks, tenant_id: str = None
 ) -> LiveAnswerResult:
-    conference = conference_repository.get_by_uid(db, payload.conferenceUid)
-    if not conference:
-        raise not_found("Training not found")
+    conference, _attendance = trainee_access.present_conference(db, trainee, payload.conferenceUid)
 
-    live = (
+    live_question = (
         conference.liveQuizState == LIVE_QUIZ_STATE_QUESTION_LIVE
         and conference.liveQuestionId == str(payload.questionId)
-        and conference.liveTimerEndsAt
-        and _now_ms() < conference.liveTimerEndsAt
+        and bool(conference.liveTimerEndsAt)
     )
-    if not live:
+    if not live_question or _timer_expired(conference):
         return LiveAnswerResult(accepted=False)
+    if _timer_paused(conference):
+        # Still open, just stopped by the trainer: `paused` tells the app this isn't a timeout, so
+        # it keeps the question up (locked) instead of revealing the answer.
+        return LiveAnswerResult(accepted=False, paused=True)
 
     question = assessment_repository.get_question(db, payload.questionId)
     broadcast_ms = _broadcast_ms(conference, question) if question else None
@@ -457,9 +485,7 @@ def report_live_timeout(
     a blank answer row so the Assessment Map can tell 'timed out' (the question
     reached them, they didn't answer in time) from 'skipped' (never broadcast to
     them). Idempotent - a no-op once any answer row exists for this question."""
-    conference = conference_repository.get_by_uid(db, conference_uid)
-    if not conference:
-        raise not_found("Training not found")
+    conference, _attendance = trainee_access.present_conference(db, trainee, conference_uid)
 
     suite_uid = live_quiz_suite_uid(conference)
     question = assessment_repository.get_question(db, question_id)
@@ -483,9 +509,7 @@ def get_live_quiz_summary(
 ) -> LiveQuizSummaryOut:
     """The calling trainee's per-question outcome map, shown after they answer
     the last question and before Final Submit."""
-    conference = conference_repository.get_by_uid(db, conference_uid)
-    if not conference:
-        raise not_found("Training not found")
+    conference, _attendance = trainee_access.present_conference(db, trainee, conference_uid)
     suite_uid = live_quiz_suite_uid(conference)
     if not suite_uid:
         raise bad_request("This session has no Live Quiz")
@@ -557,14 +581,11 @@ def reveal_live_question(db: Session, trainee: Trainee, conference_uid: str, que
     """Correct answer + explanation for one question. Refused while that
     question is still the live one and its timer hasn't run out and the
     trainee hasn't answered - so it can't be used to peek."""
-    conference = conference_repository.get_by_uid(db, conference_uid)
-    if not conference:
-        raise not_found("Training not found")
+    conference, _attendance = trainee_access.present_conference(db, trainee, conference_uid)
 
     answer = assessment_repository.get_answer(db, conference_uid, trainee.traineeUid, question_id)
     still_the_live_question = conference.liveQuestionId == str(question_id)
-    timer_expired = bool(conference.liveTimerEndsAt) and _now_ms() >= conference.liveTimerEndsAt
-    if still_the_live_question and not timer_expired and answer is None:
+    if still_the_live_question and not _timer_expired(conference) and answer is None:
         raise conflict("This question is still live")
 
     question = assessment_repository.get_question(db, question_id)
@@ -582,9 +603,7 @@ def submit_live_quiz(db: Session, trainee: Trainee, conference_uid: str) -> Live
     """Trainee ends their own Live Quiz early ("Final Submit"). Scores just
     this trainee from their answers so far and marks their result Submitted;
     does not touch the trainer-controlled quiz state."""
-    conference = conference_repository.get_by_uid(db, conference_uid)
-    if not conference:
-        raise not_found("Training not found")
+    conference, _attendance = trainee_access.present_conference(db, trainee, conference_uid)
     suite_uid = live_quiz_suite_uid(conference)
     if not suite_uid:
         raise bad_request("This session has no Live Quiz")
@@ -625,9 +644,7 @@ def get_live_quiz_results(db: Session, trainee: Trainee, conference_uid: str) ->
     trainee's Rank screen re-polls it every few seconds while the quiz runs.
     `finished` flips true once the trainer ends the quiz - the ranking is final
     then, and the trainee's Rank tab keeps showing it after the session ends."""
-    conference = conference_repository.get_by_uid(db, conference_uid)
-    if not conference:
-        raise not_found("Training not found")
+    conference, _attendance = trainee_access.present_conference(db, trainee, conference_uid)
     suite_uid = live_quiz_suite_uid(conference)
     if not suite_uid:
         raise bad_request("This session has no Live Quiz")

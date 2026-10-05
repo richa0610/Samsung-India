@@ -16,8 +16,13 @@ statement costs one network round trip (~40 ms) however little work it does.
 from dataclasses import dataclass, field
 from typing import Collection, Optional
 
-from sqlalchemy import String, and_, case, cast, exists, false, func, literal, not_, null, or_, select, true, union, union_all
+from sqlalchemy import (
+    Boolean, Float, String, and_, case, cast, exists, false, func, literal, literal_column, not_, null, or_, select, true,
+    tuple_, type_coerce, union, union_all,
+)
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.expression import ColumnElement
 
 from app.core.constants import PASS_THRESHOLD_PERCENT
 from app.dependencies.filters import ConferenceFilters
@@ -117,14 +122,17 @@ def conference_authorization_conditions(scope: AccessScope) -> list:
     return [false()]
 
 
-def trainee_authorization_conditions(scope: AccessScope) -> list:
+def trainee_authorization_conditions(scope: AccessScope, *, listing: bool = False) -> list:
     """The trainee-table twin of `conference_authorization_conditions`: an admin-panel grant by
     the trainee's own company/zone/region, an active trainer by assignment or roster
-    (`trainee_repository.trainer_owned_condition`). Anything else matches nothing."""
+    (`trainee_repository.trainer_owned_condition`). Anything else matches nothing. `listing=True`
+    gives the same set in the form that is fast for listing / counting many rows (the Trainee
+    List); leave it off when checking one known trainee."""
     if scope.is_admin_panel:
         return access_scope_conditions(scope, Trainee.company, Trainee.zone, Trainee.region)
     if scope.is_trainer:
-        return [trainee_repository.trainer_owned_condition(scope.trainer_username)]
+        owned = trainee_repository.trainer_owned_list_condition if listing else trainee_repository.trainer_owned_condition
+        return [owned(scope.trainer_username)]
     return [false()]
 
 
@@ -188,6 +196,200 @@ def trainer_summary_counts(
         "missed": int(missed),
         "ongoing": int(ongoing),
     }
+
+
+def count_trained_by_conference(db: Session, conference_uids: Collection[str]) -> dict[str, int]:
+    """{conferenceUid: real headcount} - the distinct trainees marked Present or with a submitted
+    test there (the same definition as the session dashboard), counted in SQL: one grouped row per
+    training comes back, never one row per trainee. Trainings with nobody are left out (0)."""
+    if not conference_uids:
+        return {}
+    uids = sorted(set(conference_uids))
+    trained = union(
+        select(Attendance.conferenceUid.label("conferenceUid"), Attendance.traineeUid.label("traineeUid"))
+        .where(Attendance.conferenceUid.in_(uids), Attendance.status == "Present"),
+        select(AssessmentResult.conferenceUid, AssessmentResult.traineeUid)
+        .where(AssessmentResult.conferenceUid.in_(uids), AssessmentResult.status == "Submitted"),
+    ).subquery()
+    rows = db.execute(select(trained.c.conferenceUid, func.count()).group_by(trained.c.conferenceUid)).all()
+    return {conference_uid: int(count) for conference_uid, count in rows}
+
+
+# ---------------------------------------------------------------------------
+# Trainee ranking - computed entirely in SQL, per request (never cached)
+# ---------------------------------------------------------------------------
+
+_LIVE_QUIZ_PATH = "$.liveQuiz.assessmentSuiteUid"
+
+
+class live_quiz_suite_is(ColumnElement):
+    """SQL for `module_flow.live_quiz_suite_uid(conference) == suite`: the Live Quiz test id stored
+    in `sessionConfig` JSON equals `suite`. A missing, empty or malformed config, a missing key, or
+    a non-text value (a number, null) never matches - as the Python lookup (json.loads + .get)
+    behaves. Compiled per database below."""
+
+    type = Boolean()
+    inherit_cache = True
+
+    def __init__(self, config, suite):
+        self.config = config
+        self.suite = suite
+
+
+@compiles(live_quiz_suite_is)
+def _live_quiz_suite_is_sqlite(element, compiler, **kw):
+    config, suite = compiler.process(element.config, **kw), compiler.process(element.suite, **kw)
+    # CASE guards the JSON functions: SQLite raises on malformed JSON, and CASE is evaluated lazily.
+    return (
+        f"(CASE WHEN json_valid({config}) THEN "
+        f"(json_type({config}, '{_LIVE_QUIZ_PATH}') = 'text' AND json_extract({config}, '{_LIVE_QUIZ_PATH}') = {suite}) "
+        f"ELSE 0 END)"
+    )
+
+
+@compiles(live_quiz_suite_is, "mysql")
+def _live_quiz_suite_is_mysql(element, compiler, **kw):
+    config, suite = compiler.process(element.config, **kw), compiler.process(element.suite, **kw)
+    # Compared as JSON to JSON (a JSON string equals only that same string), so the column's
+    # character set / collation never meets the JSON's - no "illegal mix of collations" - and a
+    # JSON number or null never equals a text id.
+    return (
+        f"(CASE WHEN JSON_VALID({config}) THEN "
+        f"COALESCE(JSON_EXTRACT({config}, '{_LIVE_QUIZ_PATH}') = CAST(JSON_QUOTE({suite}) AS JSON), 0) "
+        f"ELSE 0 END)"
+    )
+
+
+def _counted_marks(trainee_uid: Optional[str] = None):
+    """Per trainee: the summed Standard Test + Live Quiz marks (total, max) of Submitted results, at
+    trainings that weren't cancelled, where the trainee was marked Present."""
+    present = exists().where(
+        Attendance.conferenceUid == AssessmentResult.conferenceUid,
+        Attendance.traineeUid == AssessmentResult.traineeUid,
+        Attendance.status == "Present",
+    )
+    counted_suite = or_(
+        AssessmentResult.assessmentSuiteUid == Conference.postAssessmentUid,
+        live_quiz_suite_is(Conference.sessionConfig, AssessmentResult.assessmentSuiteUid),
+    )
+    query = (
+        select(
+            AssessmentResult.traineeUid.label("traineeUid"),
+            func.sum(AssessmentResult.totalScore).label("score"),
+            func.sum(AssessmentResult.maxScore).label("maximum"),
+        )
+        .join(Conference, Conference.conferenceUid == AssessmentResult.conferenceUid)
+        .where(
+            AssessmentResult.status == "Submitted",
+            func.lower(func.coalesce(Conference.conferenceStatus, "")) != "cancelled",
+            present,
+            counted_suite,
+        )
+        .group_by(AssessmentResult.traineeUid)
+    )
+    if trainee_uid is not None:
+        query = query.where(AssessmentResult.traineeUid == trainee_uid)
+    return query.subquery()
+
+
+def _ranked(trainee_uid: Optional[str] = None):
+    """Every ranked trainee - marked Present at least once - with their state and percent over
+    those marks (0 with none). The percent is computed as a double (`* 1.0E0`) by the same
+    expression for everyone, so equal marks always give equal percents."""
+    population = select(Attendance.traineeUid.label("traineeUid")).where(Attendance.status == "Present")
+    if trainee_uid is not None:
+        population = population.where(Attendance.traineeUid == trainee_uid)
+    population = population.distinct().subquery()
+    marks = _counted_marks(trainee_uid)
+    maximum = func.coalesce(marks.c.maximum, 0)
+    # Typed as Float (no SQL cast): the percent comes back - and is bound back into the rank
+    # comparison - as a plain float, never a Decimal the driver might send as text.
+    percent = type_coerce(
+        case(
+            (maximum > 0, marks.c.score * literal_column("1.0E0") / marks.c.maximum * 100),
+            else_=literal_column("0.0E0"),
+        ),
+        Float(),
+    )
+    return (
+        select(population.c.traineeUid, Trainee.state.label("state"), percent.label("percent"))
+        .select_from(population)
+        .outerjoin(marks, marks.c.traineeUid == population.c.traineeUid)
+        .outerjoin(Trainee, Trainee.traineeUid == population.c.traineeUid)
+        .subquery()
+    )
+
+
+@dataclass(frozen=True)
+class RankPosition:
+    rank: Optional[int]
+    total: int
+
+    @property
+    def percentile(self) -> Optional[float]:
+        return round(self.rank / self.total * 100, 1) if self.rank is not None and self.total else None
+
+
+def trainee_rank(db: Session, trainee_uid: str, state: Optional[str]) -> tuple[RankPosition, RankPosition]:
+    """(global, state) competition rank of one trainee among every ranked trainee of this tenant:
+    1 + how many have a strictly higher percent (ties share a rank). Never Present -> not ranked
+    (rank None). No state -> an empty state pool. Two statements, aggregated in the database: no
+    other trainee's row leaves it."""
+    mine = db.execute(select(_ranked(trainee_uid).c.percent)).scalar_one_or_none()
+    ranked = _ranked()
+    in_state = ranked.c.state == state if state else false()
+    higher = ranked.c.percent > mine if mine is not None else false()
+
+    def how_many(condition):
+        return func.coalesce(func.sum(case((condition, 1), else_=0)), 0)
+
+    total, above, state_total, state_above = db.execute(
+        select(func.count(), how_many(higher), how_many(in_state), how_many(and_(in_state, higher))).select_from(ranked)
+    ).one()
+    ranked_here = mine is not None
+    return (
+        RankPosition(1 + int(above) if ranked_here else None, int(total)),
+        RankPosition(1 + int(state_above) if ranked_here and state else None, int(state_total)),
+    )
+
+
+def session_ranks(db: Session, trainee_uid: str, suite_by_conference: dict[str, str]) -> dict[str, int]:
+    """{conferenceUid: the trainee's rank in that training's test} for the given (training, test)
+    pairs, in ONE statement. Each trainee counts once, by their latest Submitted attempt (as the
+    session dashboard's Top Performers does); rank = 1 + how many trainees scored strictly higher,
+    so equal scores share a rank. Trainings where this trainee has no Submitted attempt are left out."""
+    if not suite_by_conference:
+        return {}
+    pairs = sorted(suite_by_conference.items())
+
+    def latest_attempts(name: str, only_trainee: Optional[str] = None):
+        # Built separately for each use: one expanding IN list can't be shared by two aliases.
+        result, newer = AssessmentResult.__table__.alias(f"{name}_result"), AssessmentResult.__table__.alias(f"{name}_newer")
+        attempt, newer_attempt = func.coalesce(result.c.attemptNumber, 0), func.coalesce(newer.c.attemptNumber, 0)
+        query = select(result.c.conferenceUid, result.c.traineeUid, result.c.percentage).where(
+            tuple_(result.c.conferenceUid, result.c.assessmentSuiteUid).in_(pairs),
+            result.c.status == "Submitted",
+            ~exists().where(
+                newer.c.conferenceUid == result.c.conferenceUid,
+                newer.c.assessmentSuiteUid == result.c.assessmentSuiteUid,
+                newer.c.traineeUid == result.c.traineeUid,
+                newer.c.status == "Submitted",
+                or_(newer_attempt > attempt, and_(newer_attempt == attempt, newer.c.id > result.c.id)),
+            ),
+        )
+        if only_trainee is not None:
+            query = query.where(result.c.traineeUid == only_trainee)
+        return query.subquery(name)
+
+    mine, others = latest_attempts("mine", trainee_uid), latest_attempts("others")
+    rows = db.execute(
+        select(mine.c.conferenceUid, func.count(others.c.traineeUid))
+        .select_from(mine)
+        .outerjoin(others, and_(others.c.conferenceUid == mine.c.conferenceUid, others.c.percentage > mine.c.percentage))
+        .where(mine.c.traineeUid == trainee_uid)
+        .group_by(mine.c.conferenceUid)
+    ).all()
+    return {conference_uid: 1 + int(higher) for conference_uid, higher in rows}
 
 
 def counted_condition():

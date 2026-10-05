@@ -11,6 +11,37 @@ def get_by_uid(db: Session, conference_uid: str) -> Optional[Conference]:
     return db.query(Conference).filter(Conference.conferenceUid == conference_uid).first()
 
 
+def claim_active_module(db: Session, conference_uid: str, expected: Optional[str], new: Optional[str]) -> bool:
+    """Atomically moves the session's active module from `expected` to `new` - True only for the
+    one request whose UPDATE matched. Two concurrent starts/advances can both have read the same
+    activeModuleId; only one may act on it (the other matches 0 rows and backs off), so the
+    Execution Flow never logs a module as started twice. The UPDATE row-locks until commit."""
+    current = Conference.activeModuleId.is_(None) if expected is None else Conference.activeModuleId == expected
+    matched = (
+        db.query(Conference)
+        .filter(Conference.conferenceUid == conference_uid, current)
+        .update({"activeModuleId": new}, synchronize_session=False)
+    )
+    return bool(matched)
+
+
+def claim_end(db: Session, conference_uid: str, ends_on: str) -> bool:
+    """Atomically marks the session ended - True only for the one request that did it."""
+    matched = (
+        db.query(Conference)
+        .filter(Conference.conferenceUid == conference_uid, Conference.conferenceEndsOn.is_(None))
+        .update({"conferenceEndsOn": ends_on}, synchronize_session=False)
+    )
+    return bool(matched)
+
+
+def lock_for_roster_change(db: Session, conference_uid: str) -> Optional[Conference]:
+    """The conference, with its row held (SELECT ... FOR UPDATE) until the transaction ends. Every
+    path that may create a trainee's attendance row for this session (check-in, QR join) takes it
+    first, so two concurrent requests can't both see "no row yet" and create two."""
+    return db.query(Conference).filter(Conference.conferenceUid == conference_uid).with_for_update().first()
+
+
 def trainer_condition(trainer_employee_id: Optional[str]):
     """SQL condition for "this conference is assigned to this trainer" - the one trainer-ownership
     rule every trainer query below uses. A blank/None username matches nothing (never
@@ -56,13 +87,6 @@ def approval_conditions(approval: Optional[str]) -> list:
     if approval == "approved":
         return [approval_status == "approved"]
     return []
-
-
-def list_all(db: Session) -> list[Conference]:
-    """Every conference org-wide, all trainers - the admin dashboard's
-    overview cards (unlike everything else here, which is scoped to one
-    trainer)."""
-    return db.query(Conference).all()
 
 
 def list_recent_completed_for_trainer(db: Session, trainer_employee_id: str, limit: int) -> list[Conference]:
@@ -165,15 +189,43 @@ MAX_PAGE_SIZE = keyset.MAX_PAGE_SIZE
 _CONFERENCE_STATUS = func.lower(func.coalesce(Conference.conferenceStatus, ""))
 
 
-def session_conditions(on_date: Optional[str], status: Optional[str], location: Optional[str]) -> list:
+def session_conditions(
+    on_date: Optional[str],
+    status: Optional[str],
+    location: Optional[str],
+    today: Optional[str] = None,
+) -> list:
     """The Sessions screen's own narrowing: its "Today" tab (`on_date`, the device's date), its
-    "Completed" tab (`status="completed"`) and its location filter - a training's hub, or its
-    state when it has no hub (the value the screen shows as the location)."""
+    "Completed" tab or card filter (`status="completed" | "ongoing" | "planned" | "missed"`) and
+    its location filter - a training's hub, or its state when it has no hub."""
     conditions = []
     if on_date:
         conditions.append(Conference.conferenceDate == on_date)
-    if status == "completed":
-        conditions.append(_CONFERENCE_STATUS == "completed")
+    if status:
+        norm_status = status.lower()
+        approval_status = func.lower(func.coalesce(Conference.status, ""))
+        if norm_status in ("total", "all"):
+            conditions.append(_CONFERENCE_STATUS != "cancelled")
+        elif norm_status == "completed":
+            conditions.append(_CONFERENCE_STATUS == "completed")
+        elif norm_status in ("ongoing", "live"):
+            conditions.append(_CONFERENCE_STATUS.in_(("ongoing", "live")))
+        elif norm_status in ("planned", "pending"):
+            conds = [
+                approval_status == "approved",
+                _CONFERENCE_STATUS.notin_(("ongoing", "live", "completed", "cancelled")),
+            ]
+            if today:
+                conds.append(or_(Conference.conferenceDate >= today, func.coalesce(Conference.conferenceDate, "") == ""))
+            conditions.append(and_(*conds))
+        elif norm_status == "missed":
+            conds = [
+                approval_status == "approved",
+                _CONFERENCE_STATUS.notin_(("ongoing", "live", "completed", "cancelled")),
+            ]
+            if today:
+                conds.append(and_(Conference.conferenceDate < today, func.coalesce(Conference.conferenceDate, "") != ""))
+            conditions.append(and_(*conds))
     if location:
         shown_location = func.coalesce(func.nullif(Conference.trainingHub, ""), Conference.state)
         conditions.append(shown_location == location)

@@ -1,16 +1,17 @@
+from datetime import date
 from typing import Optional
 
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import bad_request
+from app.core.exceptions import bad_request, not_found
 from app.core.security import hash_password
 from app.models.admin import Admin
 from app.models.trainee import Trainee
 from app.repositories import dashboard_repository, trainee_repository
 from app.routers.ws import manager as ws_manager
 from app.schemas.trainee_admin import TraineeAdminIn, TraineeAdminOut, TraineePageResponse
-from app.services import placement_rules
+from app.services import placement_rules, trainee_service
 from app.services.access_service import resolve_scope
 from app.services.activity_log_service import log_activity
 from app.utils.status import title_status
@@ -90,7 +91,10 @@ def register_trainee_admin(
         designation=payload.designation,
         district=payload.district,
         state=payload.state,
-        profilePhoto=payload.profilePhoto,
+        # Never a client-supplied path: a stored photo path is what grants reading that file (media
+        # access follows the trainee who owns it). The photo is uploaded as a file right after
+        # (upload_trainee_photo), or by the trainee themselves (POST /trainees/me/photo).
+        profilePhoto=None,
         zone=payload.zone,
         region=payload.region,
         company=payload.company,
@@ -130,6 +134,28 @@ def register_trainee_admin(
     return _trainee_to_admin_out(trainee)
 
 
+async def upload_trainee_photo(
+    db: Session, common_db: Session, admin: Admin, trainee_uid: str, file, tenant_id: str
+) -> TraineeAdminOut:
+    """The New Trainee form's profile photo, uploaded once the trainee is registered. Only for a
+    trainee the caller may see (the Trainee List rule: admin grant / assigned-or-rostered trainer);
+    anyone else's trainee is "not found". Stored exactly like the trainee's own upload, so the
+    trainee sees it after logging in."""
+    conditions = dashboard_repository.trainee_authorization_conditions(resolve_scope(common_db, admin, tenant_id))
+    trainee = trainee_repository.get_authorized_by_uid(db, trainee_uid, conditions)
+    if trainee is None:
+        raise not_found("Trainee not found")
+    trainee = await trainee_service.upload_profile_photo(db, trainee, file, tenant_id)
+    log_activity(
+        db,
+        action="UPLOAD_TRAINEE_PHOTO",
+        username=admin.username,
+        role=admin.role,
+        remarks=f"Uploaded the profile photo of trainee {trainee.traineeUid}",
+    )
+    return _trainee_to_admin_out(trainee)
+
+
 def list_trainees_page(
     db: Session,
     admin: Admin,
@@ -142,10 +168,15 @@ def list_trainees_page(
     page: Optional[int] = None,
     common_db: Optional[Session] = None,
     tenant_id: Optional[str] = None,
+    registered_from: Optional[date] = None,
+    registered_to: Optional[date] = None,
 ) -> TraineePageResponse:
     """One page of the Trainee List (or, with `mode="pending"`, the Pending Trainee List) - the
-    same rows `list_trainees_admin` authorizes, but counted, searched, sorted and paged in SQL."""
-    conditions = dashboard_repository.trainee_authorization_conditions(resolve_scope(common_db, admin, tenant_id))
+    same rows `list_trainees_admin` authorizes, but counted, searched, sorted and paged in SQL.
+    `registered_from` / `registered_to` narrow it to trainees registered in that date range."""
+    conditions = dashboard_repository.trainee_authorization_conditions(
+        resolve_scope(common_db, admin, tenant_id), listing=True
+    ) + trainee_repository.registered_between(registered_from, registered_to)
     try:
         result = trainee_repository.list_page(db, conditions, mode, search, sort, descending, cursor, limit, page)
     except (ValueError, KeyError, TypeError):

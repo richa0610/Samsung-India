@@ -1,9 +1,9 @@
+from datetime import date
 from typing import Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import forbidden
 from app.dependencies.auth import get_current_admin, require_admin_role
 from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.dependencies.filters import ConferenceFilters, get_conference_filters
@@ -16,21 +16,23 @@ from app.schemas.training import (
     AssessmentSuiteOut,
     AttendanceListItemOut,
     AttendanceMarkRequest,
+    AttendancePageResponse,
     AttendanceResetRequest,
+    JoinCodeOut,
     LiveBroadcastRequest,
+    LiveTimerRequest,
     ProctoringUnlockRequest,
     QuestionCreate,
     SessionDashboardOut,
     SessionReportOut,
     TopPerformer,
     TrainerSummaryOut,
-    TrainingPageResponse,
-    AttendancePageResponse,
     TrainingAdminUpdate,
     TrainingCreate,
     TrainingDetailOut,
     TrainingFacetsOut,
     TrainingOut,
+    TrainingPageResponse,
     TrainingStatusActionRequest,
 )
 from app.services import (
@@ -130,7 +132,7 @@ def list_trainings_page(
     # The trainer Sessions screen: its Today tab (the device's date), Completed tab and location
     # filter; sort="session" is its grouped order (page numbers only).
     on_date: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    status: Optional[Literal["completed"]] = Query(None),
+    status: Optional[str] = Query(None, max_length=50),
     location: Optional[str] = Query(None, max_length=200),
     paging: PageRequest = Depends(page_request(50)),
     filters: ConferenceFilters = Depends(get_conference_filters),
@@ -202,6 +204,18 @@ def get_session_dashboard(
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
     return training_service.get_session_dashboard(db, admin, conference_uid, common_db, tenant_id)
+
+
+@router.get("/trainings/{conference_uid}/join-code", response_model=JoinCodeOut)
+def get_join_code(
+    conference_uid: str,
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+    common_db: Session = Depends(get_common_db),
+    tenant_id: str = Depends(get_tenant_id_from_request),
+):
+    """The signed code the trainer's QR code and share link carry."""
+    return training_service.get_join_code(db, admin, conference_uid, common_db, tenant_id)
 
 
 @router.get("/trainings/{conference_uid}/detail", response_model=TrainingDetailOut)
@@ -367,12 +381,15 @@ def live_quiz_broadcast(
 def live_quiz_stop_timer(
     conference_uid: str,
     background_tasks: BackgroundTasks,
+    payload: Optional[LiveTimerRequest] = None,
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return live_quiz_service.stop_timer(db, admin, conference_uid, background_tasks, common_db, tenant_id)
+    return live_quiz_service.stop_timer(
+        db, admin, conference_uid, background_tasks, common_db, tenant_id, paused=payload.paused if payload else None
+    )
 
 
 @router.post("/trainings/{conference_uid}/live-quiz/leaderboard", response_model=SessionDashboardOut)
@@ -516,12 +533,27 @@ def register_trainee_admin(
     )
 
 
+@router.post("/trainees/{trainee_uid}/photo", response_model=TraineeAdminOut)
+async def upload_trainee_photo(
+    trainee_uid: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    admin: Admin = Depends(get_current_admin),
+    common_db: Session = Depends(get_common_db),
+    tenant_id: str = Depends(get_tenant_id_from_request),
+):
+    return await trainee_admin_service.upload_trainee_photo(db, common_db, admin, trainee_uid, file, tenant_id)
+
+
 @router.get("/trainees/page", response_model=TraineePageResponse)
 def list_trainees_page(
     mode: Literal["all", "pending"] = "all",
     q: Optional[str] = Query(None, max_length=100),
     sort: Literal["timestamp", "traineeUid", "name", "trainerName", "supervisorName", "district", "updatedBy", "status"] = "timestamp",
     dir: Literal["asc", "desc"] = "desc",
+    # Registration date range (YYYY-MM-DD, inclusive) - the trainer lists' date filter.
+    start: Optional[date] = Query(None),
+    end: Optional[date] = Query(None),
     paging: PageRequest = Depends(page_request(10)),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
@@ -529,5 +561,6 @@ def list_trainees_page(
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
     return trainee_admin_service.list_trainees_page(
-        db, admin, mode, q, sort, dir == "desc", paging.cursor, paging.limit, paging.page, common_db=common_db, tenant_id=tenant_id
+        db, admin, mode, q, sort, dir == "desc", paging.cursor, paging.limit, paging.page,
+        common_db=common_db, tenant_id=tenant_id, registered_from=start, registered_to=end,
     )

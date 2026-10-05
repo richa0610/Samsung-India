@@ -23,7 +23,7 @@ from app.core.exceptions import forbidden
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.services import trainer_service
-from app.services.access_service import AccessScope, norm, reject_outside_scope
+from app.services.access_service import AccessScope, granted_companies, norm, reject_outside_scope
 
 
 def authorize_placement(
@@ -67,5 +67,6 @@ def _authorize_admin(db, common_db, scope: AccessScope, tenant_id, company, zone
     target = trainer_service.find_trainer(common_db, db, assigned, tenant_id)
     if target is None:
         raise forbidden("This trainer is not an active trainer in this organisation")
-    if not scope.is_super and norm(target.company) not in {rule.company for rule in scope.rules}:
+    companies = granted_companies(scope)
+    if companies is not None and norm(target.company) not in companies:
         raise forbidden("You can only assign a trainer from a company in your authorized scope")

@@ -5,7 +5,10 @@ conferences. Nothing is faked: a trainee with no history gets zeros and an
 empty training table, not sample data.
 """
 
+import math
+from collections import Counter
 from datetime import datetime, timedelta
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -14,7 +17,7 @@ from app.repositories import (
     assessment_repository,
     attendance_repository,
     conference_repository,
-    trainee_repository,
+    dashboard_repository,
 )
 from app.schemas.session import (
     DashboardMetrics,
@@ -22,6 +25,8 @@ from app.schemas.session import (
     DashboardRanking,
     DashboardTrainingRow,
     TraineeDashboardOut,
+    TraineeMetricCard,
+    TrainingHistoryPage,
 )
 from app.services import session_service
 from app.services.module_flow import live_quiz_suite_uid
@@ -69,9 +74,10 @@ def _test_and_quiz_suites(conference) -> set[str]:
 
 
 def _trainee_status_for(conference, attendance) -> str:
-    """This trainee's own outcome for one conference - shared by the
-    dashboard metrics and the Training Details table so the two can never
-    disagree with each other."""
+    """This trainee's own outcome for one conference - the status on each
+    Training Details row, and what Training History's status filter matches,
+    so the two can never disagree. (The Dashboard's metric cards group
+    trainings differently - see _metric_card_for.)"""
     over = session_service._session_is_over(conference)
     conf_live = title_status(conference.conferenceStatus) in ("Ongoing", "Live")
     if attendance and attendance.status == "Present":
@@ -99,48 +105,90 @@ def _never_started(conference) -> bool:
     return bool(scheduled_day) and scheduled_day < ist_now().date().isoformat()
 
 
-def _rank_in(pool: list[tuple[str, float]], trainee_uid: str) -> tuple[int | None, int, float | None]:
-    """`pool` is (uid, percent), sorted best-first. Competition ranking - every
-    trainee with a strictly higher percent is ahead; ties share a rank.
-    Returns (rank, total, percentile) or (None, total, None) if not in pool."""
-    total = len(pool)
-    my_percent = next((percent for uid, percent in pool if uid == trainee_uid), None)
-    if my_percent is None:
-        return None, total, None
-    rank = 1 + sum(1 for _uid, percent in pool if percent > my_percent)
-    return rank, total, round(rank / total * 100, 1) if total else None
+def _metric_card_for(conference, attendance) -> TraineeMetricCard:
+    """The one Dashboard metric card this training counts toward - shared by the cards' numbers and
+    the Training History a tapped card opens, so the list always holds what the card counted. Every
+    training lands in exactly one, so the cards add up to Total Trainings. In priority order:
+      present    - marked Present at the session
+      absent     - the trainer ended it and they were never marked Present
+      ongoing    - it started, hasn't been ended, and they aren't Present
+      notStarted - its date has passed but the trainer never started it
+      scheduled  - still upcoming (assigned / joined, not begun)"""
+    if attendance is not None and attendance.status == "Present":
+        return "present"
+    if _session_ended(conference):
+        return "absent"
+    if title_status(conference.conferenceStatus) in ("Ongoing", "Live"):
+        return "ongoing"
+    if _never_started(conference):
+        return "notStarted"
+    return "scheduled"
 
 
-def _ranking_pool(db: Session) -> list[tuple[str, float]]:
-    """(traineeUid, percent) for every trainee marked Present in at least one
-    training, sorted best-first. `percent` is their aggregate over Standard
-    Test + Live Quiz results **for sessions they were Present at**; a trainee
-    who attended but has no such marks sits at 0%. A trainee who has a result
-    but was never Present anywhere is not ranked."""
-    results = assessment_repository.list_all_submitted_results(db)
-    conf_uids = {r.conferenceUid for r in results}
-    confs = {
-        c.conferenceUid: c
-        for c in conference_repository.list_by_uids(db, conf_uids)
-        if title_status(c.conferenceStatus) != "Cancelled"
-    }
-    accepted = {uid: _test_and_quiz_suites(c) for uid, c in confs.items()}
-    present_pairs = set(attendance_repository.list_present_pairs(db, list(conf_uids)))
+class _OwnTrainings:
+    """The trainee's own trainings - every one with an attendance row or a result - with their
+    attendance and results. Cancelled ones (and, with a date range, ones outside it) are dropped
+    from every number and row, as if the trainee was never part of them. Three statements, the
+    trainee's own rows only."""
 
-    pool_uids = attendance_repository.list_attended_trainee_uids(db)
-    totals: dict[str, list[float]] = {uid: [0.0, 0.0] for uid in pool_uids}
-    for row in results:
-        if (
-            row.traineeUid in totals
-            and (row.conferenceUid, row.traineeUid) in present_pairs
-            and row.assessmentSuiteUid in accepted.get(row.conferenceUid, set())
-        ):
-            totals[row.traineeUid][0] += _num(row.totalScore)
-            totals[row.traineeUid][1] += _num(row.maxScore)
+    def __init__(self, db: Session, trainee: Trainee, start: str | None, end: str | None):
+        attendance_rows = attendance_repository.list_for_trainee(db, trainee.traineeUid)
+        result_rows = assessment_repository.list_results_for_trainee(db, trainee.traineeUid)
+        all_uids = {row.conferenceUid for row in attendance_rows} | {row.conferenceUid for row in result_rows}
+        conferences = {c.conferenceUid: c for c in conference_repository.list_by_uids(db, all_uids)}
+        dropped = {uid for uid, c in conferences.items() if title_status(c.conferenceStatus) == "Cancelled"}
+        if start or end:
+            dropped |= {
+                uid
+                for uid, c in conferences.items()
+                if (start and (c.conferenceDate or "") < start) or (end and (c.conferenceDate or "") > end)
+            }
+        self.attendance_rows = [row for row in attendance_rows if row.conferenceUid not in dropped]
+        self.result_rows = [row for row in result_rows if row.conferenceUid not in dropped]
+        self.attendance_by_conf = {row.conferenceUid: row for row in self.attendance_rows}
+        self.results_by_conf: dict[str, list] = {}
+        for row in self.result_rows:
+            self.results_by_conf.setdefault(row.conferenceUid, []).append(row)
+        self.conf_uids = all_uids - dropped
+        self.conferences_by_uid = {uid: c for uid, c in conferences.items() if uid not in dropped}
 
-    pool = [(uid, (score / maximum * 100) if maximum > 0 else 0.0) for uid, (score, maximum) in totals.items()]
-    pool.sort(key=lambda item: item[1], reverse=True)
-    return pool
+    def newest_first(self) -> list:
+        return sorted(
+            self.conferences_by_uid.values(),
+            key=lambda c: (_parse_date(c.conferenceDate) or datetime.min, c.id),
+            reverse=True,
+        )
+
+
+def list_training_history(
+    db: Session,
+    trainee: Trainee,
+    page: int,
+    limit: int,
+    start: str | None = None,
+    end: str | None = None,
+    status: str | None = None,
+    card: Optional[TraineeMetricCard] = None,
+) -> TrainingHistoryPage:
+    """One page of the trainee's Training History, newest first - the screen's infinite scroll.
+    The date range and the filters apply before paging, so `total` is what matches them; `status`
+    is the trainee's own outcome shown on each row (_trainee_status_for) and `card` the Dashboard
+    metric card a training counted toward (_metric_card_for - a tapped card lists exactly what it
+    counted). Both depend on the session's timing, so they are applied here rather than in SQL -
+    over the trainee's own trainings only. Only the page's rows are built (scores and session rank:
+    one statement for the page), and the tenant-wide ranking the Dashboard shows is not computed."""
+    own = _OwnTrainings(db, trainee, start, end)
+    ordered = own.newest_first()
+    if status:
+        ordered = [c for c in ordered if _trainee_status_for(c, own.attendance_by_conf.get(c.conferenceUid)) == status]
+    if card:
+        ordered = [c for c in ordered if _metric_card_for(c, own.attendance_by_conf.get(c.conferenceUid)) == card]
+    total = len(ordered)
+    offset = (page - 1) * limit
+    rows = _training_rows(db, trainee, ordered[offset:offset + limit], own.attendance_by_conf, own.results_by_conf)
+    return TrainingHistoryPage(
+        items=rows, total=total, page=page, pageSize=limit, totalPages=math.ceil(total / limit) if total else 0
+    )
 
 
 def build_trainee_dashboard(
@@ -148,69 +196,17 @@ def build_trainee_dashboard(
 ) -> TraineeDashboardOut:
     conference, started, _start_at = session_service._select_current_conference(db, trainee=trainee)
 
-    attendance_rows = attendance_repository.list_for_trainee(db, trainee.traineeUid)
-    result_rows = assessment_repository.list_results_for_trainee(db, trainee.traineeUid)
+    own = _OwnTrainings(db, trainee, start, end)
+    attendance_rows, result_rows = own.attendance_rows, own.result_rows
+    attendance_by_conf, results_by_conf = own.attendance_by_conf, own.results_by_conf
+    conf_uids, conferences_by_uid = own.conf_uids, own.conferences_by_uid
 
-    attendance_by_conf = {row.conferenceUid: row for row in attendance_rows}
-    results_by_conf: dict[str, list] = {}
-    for row in result_rows:
-        results_by_conf.setdefault(row.conferenceUid, []).append(row)
-
-    conf_uids = set(attendance_by_conf) | set(results_by_conf)
-    conferences_by_uid = {c.conferenceUid: c for c in conference_repository.list_by_uids(db, conf_uids)}
-
-    # A cancelled training is dropped from every number and row on this
-    # dashboard, as if the trainee was never part of it.
-    cancelled_uids = {uid for uid, c in conferences_by_uid.items() if title_status(c.conferenceStatus) == "Cancelled"}
-    # The dashboard's date filter drops trainings outside [start, end] the same
-    # way (ranking stays all-time, since a rank is relative to everyone).
-    if start or end:
-        cancelled_uids |= {
-            uid
-            for uid, c in conferences_by_uid.items()
-            if (start and (c.conferenceDate or "") < start) or (end and (c.conferenceDate or "") > end)
-        }
-    if cancelled_uids:
-        attendance_rows = [row for row in attendance_rows if row.conferenceUid not in cancelled_uids]
-        result_rows = [row for row in result_rows if row.conferenceUid not in cancelled_uids]
-        attendance_by_conf = {uid: row for uid, row in attendance_by_conf.items() if uid not in cancelled_uids}
-        results_by_conf = {uid: rows for uid, rows in results_by_conf.items() if uid not in cancelled_uids}
-        conf_uids -= cancelled_uids
-        conferences_by_uid = {uid: c for uid, c in conferences_by_uid.items() if uid not in cancelled_uids}
-
-    # --- metrics ---------------------------------------------------------
-    # Every training the trainee is part of lands in exactly ONE bucket, so the
-    # cards always add up to Total Trainings. In priority order:
-    #   Present     - marked Present at the session
-    #   Absent      - the trainer ended it and they were never marked Present
-    #   Ongoing     - it started, hasn't been ended, and they aren't Present
-    #   Not Started - its date has passed but the trainer never started it
-    #   Scheduled   - still upcoming (assigned / joined, not begun)
-    present = absent = ongoing = not_started = scheduled = 0
-    for uid in conf_uids:
-        conference = conferences_by_uid.get(uid)
-        if conference is None:
-            continue
-        att = attendance_by_conf.get(uid)
-        if att is not None and att.status == "Present":
-            present += 1
-        elif _session_ended(conference):
-            absent += 1
-        elif title_status(conference.conferenceStatus) in ("Ongoing", "Live"):
-            ongoing += 1
-        elif _never_started(conference):
-            not_started += 1
-        else:
-            scheduled += 1
-    total_trainings = present + absent + ongoing + not_started + scheduled
-    metrics = DashboardMetrics(
-        totalTrainings=total_trainings,
-        present=present,
-        absent=absent,
-        ongoing=ongoing,
-        scheduled=scheduled,
-        notStarted=not_started,
+    # --- metrics: one card per training (see _metric_card_for) -------------
+    cards = Counter(
+        _metric_card_for(training, attendance_by_conf.get(uid))
+        for uid, training in conferences_by_uid.items()
     )
+    metrics = DashboardMetrics(totalTrainings=sum(cards.values()), **cards)
 
     # --- performance: Standard Test + Live Quiz marks, for sessions the
     #     trainee was actually marked Present at (a result without a Present
@@ -244,19 +240,16 @@ def build_trainee_dashboard(
 
     # --- ranking: trainees who've attended >=1 training, by their Standard
     #     Test + Live Quiz marks. A new trainee who's never attended is out. ---
-    global_pool = _ranking_pool(db)
-    state_uids = trainee_repository.list_uids_in_state(db, trainee.state) if trainee.state else set()
-    state_pool = [item for item in global_pool if item[0] in state_uids]
-
-    g_rank, g_total, g_pct = _rank_in(global_pool, trainee.traineeUid)
-    s_rank, s_total, s_pct = _rank_in(state_pool, trainee.traineeUid)
+    # Computed in the database on every request (dashboard_repository.trainee_rank) - never cached,
+    # so a result or attendance written anywhere shows up in the next rank.
+    global_position, state_position = dashboard_repository.trainee_rank(db, trainee.traineeUid, trainee.state)
     ranking = DashboardRanking(
-        globalRank=g_rank,
-        globalTotal=g_total,
-        globalPercentile=g_pct,
-        stateRank=s_rank,
-        stateTotal=s_total,
-        statePercentile=s_pct,
+        globalRank=global_position.rank,
+        globalTotal=global_position.total,
+        globalPercentile=global_position.percentile,
+        stateRank=state_position.rank,
+        stateTotal=state_position.total,
+        statePercentile=state_position.percentile,
         stateName=trainee.state,
     )
 
@@ -276,11 +269,21 @@ def build_trainee_dashboard(
 def _build_training_rows(
     db, trainee, attendance_by_conf, results_by_conf, conferences_by_uid, limit
 ) -> list[DashboardTrainingRow]:
-    # Newest first for display.
+    # Newest first for display; only the rows returned are built.
     ordered = sorted(
         conferences_by_uid.values(),
         key=lambda c: (_parse_date(c.conferenceDate) or datetime.min, c.id),
         reverse=True,
+    )[:limit]
+    return _training_rows(db, trainee, ordered, attendance_by_conf, results_by_conf)
+
+
+def _training_rows(db, trainee, ordered, attendance_by_conf, results_by_conf) -> list[DashboardTrainingRow]:
+    """The table rows for exactly these trainings, in this order."""
+    # The trainee's rank in each row's Standard Test, for all rows in ONE statement (not one per
+    # row): each trainee counts once by their latest attempt, equal scores share a rank.
+    session_rank = dashboard_repository.session_ranks(
+        db, trainee.traineeUid, {conf.conferenceUid: conf.postAssessmentUid for conf in ordered if conf.postAssessmentUid}
     )
 
     rows: list[DashboardTrainingRow] = []
@@ -297,19 +300,8 @@ def _build_training_rows(
         # "Joined" (never checked in) is "Missed" for them, not "Completed".
         status = _trainee_status_for(conf, attendance_by_conf.get(conf.conferenceUid))
 
-        rank_label = None
-        if post and conf.postAssessmentUid:
-            ranked = sorted(
-                assessment_repository.list_results_for_conference_suite(
-                    db, conf.conferenceUid, conf.postAssessmentUid
-                ),
-                key=lambda r: float(r.percentage),
-                reverse=True,
-            )
-            for index, result in enumerate(ranked):
-                if result.traineeUid == trainee.traineeUid:
-                    rank_label = str(index + 1)
-                    break
+        position = session_rank.get(conf.conferenceUid) if post else None
+        rank_label = str(position) if position is not None else None
 
         started_at = _parse_date(conf.conferenceDate)
         rows.append(
@@ -327,4 +319,4 @@ def _build_training_rows(
             )
         )
 
-    return rows[:limit]
+    return rows

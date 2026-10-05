@@ -1,5 +1,6 @@
 import AppInput from "@/components/ui/AppInput";
-import { digitsOnly } from "@/utils/validation";
+import AppText from "@/components/ui/AppText";
+import { Colors } from "@/theme/colors";
 import { TrainerProfileForm } from "./useTrainerProfileForm";
 import { ProfileSection } from "./ProfileSection";
 
@@ -12,55 +13,44 @@ const TEXT_FIELDS: { key: "companyEmail" | "visitingCard" | "idCard" | "offerLet
   { key: "promocode", label: "Promocode" },
 ];
 
+// View-only: these HR details are managed by admins (the server ignores them on a profile save).
 export function OfficialInfoSection({ form }: { form: TrainerProfileForm }) {
-  const { profile, editing, savingSection, setField, toggleEdit, saveSection } = form;
+  const { profile } = form;
   if (!profile) return null;
-  const isEditing = editing.official;
 
   return (
-    <ProfileSection
-      icon="briefcase-outline"
-      title="Official Information"
-      editing={isEditing}
-      saving={savingSection === "official"}
-      onToggleEdit={() => (isEditing ? saveSection("official") : toggleEdit("official"))}
-    >
+    <ProfileSection icon="briefcase-outline" title="Official Information" editing={false}>
+      <AppText variant="caption" color={Colors.gray500}>Managed by your admin</AppText>
       <AppInput
         compact
         label="Job Status"
         value={profile.jobStatus}
-        editable={isEditing}
-        onChangeText={(v) => setField("jobStatus", v)}
+        editable={false}
       />
       <AppInput
         compact
         label="Joined On"
         value={profile.joinedOn}
-        editable={isEditing}
-        onChangeText={(v) => setField("joinedOn", v)}
+        editable={false}
       />
       <AppInput
         compact
         label="Role"
         value={profile.role}
-        editable={isEditing}
-        onChangeText={(v) => setField("role", v)}
+        editable={false}
       />
       <AppInput
         compact
         label="Designation"
         value={profile.designation}
-        editable={isEditing}
-        onChangeText={(v) => setField("designation", v)}
+        editable={false}
       />
       <AppInput
         compact
         label="Salary"
         placeholder="Salary in Rupees"
         value={profile.salary}
-        editable={isEditing}
-        keyboardType="number-pad"
-        onChangeText={(v) => setField("salary", digitsOnly(v))}
+        editable={false}
       />
       {TEXT_FIELDS.map((field) => (
         <AppInput
@@ -69,8 +59,7 @@ export function OfficialInfoSection({ form }: { form: TrainerProfileForm }) {
           label={field.label}
           placeholder={field.placeholder}
           value={profile[field.key]}
-          editable={isEditing}
-          onChangeText={(v) => setField(field.key, v)}
+          editable={false}
         />
       ))}
     </ProfileSection>

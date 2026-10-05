@@ -1,5 +1,7 @@
 export const FontSize = {
   display: 32,
+  hero: 20,
+  heroBody: 12,
   h1: 28,
   h2: 24,
   h3: 20,
@@ -14,6 +16,8 @@ export const FontSize = {
 
 export const LineHeight = {
   display: 40,
+  hero: 24,
+  heroBody: 16,
   h1: 36,
   h2: 32,
   h3: 28,
@@ -38,6 +42,18 @@ export const Typography = {
     fontSize: FontSize.display,
     lineHeight: LineHeight.display,
     fontWeight: FontWeight.bold,
+  },
+  /** Big, tight headline on a hero banner (e.g. the login landing's "Learn. Assess. Grow together."). */
+  hero: {
+    fontSize: FontSize.hero,
+    lineHeight: LineHeight.hero,
+    fontWeight: FontWeight.bold,
+  },
+  /** The supporting line under a hero headline. */
+  heroBody: {
+    fontSize: FontSize.heroBody,
+    lineHeight: LineHeight.heroBody,
+    fontWeight: FontWeight.regular,
   },
   h1: {
     fontSize: FontSize.h1,

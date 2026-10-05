@@ -17,8 +17,10 @@ import {
 } from "@/components/admin/dashboard";
 import AdminFilterBar from "@/components/admin/AdminFilterBar";
 import AppText from "@/components/ui/AppText";
+import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { useAdminDashboard } from "@/hooks/useAdminDashboard";
 import { useAdminPhotoUpload } from "@/hooks/useAdminPhotoUpload";
+import { useStaffLogout } from "@/hooks/useStaffLogout";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { FontWeight } from "@/theme/fontWeight";
@@ -27,7 +29,8 @@ const ACTIVE_TAB: AdminDashboardTab = "home";
 
 export default function AdminDashboardScreen() {
   const router = useRouter();
-  const { admin, pendingCount, stats, loading, refreshing, error, refresh, handleLogout } = useAdminDashboard();
+  const { admin, pendingCount, stats, loading, refreshing, error, refresh } = useAdminDashboard();
+  const { confirmLogoutOpen, requestLogout, cancelLogout, confirmLogout } = useStaffLogout();
   const { pickAndUpload, uploading } = useAdminPhotoUpload();
   const [showTrainingTypes, setShowTrainingTypes] = useState(false);
   const [showAudienceTypes, setShowAudienceTypes] = useState(false);
@@ -68,7 +71,7 @@ export default function AdminDashboardScreen() {
             avatarUrl={admin?.profilePicture}
             onOpenProfile={pickAndUpload}
             uploadingPhoto={uploading}
-            onLogout={handleLogout}
+            onLogout={requestLogout}
           />
 
           <View style={styles.filterWrap}>
@@ -222,6 +225,7 @@ export default function AdminDashboardScreen() {
           onSelectTab={() => {}}
         />
       </SafeAreaView>
+      <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </>
   );
 }

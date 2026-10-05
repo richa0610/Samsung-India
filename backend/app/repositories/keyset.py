@@ -9,9 +9,8 @@ its sort order and its search columns:
 
 Two ways to move through a list:
   - `page` (1-based, an OFFSET) - what the tables' numbered page buttons use. `total` and
-    `totalPages` come with every numbered page. The COUNT behind them runs once per distinct
-    list and is then reused until that database's list data changes (database/change_tracking)
-    or COUNT_TTL_SECONDS pass - so paging through a list doesn't recount it on every page.
+    `totalPages` come with every numbered page, counted fresh for that request (never cached:
+    other servers and systems write to the same database, so a remembered total could be stale).
   - `cursor` ("the rows after this one", keyset) - what export and "load more" walks use; it
     stays correct while rows are added and costs the same however deep it goes. No count is run
     for a cursor continuation (the caller already has it).
@@ -28,18 +27,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Optional
 
-from sqlalchemy import Select, func, or_, select, tuple_
+from sqlalchemy import Select, asc, desc, func, or_, select, tuple_
 from sqlalchemy.orm import Session
 
-from app.core.ttl_cache import TTLCache
-from app.database.change_tracking import data_version
-
 MAX_PAGE_SIZE = 200
-
-# How long a count is trusted without a change this process saw - bounds staleness from writes it
-# can't see (another worker, the legacy system writing to the same database).
-COUNT_TTL_SECONDS = 60
-_count_cache = TTLCache(ttl_seconds=COUNT_TTL_SECONDS, max_entries=5000)
 
 
 @dataclass(frozen=True)
@@ -95,26 +86,8 @@ class Page:
 
 
 def _count(db: Session, count_stmt: Select) -> int:
-    """The list's total, from the cache when this exact query (same SQL, same parameters - so the
-    same authorization, filters and search) was counted since the database last changed."""
-    engine = db.get_bind()
-    compiled = count_stmt.compile(dialect=engine.dialect)
-    key = (
-        data_version(engine),
-        str(compiled),
-        tuple(sorted((name, repr(value)) for name, value in compiled.params.items())),
-    )
-    cached = _count_cache.get(key)
-    if cached is not None:
-        return cached
-    total = int(db.scalar(count_stmt) or 0)
-    _count_cache.set(key, total)
-    return total
-
-
-def clear_count_cache() -> None:
-    """Forgets every cached count (tests)."""
-    _count_cache.clear()
+    """The list's total (same authorization, filters and search as its rows), counted now."""
+    return int(db.scalar(count_stmt) or 0)
 
 
 def search_conditions(expressions, search: Optional[str]) -> list:
@@ -157,9 +130,16 @@ def paginate(
     limit: int,
     page: Optional[int],
     entities: bool = True,
+    enrich: Optional[Callable[[Any], Select]] = None,
 ) -> Page:
     """One page of an already-authorized, filtered and searched `stmt`. `entities=True` returns
-    ORM objects (`select(Model)`), False the labelled rows of a column select."""
+    ORM objects (`select(Model)`), False the labelled rows of a column select.
+
+    `enrich` (a "deferred join", keyset orders only): `stmt` then selects just `id` and
+    `sort_value`, and is sorted, offset and limited on its own; `enrich(page_rows)` receives that
+    page as a subquery and returns the select that joins the displayed columns onto those rows only
+    - in the SAME statement. The count runs on the narrow `stmt` as well. For lists whose display
+    joins can't change which rows match (e.g. a LEFT JOIN on a unique key)."""
     limit = max(1, min(limit, MAX_PAGE_SIZE))
     total = None
     if cursor is None:
@@ -177,7 +157,14 @@ def paginate(
     page_number = None if cursor else (page or 1)
     if page_number and page_number > 1:
         stmt = stmt.offset((page_number - 1) * limit)
-    result = db.scalars(stmt.limit(limit + 1)) if entities else db.execute(stmt.limit(limit + 1))
+    if enrich is not None:
+        if order.keyset_expression is None:
+            raise ValueError("a deferred join needs a single-expression order")
+        page_rows = stmt.limit(limit + 1).subquery("page_rows")
+        direction = desc if order.descending else asc
+        result = db.execute(enrich(page_rows).order_by(direction(page_rows.c.sort_value), direction(page_rows.c.id)))
+    else:
+        result = db.scalars(stmt.limit(limit + 1)) if entities else db.execute(stmt.limit(limit + 1))
     rows = list(result.all())
 
     next_cursor = None

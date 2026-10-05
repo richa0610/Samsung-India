@@ -1,5 +1,6 @@
 import type { NewTraineeRecord } from "@/data/mockData";
-import { apiRequest } from "./client";
+import type { PickedImage } from "./auth";
+import { apiRequest, apiUpload } from "./client";
 import type { PageMeta } from "./training";
 
 export type NewTraineeInput = Omit<NewTraineeRecord, "registeredAt" | "approvalStatus" | "updatedBy" | "updationOn" | "timestamp">;
@@ -11,6 +12,13 @@ export function registerNewTrainee(token: string, payload: NewTraineeInput) {
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
   });
+}
+
+/** The New Trainee form's profile photo, sent as a file once the trainee is registered. */
+export function uploadNewTraineePhoto(token: string, traineeUid: string, image: PickedImage) {
+  const formData = new FormData();
+  formData.append("file", { uri: image.uri, name: image.name, type: image.type } as unknown as Blob);
+  return apiUpload<NewTraineeRecord>(`/admin/trainees/${encodeURIComponent(traineeUid)}/photo`, formData, token);
 }
 
 export type TraineeSortKey =
@@ -39,10 +47,17 @@ export function fetchTraineesPage(
     cursor?: string | null;
     page?: number;
     limit?: number;
+    /** Registration date range, "YYYY-MM-DD" inclusive (empty = open-ended). */
+    start?: string;
+    end?: string;
+    /** Aborts the request when a newer one replaces it. */
+    signal?: AbortSignal;
   },
 ) {
   const params = new URLSearchParams();
   params.set("mode", options.mode);
+  if (options.start) params.set("start", options.start);
+  if (options.end) params.set("end", options.end);
   if (options.page && options.page > 1) params.set("page", String(options.page));
   if (options.q?.trim()) params.set("q", options.q.trim());
   if (options.sort) params.set("sort", options.sort);
@@ -51,6 +66,7 @@ export function fetchTraineesPage(
   if (options.limit) params.set("limit", String(options.limit));
   return apiRequest<TraineePage>(`/admin/trainees/page?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal: options.signal,
   });
 }
 

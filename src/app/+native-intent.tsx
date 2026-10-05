@@ -26,8 +26,9 @@ export function redirectSystemPath({ path }: { path: string; initial: boolean })
     const withHost = p.match(/^\/join\/([^/?#]+)/i);
     if (withHost) return `/join/${withHost[1]}`;
 
-    // Authority dropped: a bare `/CONF2610014` is a scanned join link.
-    const bareCode = p.match(/^\/(CONF\d[A-Za-z0-9]*)(?:[/?#]|$)/i);
+    // Authority dropped: a bare `/CONF2698735081.SIGNATURE` (or an older unsigned `/CONF2610014`)
+    // is a scanned join link.
+    const bareCode = p.match(/^\/(CONF\d[A-Za-z0-9]*(?:\.[A-Za-z0-9]+)?)(?:[/?#]|$)/i);
     if (bareCode) return `/join/${bareCode[1]}`;
 
     return path;

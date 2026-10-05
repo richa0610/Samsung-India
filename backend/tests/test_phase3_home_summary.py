@@ -3,14 +3,12 @@
 1. The trainer Home dashboard counts in SQL (dashboard_repository.trainer_summary_counts) and must
    give exactly the numbers the old Python counting gave (tests/_legacy_trainer_agenda.py) - checked
    on randomized, messy data (mixed-case / blank / NULL statuses, NULL dates, several trainers).
-2. A list's total is counted once and reused until the list data changes
-   (database/change_tracking + repositories/keyset._count), then recounted - never stale.
+2. A list's total is counted fresh on every numbered page (no cache - Phase 5), so it is never stale.
 """
 
 import random
 import unittest
 from datetime import date, timedelta
-from unittest.mock import patch
 
 from sqlalchemy import create_engine, event, select, text
 from sqlalchemy.orm import sessionmaker
@@ -90,9 +88,11 @@ class HomeSummaryMatchesTheOldCounting(unittest.TestCase):
         self.assertEqual(len(seen), 2)
 
 
-class CountIsReusedUntilTheDataChanges(unittest.TestCase):
+class CountIsAlwaysFresh(unittest.TestCase):
+    """Phase 5: a numbered page's total is counted on every request - never cached, because other
+    servers and systems write to the same database. A cursor continuation still skips the count."""
+
     def setUp(self):
-        keyset.clear_count_cache()
         self.engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
         TenantBase.metadata.create_all(self.engine)
         self.db = sessionmaker(bind=self.engine)()
@@ -109,56 +109,25 @@ class CountIsReusedUntilTheDataChanges(unittest.TestCase):
         event.listen(self.engine, "before_cursor_execute", listener)
         self.addCleanup(event.remove, self.engine, "before_cursor_execute", listener)
 
-    def page(self, number=1, where=()):
-        stmt = select(Conference).where(Conference.trainerEmployeeId == "t1", *where)
-        return keyset.paginate(self.db, stmt, self.order, cursor=None, limit=10, page=number)
+    def page(self, number=1, cursor=None):
+        stmt = select(Conference).where(Conference.trainerEmployeeId == "t1")
+        return keyset.paginate(self.db, stmt, self.order, cursor=cursor, limit=10, page=None if cursor else number)
 
-    def test_paging_through_an_unchanged_list_counts_once(self):
-        totals = [self.page(n).total for n in (1, 2, 3, 1)]
-        self.assertEqual(totals, [30, 30, 30, 30])
-        self.assertEqual(self.counts, 1)
+    def test_every_numbered_page_counts(self):
+        self.assertEqual([self.page(n).total for n in (1, 2, 3)], [30, 30, 30])
+        self.assertEqual(self.counts, 3)
 
-    def test_an_insert_a_delete_and_an_edit_each_trigger_a_fresh_count(self):
+    def test_a_write_from_anywhere_shows_in_the_next_total(self):
         self.assertEqual(self.page().total, 30)
-        self.db.add(Conference(conferenceUid="NEW", trainerEmployeeId="t1"))
-        self.db.commit()
-        self.assertEqual(self.page(2).total, 31)                                  # added
-        self.db.query(Conference).filter(Conference.conferenceUid == "C00").delete()
-        self.db.commit()
-        self.assertEqual(self.page(3).total, 30)                                  # deleted (bulk delete)
-        self.db.query(Conference).filter(Conference.conferenceUid == "C01").update({"trainerEmployeeId": "t2"})
-        self.db.commit()
-        self.assertEqual(self.page().total, 29)                                   # edited out of the list
-        with self.engine.begin() as conn:                                         # a raw SQL write
-            conn.execute(text("UPDATE conference SET trainerEmployeeId = 't1' WHERE conferenceUid = 'C01'"))
-        self.assertEqual(self.page().total, 30)
-        self.assertEqual(self.counts, 5)
+        with self.engine.begin() as conn:  # another connection, as another server or system would
+            conn.execute(text("INSERT INTO conference (conferenceUid, trainerEmployeeId) VALUES ('RAW', 't1')"))
+        self.assertEqual(self.page(2).total, 31)
 
-    def test_a_rolled_back_write_does_not_force_a_recount(self):
-        self.page()
-        self.db.add(Conference(conferenceUid="GONE", trainerEmployeeId="t1"))
-        self.db.flush()
-        self.db.rollback()
-        self.assertEqual(self.page(2).total, 30)
-        self.assertEqual(self.counts, 1)
-
-    def test_different_filters_are_counted_separately(self):
-        self.assertEqual(self.page().total, 30)
-        self.assertEqual(self.page(where=[Conference.conferenceUid.like("C0%")]).total, 10)
-        self.assertEqual(self.counts, 2)
-
-    def test_writes_to_unrelated_tables_keep_the_count(self):
-        self.page()
-        with self.engine.begin() as conn:
-            conn.execute(text("INSERT INTO logsmaster (username, action, status) VALUES ('x', 'LOGIN', 'Success')"))
-        self.page(2)
-        self.assertEqual(self.counts, 1)
-
-    def test_an_expired_count_is_recounted(self):
-        self.page()
-        with patch.object(keyset._count_cache, "get", return_value=None):  # as if the TTL passed
-            self.page(2)
-        self.assertEqual(self.counts, 2)
+    def test_a_cursor_continuation_does_not_count(self):
+        first = self.page()
+        self.counts = 0
+        self.page(cursor=first.next_cursor)
+        self.assertEqual(self.counts, 0)
 
 
 if __name__ == "__main__":

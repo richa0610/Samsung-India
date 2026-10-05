@@ -12,7 +12,6 @@ import {
   SessionModuleKey,
   getCurrentSession,
   getSessionFlowState,
-  isAttendanceRecorded,
   isModuleLeft,
   setSessionFlowState,
 } from "@/api/session";
@@ -62,6 +61,11 @@ export interface SessionActivityData {
 
 export type ModuleLocationGateStatus = "idle" | "checking" | "verified";
 
+/** Key of one module's location check in `moduleLocationStatus` - once per module per training. */
+function locationGateKey(conferenceUid: string | undefined, moduleKey: SessionModuleKey): string {
+  return `${conferenceUid}:${moduleKey}`;
+}
+
 // Which conference's Live Quiz this trainee has already been pulled into (or
 // left). Module scope so it survives `session_detail` remounting - the trainee
 // gets auto-routed to the quiz room ONCE, and Leave stays Leave.
@@ -107,6 +111,7 @@ export function useTraineeHome() {
   >({});
   const { requestLocationWithRationale } = useLocationPermission();
 
+  const traineeUid = trainee?.traineeUid;
   const loadSession = useCallback(
     async (mode: "load" | "refresh" | "silent" = "load") => {
       if (!token) return;
@@ -182,7 +187,7 @@ export function useTraineeHome() {
         // backend attendance row exists. Keep that sub-state in sync; once the
         // row is there, module.isCompleted from the backend is authoritative.
         const confUid = data.conferenceUid;
-        const currentTraineeUid = trainee?.traineeUid;
+        const currentTraineeUid = traineeUid;
         const backendAttendanceDone = data.modules.some(
           (m) => m.key === "ATTENDANCE" && m.isCompleted,
         );
@@ -232,7 +237,7 @@ export function useTraineeHome() {
         else if (mode === "load") setLoading(false);
       }
     },
-    [token, trainee?.traineeUid, params.conferenceUid, params.traineeUid, params.attendance, params.checkIn, params.flow, params.postTest, params.score],
+    [token, traineeUid, params.conferenceUid, params.traineeUid, params.attendance, params.checkIn, params.flow, params.postTest, params.score],
   );
 
   useFocusEffect(
@@ -314,17 +319,21 @@ export function useTraineeHome() {
   // has already run out by the time they tap "Enter Live Quiz". Q2+ are fine
   // because they're already in the room. One-shot per conference; the manual
   // button and Leave still work.
+  // On a geofenced training the Live Quiz asks for the same location check as
+  // every other module first: the card shows "Check-In to Enter", and the
+  // trainee is taken into the room as soon as that check passes.
   useEffect(() => {
     const uid = session?.conferenceUid;
     if (!uid || sessionClosed || notStarted || !attendanceRecorded) return;
     if (autoEnteredLiveQuiz === uid || isModuleLeft(uid, "LIVE_QUIZ", currentTraineeUid)) return;
+    if (session?.attendanceGeoFencing && moduleLocationStatus[locationGateKey(uid, "LIVE_QUIZ")] !== "verified") return;
     const liveQuiz = session?.modules.find(
       (m) => m.key === "LIVE_QUIZ" && m.isLive && !m.isCompleted,
     );
     if (!liveQuiz) return;
     autoEnteredLiveQuiz = uid;
     router.push({ pathname: "/live_quiz", params: { conferenceUid: uid } });
-  }, [session, sessionClosed, notStarted, attendanceRecorded, router, currentTraineeUid]);
+  }, [session, sessionClosed, notStarted, attendanceRecorded, moduleLocationStatus, router, currentTraineeUid]);
 
   const currentFlow: SessionFlowState = attendanceRecorded
     ? "ATTENDANCE_RECORDED"
@@ -389,7 +398,7 @@ export function useTraineeHome() {
         locationGateEnabled: !isAttendance && !!session?.attendanceGeoFencing,
         locationGateStatus: isAttendance
           ? undefined
-          : moduleLocationStatus[`${session?.conferenceUid}:${module.key}`] ?? "idle",
+          : moduleLocationStatus[locationGateKey(session?.conferenceUid, module.key)] ?? "idle",
       };
     },
   );
@@ -456,7 +465,7 @@ export function useTraineeHome() {
   // attendance-specific.
   const handleCheckInToModule = async (moduleKey: SessionModuleKey) => {
     if (!session?.conferenceUid || !token) return;
-    const statusKey = `${session.conferenceUid}:${moduleKey}`;
+    const statusKey = locationGateKey(session.conferenceUid, moduleKey);
     setModuleLocationStatus((prev) => ({ ...prev, [statusKey]: "checking" }));
 
     const { coords, status, error: permError } = await requestLocationWithRationale();

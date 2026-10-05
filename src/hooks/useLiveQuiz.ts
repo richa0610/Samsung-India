@@ -128,14 +128,24 @@ export function useLiveQuiz() {
 
   const liveQuestion = view?.state === "QUESTION_LIVE" ? (view.question ?? null) : null;
   const onLiveQuestion = !!liveQuestion && resolvedQuestionId !== liveQuestion.id && !feedback;
-  const secondsLeft = useCountdown(onLiveQuestion ? view?.timerEndsAt : null, view?.serverNowMs);
+  // The trainer pressed Stop Timer: the clock freezes at what was left and the
+  // answers lock until they press Play (the server refuses answers meanwhile).
+  const timerPaused = onLiveQuestion && view?.timerRemainingMs != null;
+  const runningSecondsLeft = useCountdown(
+    onLiveQuestion && !timerPaused ? view?.timerEndsAt : null,
+    view?.serverNowMs,
+  );
+  const secondsLeft = timerPaused ? Math.ceil((view?.timerRemainingMs ?? 0) / 1000) : runningSecondsLeft;
 
   // Timer expired and we never answered - `revealAsTimeout` sets `feedback`,
-  // which flips `onLiveQuestion` false so this won't re-fire.
+  // which flips `onLiveQuestion` false so this won't re-fire. A stopped clock
+  // never times out.
   useEffect(() => {
-    if (!onLiveQuestion || !liveQuestion || !view?.timerEndsAt || secondsLeft > 0 || selectedOption) return;
+    if (!onLiveQuestion || !liveQuestion || timerPaused || !view?.timerEndsAt || secondsLeft > 0 || selectedOption) {
+      return;
+    }
     revealAsTimeout(liveQuestion, null);
-  }, [onLiveQuestion, liveQuestion, view?.timerEndsAt, secondsLeft, selectedOption, revealAsTimeout]);
+  }, [onLiveQuestion, liveQuestion, timerPaused, view?.timerEndsAt, secondsLeft, selectedOption, revealAsTimeout]);
 
   // Trainer ended the quiz - straight to the rank page.
   useEffect(() => {
@@ -145,7 +155,7 @@ export function useLiveQuiz() {
 
   const selectOption = useCallback(
     async (optionId: string) => {
-      if (!onLiveQuestion || !liveQuestion || !token || !conferenceUid || selectedOption) return;
+      if (!onLiveQuestion || !liveQuestion || timerPaused || !token || !conferenceUid || selectedOption) return;
       setSelectedOption(optionId);
       try {
         const res = await submitLiveAnswer(token, conferenceUid, liveQuestion.id, optionId);
@@ -157,6 +167,11 @@ export function useLiveQuiz() {
             correctOptionId: res.correctOptionId ?? null,
             explanation: res.explanation ?? null,
           });
+        } else if (res.paused) {
+          // The trainer stopped the timer just before this tap reached the
+          // server - nothing was saved, so free the options and show the pause.
+          setSelectedOption(null);
+          void refetch();
         } else {
           revealAsTimeout(liveQuestion, optionId);
         }
@@ -164,7 +179,7 @@ export function useLiveQuiz() {
         // keep the local selection; a later refetch reconciles
       }
     },
-    [onLiveQuestion, liveQuestion, token, conferenceUid, selectedOption, revealAsTimeout],
+    [onLiveQuestion, liveQuestion, timerPaused, token, conferenceUid, selectedOption, revealAsTimeout, refetch],
   );
 
   const onFinalSubmit = useCallback(async () => {
@@ -202,6 +217,7 @@ export function useLiveQuiz() {
     loadError,
     selectedOption,
     secondsLeft,
+    timerPaused,
     submitting,
     connected,
     conferenceUid,

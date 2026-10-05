@@ -33,11 +33,11 @@ export function useSurvey(suiteUid?: string, conferenceUid?: string) {
   useEffect(() => {
     let ignore = false;
     async function load() {
-      if (!token || !suiteUid) return;
+      if (!token || !suiteUid || !conferenceUid) return;
       setLoading(true);
       setError(null);
       try {
-        const data = await getAssessmentQuestions(token, suiteUid);
+        const data = await getAssessmentQuestions(token, suiteUid, conferenceUid);
         if (!ignore) {
           setQuestions(data.questions);
           setSurveyTitle(data.title);
@@ -58,7 +58,7 @@ export function useSurvey(suiteUid?: string, conferenceUid?: string) {
     return () => {
       ignore = true;
     };
-  }, [token, suiteUid, reloadKey]);
+  }, [token, suiteUid, reloadKey, conferenceUid]);
 
   const handleAnswerChange = useCallback(
     (questionId: string | number, value: string) => {

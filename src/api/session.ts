@@ -130,6 +130,10 @@ export type LiveQuizView = {
   suiteUid: string | null;
   question: LiveQuizQuestion | null;
   timerEndsAt: number | null;
+  // Set (milliseconds left) only while the trainer has stopped the timer: the
+  // countdown is frozen at this value and answers are locked until Play.
+  // `timerEndsAt` is null meanwhile.
+  timerRemainingMs?: number | null;
   // Server clock when this was sent (epoch ms) - for clock-skew-correct countdown.
   serverNowMs: number | null;
   alreadyAnswered: boolean;
@@ -147,6 +151,8 @@ export type LiveAnswerResult = {
   correct?: boolean;
   correctOptionId?: string | null;
   explanation?: string | null;
+  // Refused because the trainer stopped the timer - the question is still open.
+  paused?: boolean;
 };
 
 export function submitLiveAnswer(
@@ -351,6 +357,42 @@ export function getTraineeDashboard(token: string, limit = 10, range?: { start?:
   if (range?.end) params.set("end", range.end);
   return apiRequest<TraineeDashboard>(`/sessions/dashboard?${params.toString()}`, {
     headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export type TrainingHistoryPage = {
+  items: DashboardTrainingRow[];
+  total: number | null;
+  page: number | null;
+  pageSize: number | null;
+  totalPages: number | null;
+};
+
+/** A trainee Dashboard metric card, named as its `TraineeDashboard.metrics` field. Every training
+ *  counts toward exactly one; Training History's `card` filter lists the ones a card counted. */
+export type TraineeMetricCard = Exclude<keyof DashboardMetrics, "totalTrainings">;
+
+/** One page of the trainee's Training History (newest first); the filters apply on the server. */
+export function getTrainingHistory(
+  token: string,
+  options: {
+    page: number;
+    limit: number;
+    start?: string;
+    end?: string;
+    status?: string;
+    card?: TraineeMetricCard;
+    signal?: AbortSignal;
+  },
+) {
+  const params = new URLSearchParams({ page: String(options.page), limit: String(options.limit) });
+  if (options.start) params.set("start", options.start);
+  if (options.end) params.set("end", options.end);
+  if (options.status) params.set("status", options.status);
+  if (options.card) params.set("card", options.card);
+  return apiRequest<TrainingHistoryPage>(`/sessions/trainings?${params.toString()}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: options.signal,
   });
 }
 

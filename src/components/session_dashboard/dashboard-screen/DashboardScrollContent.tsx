@@ -73,20 +73,25 @@ export default function DashboardScrollContent({
   // during a gap between modules (unlike the previous raw
   // actualStartedAt/actualEndedAt wall-clock diff, which counted those
   // gaps as runtime too).
-  const [runtimeSeconds, setRuntimeSeconds] = useState<number | null>(data?.runtimeSeconds ?? null);
+  // The shown value is derived: the server's figure, plus the seconds counted since it arrived
+  // while a module is running. Only the interval updates state (never the effect body itself).
+  const moduleRunning = data?.conferenceStatus === "Ongoing" && data?.activeModuleId != null;
+  const baseSeconds = data?.runtimeSeconds ?? null;
+  const tickingFrom = moduleRunning && baseSeconds != null ? baseSeconds : null;
+  // Which count the elapsed seconds belong to: a new server figure or another module starts at 0.
+  const tickingKey = tickingFrom == null ? null : `${tickingFrom}|${data?.activeModuleId}`;
+  const [elapsed, setElapsed] = useState<{ key: string | null; seconds: number }>({ key: null, seconds: 0 });
   useEffect(() => {
-    const moduleRunning = data?.conferenceStatus === "Ongoing" && data?.activeModuleId != null;
-    if (!moduleRunning || data?.runtimeSeconds == null) {
-      setRuntimeSeconds(data?.runtimeSeconds ?? null);
-      return;
-    }
-    const base = data.runtimeSeconds;
+    if (tickingKey == null) return;
     const capturedAt = Date.now();
-    const tick = () => setRuntimeSeconds(base + Math.floor((Date.now() - capturedAt) / 1000));
-    tick();
-    const interval = setInterval(tick, 1000);
+    const interval = setInterval(
+      () => setElapsed({ key: tickingKey, seconds: Math.floor((Date.now() - capturedAt) / 1000) }),
+      1000,
+    );
     return () => clearInterval(interval);
-  }, [data?.runtimeSeconds, data?.conferenceStatus, data?.activeModuleId]);
+  }, [tickingKey]);
+  const runtimeSeconds =
+    tickingFrom == null ? baseSeconds : tickingFrom + (elapsed.key === tickingKey ? elapsed.seconds : 0);
 
   const participants = participantsFromTrainees(data?.trainees ?? []);
 

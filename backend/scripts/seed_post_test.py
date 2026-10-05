@@ -73,12 +73,13 @@ QUESTIONS = [
     },
 ]
 
-db = SessionLocal()
-try:
-    existing_suite = db.query(AssessmentSuite).filter(AssessmentSuite.assessmentSuiteUid == SUITE_UID).first()
-    if existing_suite:
-        print(f"Skipping suite {SUITE_UID!r} - already exists")
-    else:
+def main() -> None:
+    db = SessionLocal()
+    try:
+        existing_suite = db.query(AssessmentSuite).filter(AssessmentSuite.assessmentSuiteUid == SUITE_UID).first()
+        if existing_suite:
+            print(f"Skipping suite {SUITE_UID!r} - already exists")
+            return
         db.add(
             AssessmentSuite(
                 assessmentSuiteUid=SUITE_UID,
@@ -105,5 +106,11 @@ try:
             )
         db.commit()
         print(f"Created suite {SUITE_UID!r} with {len(QUESTIONS)} questions")
-finally:
-    db.close()
+    finally:
+        db.close()
+
+
+# Only when run as a script: importing this module (pytest used to collect it as a "*_test.py"
+# file) must never touch a database.
+if __name__ == "__main__":
+    main()

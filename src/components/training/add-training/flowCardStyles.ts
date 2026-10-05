@@ -22,6 +22,7 @@ export const flowCardStyles = StyleSheet.create({
   half: { flex: 1 },
   fieldLabel: { fontSize: Fonts.body, marginBottom: Spacing.sm },
   questionsLabelRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: Spacing.sm },
+  questionsLabelText: { fontSize: Fonts.body },
   maxBadge: { backgroundColor: Colors.success, borderRadius: Radius.pill, paddingHorizontal: 8, paddingVertical: 2 },
   maxBadgeText: { fontSize: Fonts.overline },
   checkboxRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: Spacing.lg },

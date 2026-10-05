@@ -5,7 +5,7 @@ import { EMPTY_ADMIN_FILTERS } from "@/api/adminFilters";
 import { TrainingAgendaItem, fetchTrainingFacets, fetchTrainingsPage } from "@/api/training";
 import { DashboardTab } from "@/components/trainer/dashboard/DashboardBottomNav";
 import { useAuth } from "@/hooks/useAuth";
-import { formatMonthToToday } from "@/utils";
+import { istToday, monthToTodayRange } from "@/utils";
 import { DEFAULT_SESSION_FILTERS, SessionFilters, SessionTab } from "./sessionsUtils";
 
 // Sessions arrive a page at a time: the server applies this trainer's authorization, the tab,
@@ -25,11 +25,24 @@ const toOptions = (values: string[]): SelectOption[] =>
 
 export function useSessionsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ start?: string; end?: string; tab?: string }>();
+  const params = useLocalSearchParams<{ start?: string; end?: string; tab?: string; status?: string }>();
   const { adminToken } = useAuth();
+
+  // When arriving without explicit stats card date parameters (e.g. via Plan tab), the default
+  // date filter is the 1st of this month to today in IST - like every trainer list.
+  const defaultMonthRange = useMemo(() => monthToTodayRange(), []);
+  const baseStart = params.start ?? defaultMonthRange.start;
+  const baseEnd = params.end ?? defaultMonthRange.end;
 
   const initialTab: SessionTab = params.tab === "today" || params.tab === "completed" ? params.tab : "all";
   const [activeTab, setActiveTab] = useState<SessionTab>(initialTab);
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(params.status);
+  const [syncedStatusParam, setSyncedStatusParam] = useState(params.status);
+  if (params.status !== syncedStatusParam) {
+    setSyncedStatusParam(params.status);
+    setStatusFilter(params.status);
+  }
+
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [query, setQuery] = useState<string>("");
   const [filters, setFilters] = useState<SessionFilters>(DEFAULT_SESSION_FILTERS);
@@ -61,42 +74,57 @@ export function useSessionsScreen() {
   }, [searchQuery]);
 
   const dateRangeSubtitle = useMemo(() => {
-    if (params.start && params.end) {
+    const sDate = filters.fromDate || baseStart;
+    const eDate = filters.toDate || baseEnd;
+    let datePart = `${sDate} - ${eDate}`;
+    if (sDate && eDate) {
       try {
-        const s = new Date(params.start);
-        const e = new Date(params.end);
+        const s = new Date(sDate);
+        const e = new Date(eDate);
         const sStr = `${String(s.getDate()).padStart(2, "0")} ${s.toLocaleDateString("en-GB", { month: "short" })}`;
         const eStr = `${String(e.getDate()).padStart(2, "0")} ${e.toLocaleDateString("en-GB", { month: "short" })}`;
-        return `${sStr} - ${eStr}`;
+        datePart = `${sStr} - ${eStr}`;
       } catch {
         // Fallback
       }
     }
-    return formatMonthToToday();
-  }, [params.start, params.end]);
+    const effectiveStatus = activeTab === "completed" ? undefined : statusFilter;
+    if (effectiveStatus && effectiveStatus !== "all" && effectiveStatus !== "total") {
+      const capStatus = effectiveStatus.charAt(0).toUpperCase() + effectiveStatus.slice(1);
+      return `${datePart} · ${capStatus}`;
+    }
+    return datePart;
+  }, [baseStart, baseEnd, filters.fromDate, filters.toDate, activeTab, statusFilter]);
 
   // Everything that decides WHICH sessions are listed; a change starts again from page 1.
-  // The date range is the screen's own range (from the dashboard) narrowed by the From/To filter.
+  // The date range is the screen's own range (from the dashboard or default month range) narrowed by the From/To filter.
   const listRequest = useMemo(() => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = istToday();
+    const effectiveStatus = activeTab === "completed" ? ("completed" as const) : statusFilter;
     return {
       sort: "session" as const,
       limit: PAGE_SIZE,
       q: query,
       onDate: activeTab === "today" ? today : undefined,
-      status: activeTab === "completed" ? ("completed" as const) : undefined,
+      status: effectiveStatus,
       location: filters.location || undefined,
       filters: {
         ...EMPTY_ADMIN_FILTERS,
-        start: laterOf(params.start, filters.fromDate),
-        end: earlierOf(params.end, filters.toDate),
+        start: filters.fromDate || baseStart,
+        end: filters.toDate || baseEnd,
         trainingTypes: filters.sessionType ? [filters.sessionType] : [],
       },
     };
-  }, [activeTab, query, filters, params.start, params.end]);
+  }, [activeTab, statusFilter, query, filters, baseStart, baseEnd]);
 
-  // Only the latest request may update the list - a slow reply for an old tab / search is dropped.
+  // Only the latest request may update the list - a slow reply for an old tab / search is dropped,
+  // and aborted so it stops using the connection.
   const requestId = useRef(0);
+  const inFlight = useRef<AbortController | null>(null);
+  // Set synchronously, so two end-of-list events in one frame can't ask for the same page twice
+  // (the `loadingMore` state only updates on the next render).
+  const loadingMoreRef = useRef(false);
+  useEffect(() => () => inFlight.current?.abort(), []);
 
   const loadSessions = useCallback(
     async (mode: "load" | "refresh" = "load") => {
@@ -106,15 +134,19 @@ export function useSessionsScreen() {
         return;
       }
       const id = ++requestId.current;
+      inFlight.current?.abort();
+      const controller = new AbortController();
+      inFlight.current = controller;
       if (mode === "refresh") setRefreshing(true);
       else setLoading(true);
       try {
-        const result = await fetchTrainingsPage(adminToken, { ...listRequest, page: 1 });
+        const result = await fetchTrainingsPage(adminToken, { ...listRequest, page: 1, signal: controller.signal });
         if (id !== requestId.current) return;
         setSessions(result.items);
         setPage(1);
         setTotalPages(result.totalPages ?? 1);
       } catch {
+        if (controller.signal.aborted) return; // superseded by a newer request
         if (id === requestId.current) {
           setSessions([]);
           setTotalPages(0);
@@ -130,8 +162,9 @@ export function useSessionsScreen() {
   );
 
   const loadMore = useCallback(async () => {
-    if (!adminToken || loading || loadingMore || page >= totalPages) return;
+    if (!adminToken || loading || loadingMoreRef.current || page >= totalPages) return;
     const id = requestId.current;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const result = await fetchTrainingsPage(adminToken, { ...listRequest, page: page + 1 });
@@ -145,20 +178,21 @@ export function useSessionsScreen() {
     } catch {
       // Keep what is already on screen; scrolling again retries.
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
-  }, [adminToken, listRequest, loading, loadingMore, page, totalPages]);
+  }, [adminToken, listRequest, loading, page, totalPages]);
 
   const loadFacets = useCallback(async () => {
     if (!adminToken) return;
     try {
-      const facets = await fetchTrainingFacets(adminToken, { start: params.start, end: params.end });
+      const facets = await fetchTrainingFacets(adminToken, { start: baseStart, end: baseEnd });
       setLocationOptions(toOptions(facets.trainingHubs));
       setSessionTypeOptions(toOptions(facets.trainingTypes));
     } catch {
       // The filters just offer no options until the next visit.
     }
-  }, [adminToken, params.start, params.end]);
+  }, [adminToken, baseStart, baseEnd]);
 
   useFocusEffect(
     useCallback(() => {
@@ -184,14 +218,23 @@ export function useSessionsScreen() {
     router.push({ pathname: "/session_dashboard", params: { conferenceUid } });
   };
 
+  const handleSelectTab = (tab: SessionTab) => {
+    setActiveTab(tab);
+    setStatusFilter(undefined);
+  };
+
   const handleBottomNavSelect = (tab: DashboardTab) => {
     setBottomTab(tab);
     if (tab === "home") {
       router.replace("/trainer_dashboard");
     } else if (tab === "plan") {
-      setActiveTab("all");
+      if (params.start || params.end || params.status || params.tab) {
+        router.replace("/sessions");
+      } else {
+        handleSelectTab("all");
+      }
     } else if (tab === "today") {
-      setActiveTab("today");
+      handleSelectTab("today");
     } else if (tab === "profile") {
       router.push("/trainer_profile");
     } else if (tab === "more") {
@@ -204,7 +247,7 @@ export function useSessionsScreen() {
 
   return {
     activeTab,
-    setActiveTab,
+    setActiveTab: handleSelectTab,
     setSearchQuery,
     filters,
     handleFiltersChange,

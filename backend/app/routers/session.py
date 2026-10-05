@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_trainee
@@ -21,6 +21,8 @@ from app.schemas.session import (
     SessionHistoryItem,
     SessionJoinInfo,
     TraineeDashboardOut,
+    TraineeMetricCard,
+    TrainingHistoryPage,
     TrainingDetailOut,
 )
 from app.services import live_quiz_service, session_service, trainee_dashboard_service, training_detail_service
@@ -29,8 +31,10 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
 @router.get("/join/{code}", response_model=SessionJoinInfo)
-def get_session_join_info(code: str, db: Session = Depends(get_db)):
-    return session_service.get_join_info(db, code)
+def get_session_join_info(
+    code: str, db: Session = Depends(get_db), tenant_id: str = Depends(get_tenant_id_from_request)
+):
+    return session_service.get_join_info(db, code, tenant_id)
 
 
 @router.post("/join/{code}", response_model=SessionJoinInfo)
@@ -39,8 +43,9 @@ def join_session(
     viaRegistration: bool = False,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
+    tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return session_service.join_session(db, trainee, code, via_registration=viaRegistration)
+    return session_service.join_session(db, trainee, code, tenant_id, via_registration=viaRegistration)
 
 
 @router.get("/current", response_model=CurrentSession)
@@ -134,18 +139,37 @@ def get_live_quiz_results(
 
 @router.get("/history", response_model=list[SessionHistoryItem])
 def get_session_history(
-    limit: int = 10,
+    limit: int = Query(10, ge=1, le=500),
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
     return session_service.get_session_history(db, trainee, limit)
 
 
+@router.get("/trainings", response_model=TrainingHistoryPage)
+def get_training_history(
+    page: int = Query(1, ge=1, le=10000),
+    limit: int = Query(20, ge=1, le=100),
+    start: Optional[str] = Query(None, max_length=32),
+    end: Optional[str] = Query(None, max_length=32),
+    status: Optional[str] = Query(None, max_length=20),
+    # A Dashboard metric card tapped: only the trainings that card counted.
+    card: Optional[TraineeMetricCard] = Query(None),
+    db: Session = Depends(get_db),
+    trainee: Trainee = Depends(get_current_trainee),
+):
+    """The trainee's own Training History, a page at a time (the screen loads more as it scrolls)."""
+    return trainee_dashboard_service.list_training_history(
+        db, trainee, page, limit, start or None, end or None, status or None, card
+    )
+
+
 @router.get("/dashboard", response_model=TraineeDashboardOut)
 def get_trainee_dashboard(
-    limit: int = 10,
-    start: Optional[str] = None,
-    end: Optional[str] = None,
+    # The app asks for 5 (Home) or 500 (Training History); bounded so one request can't ask for more.
+    limit: int = Query(10, ge=1, le=500),
+    start: Optional[str] = Query(None, max_length=32),
+    end: Optional[str] = Query(None, max_length=32),
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):

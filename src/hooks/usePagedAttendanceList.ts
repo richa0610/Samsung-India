@@ -17,7 +17,7 @@ import {
   AttendanceSortKey,
   fetchAttendancePage,
 } from "@/api/attendanceList";
-import { useAdminFilters } from "@/hooks/useAdminFilters";
+import { AdminFilterScope, useAdminFilters } from "@/hooks/useAdminFilters";
 import { useAuth } from "@/hooks/useAuth";
 import { subscribe } from "@/services/liveEvents";
 
@@ -78,9 +78,10 @@ export type PagedAttendanceList = {
   exportAll: () => Promise<AttendanceListItem[]>;
 };
 
-export function usePagedAttendanceList(mode: AttendanceMode): PagedAttendanceList {
+/** `filterScope` is whose filter applies: the admin lists' ("lists") or the trainer's ("trainerLists"). */
+export function usePagedAttendanceList(mode: AttendanceMode, filterScope: AdminFilterScope = "lists"): PagedAttendanceList {
   const { adminToken } = useAuth();
-  const { applied, appliedKey } = useAdminFilters("lists");
+  const { applied, appliedKey } = useAdminFilters(filterScope);
 
   const [items, setItems] = useState<AttendanceListItem[]>([]);
   const [total, setTotal] = useState<number | null>(null);
@@ -167,6 +168,8 @@ export function usePagedAttendanceList(mode: AttendanceMode): PagedAttendanceLis
       const controller = new AbortController();
       inFlight.current = controller;
       try {
+        // Only the page asked for: a next page is fetched when it is opened (then kept, so going
+        // back to it is instant), never speculatively.
         const result = await fetchAttendancePage(adminToken, { ...requestOptions, page, signal: controller.signal });
         if (id !== requestId.current) return;
         pages.set(page, result.items);
@@ -174,18 +177,6 @@ export function usePagedAttendanceList(mode: AttendanceMode): PagedAttendanceLis
         setError(null);
         // The server sends the total with page 1 only; keep it while paging.
         if (result.total != null) setTotal(result.total);
-
-        // Silently pre-fetch the next page in background so tapping 'Next' renders instantly (0ms)
-        const nextPage = page + 1;
-        if (!pages.has(nextPage)) {
-          fetchAttendancePage(adminToken, { ...requestOptions, page: nextPage })
-            .then((nextResult) => {
-              if (id === requestId.current && nextResult.items.length > 0) {
-                pages.set(nextPage, nextResult.items);
-              }
-            })
-            .catch(() => {});
-        }
       } catch (err) {
         if (controller.signal.aborted || id !== requestId.current) return; // superseded by a newer request
         if (loadMode !== "silent") {

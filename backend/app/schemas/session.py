@@ -1,7 +1,8 @@
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
+from app.schemas._common import PageMeta
 from app.schemas.assessment import QuestionOption
 
 
@@ -185,6 +186,17 @@ class DashboardTrainingRow(BaseModel):
     rankScope: Optional[str] = None  # "Session"
 
 
+# A trainee Dashboard metric card, named as its DashboardMetrics field: every training counts toward
+# exactly one, and GET /sessions/trainings?card= lists the trainings a card counted.
+TraineeMetricCard = Literal["present", "absent", "ongoing", "notStarted", "scheduled"]
+
+
+class TrainingHistoryPage(PageMeta):
+    """One page of the trainee's Training History (GET /sessions/trainings), newest first."""
+
+    items: List[DashboardTrainingRow]
+
+
 class TraineeDashboardOut(BaseModel):
     conferenceUid: Optional[str] = None
     hasActiveSession: bool = False
@@ -237,6 +249,10 @@ class LiveQuizView(BaseModel):
     suiteUid: Optional[str] = None
     question: Optional[LiveQuestionOut] = None
     timerEndsAt: Optional[int] = None
+    # Set (milliseconds left) only while the trainer has stopped the clock: the
+    # countdown is frozen at this value and answers are locked until Play.
+    # `timerEndsAt` is None meanwhile.
+    timerRemainingMs: Optional[int] = None
     # Server clock at response time (epoch ms) - lets the client correct for a
     # device clock that disagrees with the server's, so the countdown is right.
     serverNowMs: Optional[int] = None
@@ -256,6 +272,9 @@ class LiveAnswerResult(BaseModel):
     correct: bool = False
     correctOptionId: Optional[str] = None
     explanation: Optional[str] = None
+    # Refused because the trainer has stopped the timer - the question is still
+    # open, so the app keeps it on screen instead of treating this as a timeout.
+    paused: bool = False
 
 
 class LiveRevealOut(BaseModel):
