@@ -1,0 +1,706 @@
+{
+  "label": "after",
+  "database": "perf_trainer_100k",
+  "when": "2026-09-30T14:58:03",
+  "mysql": "8.4.11",
+  "buffer_pool_mb": 512,
+  "rows": {
+    "conference": 3333,
+    "attendance": 100001,
+    "trainee": 25000,
+    "assessment_results": 58756
+  },
+  "rtt_ms_assumed": 42,
+  "warmup": 3,
+  "results": [
+    {
+      "case": "T01 trainer Home (today)",
+      "path": "/admin/trainings/summary",
+      "runs": 30,
+      "statements": 5,
+      "checkouts": 1,
+      "rows_fetched": 7,
+      "db_ms_p50": 43.7,
+      "p50_ms": 74.2,
+      "p95_ms": 127.0,
+      "p99_ms": 142.6,
+      "est_production_ms": 326,
+      "statement_median_ms": [
+        3.4,
+        4.6,
+        28.7,
+        4.3,
+        2.9,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT coalesce(sum(CASE WHEN (conference.`conferenceDate` = %(conferenceDate_1)s AND lower(coalesce(conference.`conferenceStatus`, %(coalesce_2)s)) != %(lower_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_3)s) AS coalesce_1, coalesce(sum(CASE WHEN (conference.`conferenceDate` = %(conferenceDate_1)s AND lower(coalesce(conference.`conferenceStatus`, %(coalesce_2)s)) != %(lower_1)s AND low",
+        "SELECT count(*) AS count_1 FROM (SELECT attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (SELECT conference.`conferenceUid` FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AND attendance.status = %(status_1)s UNION SELECT assessment_results.`traineeUid` AS `traineeUid` FROM assessment_results WHERE assessment_results.`confe",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s) AND attendance.status = %(status_1)s UNION SELECT assessment_results.`conferenceUid` AS `conferenceUid`, assessment_results.`traineeUid` AS `traineeUi",
+        "EXPLAIN ANALYZE SELECT count(*) AS count_1 FROM (SELECT attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (SELECT conference.`conferenceUid` FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AND attendance.status = %(status_1)s UNION SELECT assessment_results.`traineeUid` AS `traineeUid` FROM assessment_results WHERE assessmen"
+      ],
+      "slowest_statement_plan": "-> Aggregate: count(0)  (cost=3124..3124 rows=1) (actual time=21.7..21.7 rows=1 loops=1)\n    -> Table scan on anon_1  (cost=2618..2676 rows=4478) (actual time=20.9..21.4 rows=5881 loops=1)\n        -> Union materialize with deduplication  (cost=2618..2618 rows=4478) (actual time=20.9..20.9 rows=5881 loops=1)\n            -> Nested loop inner join  (cost=681 rows=3382) (actual time=0.104..6.37 rows=6432 loops=1)\n                -> Filter: (conference.conferenceUid is not null)  (cost=120 rows=475) (actual time=0.0905..0.833 rows=475 loops=1)\n                    -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=120 rows=475) (actual time=0.0896..0.795 rows=475 loops=1)\n                -> Covering index lookup on attendance using ix_attendance_conf_status_trainee (conferenceUid=conference.conferenceUid, status='Present')  (cost=0.47 rows=7.12) (actual time=0.00695..0.0107 rows=13.5 loops=475)\n            -> Nested loop inner join  (cost=1489 rows=1096) (actual time=0.112..9.12 rows=7571 loops=1)\n                -> Filter: (conference.conferenceUid is not null)  (cost=120 rows=475) (actual time=0.0885..0.922 rows=475 loops=1)\n                    -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=120 rows=475) (actual time=0.0878..0.883 rows=475 loops=1)\n                -> Filter: ((assessment_results.`status` = 'Submitted') and (assessment_results.conferenceUid = conference.conferenceUid))  (cost=0.575 rows=2.31) (actual time=0.00574..0.0161 rows=15.9 loops=475)\n                    -> Covering index lookup on assessment_results using ix_results_conf_trainee_status (conferenceUid=conference.conferenceUid)  (cost=0.575 rows=23.1) (actual time=0.00529..0.0115 rows=17.7 loops=475)\n"
+    },
+    {
+      "case": "T02 trainer Home (month range)",
+      "path": "/admin/trainings/summary?start=2026-09-01&end=2026-09-30",
+      "runs": 30,
+      "statements": 5,
+      "checkouts": 1,
+      "rows_fetched": 7,
+      "db_ms_p50": 24.6,
+      "p50_ms": 47.8,
+      "p95_ms": 138.8,
+      "p99_ms": 207.5,
+      "est_production_ms": 300,
+      "statement_median_ms": [
+        2.4,
+        4.2,
+        11.4,
+        3.4,
+        2.4,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT coalesce(sum(CASE WHEN (conference.`conferenceDate` >= %(conferenceDate_1)s AND conference.`conferenceDate` <= %(conferenceDate_2)s AND lower(coalesce(conference.`conferenceStatus`, %(coalesce_2)s)) != %(lower_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_3)s) AS coalesce_1, coalesce(sum(CASE WHEN (conference.`conferenceDate` >= %(conferenceDate_1)s AND conference.`conferenceDate`",
+        "SELECT count(*) AS count_1 FROM (SELECT attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (SELECT conference.`conferenceUid` FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s AND conference.`conferenceDate` >= %(conferenceDate_1)s AND conference.`conferenceDate` <= %(conferenceDate_2)s) AND attendance.status = %(status_1)s UNIO",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s) AND attendance.status = %(status_1)s UNION SELECT assessment_results.`conferenceUid` AS `conferenceUid`, assessment_results.`traineeUid` AS `traineeUi",
+        "EXPLAIN ANALYZE SELECT count(*) AS count_1 FROM (SELECT attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (SELECT conference.`conferenceUid` FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s AND conference.`conferenceDate` >= %(conferenceDate_1)s AND conference.`conferenceDate` <= %(conferenceDate_2)s) AND attendance.status = %"
+      ],
+      "slowest_statement_plan": "-> Aggregate: count(0)  (cost=1250..1250 rows=1) (actual time=9.31..9.31 rows=1 loops=1)\n    -> Table scan on anon_1  (cost=1061..1084 rows=1658) (actual time=8.92..9.2 rows=2436 loops=1)\n        -> Union materialize with deduplication  (cost=1061..1061 rows=1658) (actual time=8.92..8.92 rows=2436 loops=1)\n            -> Nested loop inner join  (cost=298 rows=1252) (actual time=0.0875..3.11 rows=2331 loops=1)\n                -> Filter: ((conference.conferenceDate >= '2026-09-01') and (conference.conferenceDate <= '2026-09-30') and (conference.conferenceUid is not null))  (cost=90.3 rows=176) (actual time=0.0741..0.949 rows=174 loops=1)\n                    -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=90.3 rows=475) (actual time=0.0718..0.842 rows=475 loops=1)\n                -> Covering index lookup on attendance using ix_attendance_conf_status_trainee (conferenceUid=conference.conferenceUid, status='Present')  (cost=0.473 rows=7.12) (actual time=0.00749..0.0114 rows=13.4 loops=174)\n            -> Nested loop inner join  (cost=597 rows=406) (actual time=0.0833..4.02 rows=2678 loops=1)\n                -> Filter: ((conference.conferenceDate >= '2026-09-01') and (conference.conferenceDate <= '2026-09-30') and (conference.conferenceUid is not null))  (cost=90.3 rows=176) (actual time=0.0635..0.98 rows=174 loops=1)\n                    -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=90.3 rows=475) (actual time=0.0625..0.885 rows=475 loops=1)\n                -> Filter: ((assessment_results.`status` = 'Submitted') and (assessment_results.conferenceUid = conference.conferenceUid))  (cost=0.576 rows=2.31) (actual time=0.00575..0.0162 rows=15.4 loops=174)\n                    -> Covering index lookup on assessment_results using ix_results_conf_trainee_status (conferenceUid=conference.conferenceUid)  (cost=0.576 rows=23.1) (actual time=0.00538..0.0117 rows=17.2 loops=174)\n"
+    },
+    {
+      "case": "T03 Sessions: All, page 1",
+      "path": "/admin/trainings/page?sort=session&limit=20",
+      "runs": 30,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 43,
+      "db_ms_p50": 19.4,
+      "p50_ms": 49.9,
+      "p95_ms": 161.1,
+      "p99_ms": 306.8,
+      "est_production_ms": 260,
+      "statement_median_ms": [
+        2.8,
+        2.1,
+        8.6,
+        5.8,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference",
+        "EXPLAIN ANALYZE SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`live"
+      ],
+      "slowest_statement_plan": "-> Limit: 21 row(s)  (cost=120 rows=21) (actual time=2.89..2.9 rows=21 loops=1)\n    -> Sort: (case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end), (case when (coalesce(conference.conferenceDate,'') = '') then 1 else 0 end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) < 2) then conference.conferenceDate end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) < 2) then (case when (locate(':',coalesce(conference.conferenceTime,'')) > 1) then ((((cast(substr(coalesce(conference.conferenceTime,''),1,(locate(':',coalesce(conference.conferenceTime,'')) - 1)) as signed) % 12) + (case when (upper(substr(coalesce(conference.conferenceTime,''),-(2))) = 'PM') then 12 else 0 end)) * 60) + cast(substr(coalesce(conference.conferenceTime,''),(locate(':',coalesce(conference.conferenceTime,'')) + 1),2) as signed)) else 0 end) end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) = 2) then conference.conferenceDate end) DESC, (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) = 2) then (case when (locate(':',coalesce(conference.conferenceTime,'')) > 1) then ((((cast(substr(coalesce(conference.conferenceTime,''),1,(locate(':',coalesce(conference.conferenceTime,'')) - 1)) as signed) % 12) + (case when (upper(substr(coalesce(conference.conferenceTime,''),-(2))) = 'PM') then 12 else 0 end)) * 60) + cast(substr(coalesce(conference.conferenceTime,''),(locate(':',coalesce(conference.conferenceTime,'')) + 1),2) as signed)) else 0 end) end) DESC, conference.id, limit input to 21 row(s) per chunk  (cost=120 rows=475) (actual time=2.87..2.88 rows=21 loops=1)\n        -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=120 rows=475) (actual time=0.0243..1.4 rows=475 loops=1)\n"
+    },
+    {
+      "case": "T04 Sessions: All, page 3",
+      "path": "/admin/trainings/page?sort=session&limit=20&page=3",
+      "runs": 30,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 43,
+      "db_ms_p50": 16.6,
+      "p50_ms": 43.2,
+      "p95_ms": 51.8,
+      "p99_ms": 52.1,
+      "est_production_ms": 253,
+      "statement_median_ms": [
+        2.2,
+        1.9,
+        7.0,
+        5.0,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference",
+        "EXPLAIN ANALYZE SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`live"
+      ],
+      "slowest_statement_plan": "-> Limit/Offset: 21/40 row(s)  (cost=120 rows=21) (actual time=2.77..2.78 rows=21 loops=1)\n    -> Sort: (case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end), (case when (coalesce(conference.conferenceDate,'') = '') then 1 else 0 end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) < 2) then conference.conferenceDate end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) < 2) then (case when (locate(':',coalesce(conference.conferenceTime,'')) > 1) then ((((cast(substr(coalesce(conference.conferenceTime,''),1,(locate(':',coalesce(conference.conferenceTime,'')) - 1)) as signed) % 12) + (case when (upper(substr(coalesce(conference.conferenceTime,''),-(2))) = 'PM') then 12 else 0 end)) * 60) + cast(substr(coalesce(conference.conferenceTime,''),(locate(':',coalesce(conference.conferenceTime,'')) + 1),2) as signed)) else 0 end) end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) = 2) then conference.conferenceDate end) DESC, (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) = 2) then (case when (locate(':',coalesce(conference.conferenceTime,'')) > 1) then ((((cast(substr(coalesce(conference.conferenceTime,''),1,(locate(':',coalesce(conference.conferenceTime,'')) - 1)) as signed) % 12) + (case when (upper(substr(coalesce(conference.conferenceTime,''),-(2))) = 'PM') then 12 else 0 end)) * 60) + cast(substr(coalesce(conference.conferenceTime,''),(locate(':',coalesce(conference.conferenceTime,'')) + 1),2) as signed)) else 0 end) end) DESC, conference.id, limit input to 61 row(s) per chunk  (cost=120 rows=475) (actual time=2.75..2.77 rows=61 loops=1)\n        -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=120 rows=475) (actual time=0.0234..1.31 rows=475 loops=1)\n"
+    },
+    {
+      "case": "T05 Sessions: Today",
+      "path": "/admin/trainings/page?sort=session&limit=20&on_date=2026-09-30",
+      "runs": 30,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 22,
+      "db_ms_p50": 13.4,
+      "p50_ms": 40.9,
+      "p95_ms": 47.2,
+      "p99_ms": 48.2,
+      "est_production_ms": 251,
+      "statement_median_ms": [
+        2.4,
+        2.1,
+        4.7,
+        3.6,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE conference.`conferenceDate` = %(conferenceDate_1)s AND conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference",
+        "EXPLAIN ANALYZE SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`live"
+      ],
+      "slowest_statement_plan": "-> Limit: 21 row(s)  (cost=9.57 rows=8.14) (actual time=0.544..0.549 rows=10 loops=1)\n    -> Sort: (case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end), (case when (coalesce(conference.conferenceDate,'') = '') then 1 else 0 end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) < 2) then conference.conferenceDate end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) < 2) then (case when (locate(':',coalesce(conference.conferenceTime,'')) > 1) then ((((cast(substr(coalesce(conference.conferenceTime,''),1,(locate(':',coalesce(conference.conferenceTime,'')) - 1)) as signed) % 12) + (case when (upper(substr(coalesce(conference.conferenceTime,''),-(2))) = 'PM') then 12 else 0 end)) * 60) + cast(substr(coalesce(conference.conferenceTime,''),(locate(':',coalesce(conference.conferenceTime,'')) + 1),2) as signed)) else 0 end) end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) = 2) then conference.conferenceDate end) DESC, (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) = 2) then (case when (locate(':',coalesce(conference.conferenceTime,'')) > 1) then ((((cast(substr(coalesce(conference.conferenceTime,''),1,(locate(':',coalesce(conference.conferenceTime,'')) - 1)) as signed) % 12) + (case when (upper(substr(coalesce(conference.conferenceTime,''),-(2))) = 'PM') then 12 else 0 end)) * 60) + cast(substr(coalesce(conference.conferenceTime,''),(locate(':',coalesce(conference.conferenceTime,'')) + 1),2) as signed)) else 0 end) end) DESC, conference.id, limit input to 21 row(s) per chunk  (cost=9.57 rows=8.14) (actual time=0.543..0.548 rows=10 loops=1)\n        -> Filter: ((conference.conferenceDate = '2026-09-30') and (conference.trainerEmployeeId = 'T0000'))  (cost=9.57 rows=8.14) (actual time=0.259..0.476 rows=10 loops=1)\n            -> Intersect rows sorted by row ID  (cost=9.57 rows=8.14) (actual time=0.257..0.471 rows=10 loops=1)\n                -> Index range scan on conference using ix_conference_date over (conferenceDate = '2026-09-30')  (cost=0.0162..0.893 rows=55) (actual time=0.0888..0.11 rows=55 loops=1)\n                -> Index range scan on conference using ix_conference_trainer over (trainerEmployeeId = 'T0000')  (cost=0.0124..5.89 rows=475) (actual time=0.0587..0.217 rows=470 loops=1)\n"
+    },
+    {
+      "case": "T06 Sessions: Completed",
+      "path": "/admin/trainings/page?sort=session&limit=20&status=completed",
+      "runs": 30,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 43,
+      "db_ms_p50": 17.9,
+      "p50_ms": 48.2,
+      "p95_ms": 52.2,
+      "p99_ms": 52.5,
+      "est_production_ms": 258,
+      "statement_median_ms": [
+        2.4,
+        2.7,
+        7.2,
+        5.1,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE lower(coalesce(conference.`conferenceStatus`, %(coalesce_1)s)) = %(lower_1)s AND conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference",
+        "EXPLAIN ANALYZE SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`live"
+      ],
+      "slowest_statement_plan": "-> Limit: 21 row(s)  (cost=120 rows=21) (actual time=2.37..2.38 rows=21 loops=1)\n    -> Sort: (case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end), (case when (coalesce(conference.conferenceDate,'') = '') then 1 else 0 end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) < 2) then conference.conferenceDate end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) < 2) then (case when (locate(':',coalesce(conference.conferenceTime,'')) > 1) then ((((cast(substr(coalesce(conference.conferenceTime,''),1,(locate(':',coalesce(conference.conferenceTime,'')) - 1)) as signed) % 12) + (case when (upper(substr(coalesce(conference.conferenceTime,''),-(2))) = 'PM') then 12 else 0 end)) * 60) + cast(substr(coalesce(conference.conferenceTime,''),(locate(':',coalesce(conference.conferenceTime,'')) + 1),2) as signed)) else 0 end) end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) = 2) then conference.conferenceDate end) DESC, (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) = 2) then (case when (locate(':',coalesce(conference.conferenceTime,'')) > 1) then ((((cast(substr(coalesce(conference.conferenceTime,''),1,(locate(':',coalesce(conference.conferenceTime,'')) - 1)) as signed) % 12) + (case when (upper(substr(coalesce(conference.conferenceTime,''),-(2))) = 'PM') then 12 else 0 end)) * 60) + cast(substr(coalesce(conference.conferenceTime,''),(locate(':',coalesce(conference.conferenceTime,'')) + 1),2) as signed)) else 0 end) end) DESC, conference.id, limit input to 21 row(s) per chunk  (cost=120 rows=475) (actual time=2.37..2.38 rows=21 loops=1)\n        -> Filter: (lower(coalesce(conference.conferenceStatus,'')) = 'completed')  (cost=120 rows=475) (actual time=0.0283..1.58 rows=306 loops=1)\n            -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=120 rows=475) (actual time=0.0255..1.46 rows=475 loops=1)\n"
+    },
+    {
+      "case": "T07 Sessions: search 'CONF00'",
+      "path": "/admin/trainings/page?sort=session&limit=20&q=CONF00",
+      "runs": 30,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 43,
+      "db_ms_p50": 20.1,
+      "p50_ms": 54.1,
+      "p95_ms": 59.3,
+      "p99_ms": 59.8,
+      "est_production_ms": 264,
+      "statement_median_ms": [
+        2.2,
+        3.3,
+        9.2,
+        5.3,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s AND ((lower(coalesce(conference.`conferenceUid`, %(coalesce_1)s)) LIKE concat('%%', %(lower_1)s, '%%') ESCAPE '/') OR (lower(coalesce(conference.`trainerName`, %(coalesce_2)s)) LIKE concat('%%', %(lower_2)s, '%%') ESCAPE '/') OR (lower(coalesce(conference.`trai",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference",
+        "EXPLAIN ANALYZE SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`live"
+      ],
+      "slowest_statement_plan": "-> Limit: 21 row(s)  (cost=120 rows=21) (actual time=3.2..3.21 rows=21 loops=1)\n    -> Sort: (case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end), (case when (coalesce(conference.conferenceDate,'') = '') then 1 else 0 end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) < 2) then conference.conferenceDate end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) < 2) then (case when (locate(':',coalesce(conference.conferenceTime,'')) > 1) then ((((cast(substr(coalesce(conference.conferenceTime,''),1,(locate(':',coalesce(conference.conferenceTime,'')) - 1)) as signed) % 12) + (case when (upper(substr(coalesce(conference.conferenceTime,''),-(2))) = 'PM') then 12 else 0 end)) * 60) + cast(substr(coalesce(conference.conferenceTime,''),(locate(':',coalesce(conference.conferenceTime,'')) + 1),2) as signed)) else 0 end) end), (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) = 2) then conference.conferenceDate end) DESC, (case when ((case when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 0 when (lower(coalesce(conference.conferenceStatus,'')) = 'completed') then 2 else 1 end) = 2) then (case when (locate(':',coalesce(conference.conferenceTime,'')) > 1) then ((((cast(substr(coalesce(conference.conferenceTime,''),1,(locate(':',coalesce(conference.conferenceTime,'')) - 1)) as signed) % 12) + (case when (upper(substr(coalesce(conference.conferenceTime,''),-(2))) = 'PM') then 12 else 0 end)) * 60) + cast(substr(coalesce(conference.conferenceTime,''),(locate(':',coalesce(conference.conferenceTime,'')) + 1),2) as signed)) else 0 end) end) DESC, conference.id, limit input to 21 row(s) per chunk  (cost=120 rows=475) (actual time=3.2..3.21 rows=21 loops=1)\n        -> Filter: ((lower(coalesce(conference.conferenceUid,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.trainerName,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.trainerEmployeeId,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.`zone`,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.region,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.sessionType,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.trainingType,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.trainingHub,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.state,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.district,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.conferenceDate,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.conferenceTime,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce(conference.suiteTitle,'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce((case when (lower(coalesce(conference.`status`,'')) = 'rejected') then 'rejected' when (lower(coalesce(conference.`status`,'')) <> 'approved') then 'pending' when (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing') then 'started' else lower(coalesce(conference.conferenceStatus,'')) end),'')) like <cache>(concat('%','conf00','%')) escape '/') or (lower(coalesce((case when ((lower(coalesce(conference.`status`,'')) = 'approved') and (lower(coalesce(conference.conferenceStatus,'')) = 'ongoing')) then 'ongoing' else '' end),'')) like <cache>(concat('%','conf00','%')) escape '/'))  (cost=120 rows=475) (actual time=0.0286..1.65 rows=475 loops=1)\n            -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=120 rows=475) (actual time=0.0242..1.48 rows=475 loops=1)\n"
+    },
+    {
+      "case": "T08 Sessions filter options",
+      "path": "/admin/trainings/facets",
+      "runs": 30,
+      "statements": 3,
+      "checkouts": 1,
+      "rows_fetched": 5,
+      "db_ms_p50": 7.8,
+      "p50_ms": 29.1,
+      "p95_ms": 34.3,
+      "p99_ms": 34.6,
+      "est_production_ms": 197,
+      "statement_median_ms": [
+        2.2,
+        2.7,
+        2.8,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT DISTINCT conference.`trainingHub` AS `conference_trainingHub` FROM conference WHERE conference.`trainingHub` IS NOT NULL AND conference.`trainingHub` != %(trainingHub_1)s AND conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s",
+        "SELECT DISTINCT conference.`trainingType` AS `conference_trainingType` FROM conference WHERE conference.`trainingType` IS NOT NULL AND conference.`trainingType` != %(trainingType_1)s AND conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s",
+        "EXPLAIN ANALYZE SELECT DISTINCT conference.`trainingType` AS `conference_trainingType` FROM conference WHERE conference.`trainingType` IS NOT NULL AND conference.`trainingType` != %(trainingType_1)s AND conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s"
+      ],
+      "slowest_statement_plan": "-> Table scan on <temporary>  (cost=150..157 rows=385) (actual time=1.29..1.29 rows=4 loops=1)\n    -> Temporary table with deduplication  (cost=150..150 rows=385) (actual time=1.29..1.29 rows=4 loops=1)\n        -> Filter: ((conference.trainingType is not null) and (conference.trainingType <> ''))  (cost=111 rows=385) (actual time=0.0516..1.07 rows=475 loops=1)\n            -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=111 rows=475) (actual time=0.0502..0.996 rows=475 loops=1)\n"
+    },
+    {
+      "case": "T09 Session dashboard (live, largest)",
+      "path": "/admin/trainings/CONF0002225",
+      "runs": 30,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 89,
+      "db_ms_p50": 14.1,
+      "p50_ms": 35.3,
+      "p95_ms": 43.0,
+      "p99_ms": 45.0,
+      "est_production_ms": 245,
+      "statement_median_ms": [
+        2.4,
+        2.8,
+        4.2,
+        4.1,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT trainee.id AS trainee_id, trainee.`traineeUid` AS `trainee_traineeUid`, trainee.name AS trainee_name, trainee.email AS trainee_email, trainee.phone AS trainee_phone, trainee.gender AS trainee_gender, trainee.designation AS trainee_designation, trainee.`supervisorName` AS `trainee_supervisorName`, trainee.district AS trainee_district, trainee.state AS trainee_state, trainee.`profilePhoto` AS",
+        "EXPLAIN ANALYZE SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_fi"
+      ],
+      "slowest_statement_plan": "-> Index lookup on attendance using unique_session_attendance (conferenceUid='CONF0002225')  (cost=19.6 rows=56) (actual time=0.0218..0.142 rows=56 loops=1)\n"
+    },
+    {
+      "case": "T10 Session dashboard (completed, largest)",
+      "path": "/admin/trainings/CONF0000813",
+      "runs": 30,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 119,
+      "db_ms_p50": 16.3,
+      "p50_ms": 39.6,
+      "p95_ms": 53.2,
+      "p99_ms": 54.8,
+      "est_production_ms": 250,
+      "statement_median_ms": [
+        2.5,
+        3.1,
+        5.1,
+        5.1,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT trainee.id AS trainee_id, trainee.`traineeUid` AS `trainee_traineeUid`, trainee.name AS trainee_name, trainee.email AS trainee_email, trainee.phone AS trainee_phone, trainee.gender AS trainee_gender, trainee.designation AS trainee_designation, trainee.`supervisorName` AS `trainee_supervisorName`, trainee.district AS trainee_district, trainee.state AS trainee_state, trainee.`profilePhoto` AS",
+        "EXPLAIN ANALYZE SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_fi"
+      ],
+      "slowest_statement_plan": "-> Index lookup on attendance using unique_session_attendance (conferenceUid='CONF0000813')  (cost=23.8 rows=68) (actual time=0.0241..0.179 rows=68 loops=1)\n"
+    },
+    {
+      "case": "T11 All performers (completed)",
+      "path": "/admin/trainings/CONF0000813/performers",
+      "runs": 30,
+      "statements": 2,
+      "checkouts": 1,
+      "rows_fetched": 2,
+      "db_ms_p50": 5.4,
+      "p50_ms": 21.1,
+      "p95_ms": 24.9,
+      "p99_ms": 27.4,
+      "est_production_ms": 147,
+      "statement_median_ms": [
+        2.2,
+        2.8,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "EXPLAIN ANALYZE SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerNa"
+      ],
+      "slowest_statement_plan": "-> Limit: 1 row(s)  (cost=0..0 rows=1) (actual time=0.001..0.0011 rows=1 loops=1)\n    -> Rows fetched before execution  (cost=0..0 rows=1) (actual time=400e-6..400e-6 rows=1 loops=1)\n"
+    },
+    {
+      "case": "T12 Session report (completed)",
+      "path": "/admin/trainings/CONF0000813/report",
+      "runs": 30,
+      "statements": 3,
+      "checkouts": 1,
+      "rows_fetched": 70,
+      "db_ms_p50": 10.5,
+      "p50_ms": 29.6,
+      "p95_ms": 35.8,
+      "p99_ms": 38.3,
+      "est_production_ms": 198,
+      "statement_median_ms": [
+        2.4,
+        2.9,
+        4.8,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "EXPLAIN ANALYZE SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_fi"
+      ],
+      "slowest_statement_plan": "-> Index lookup on attendance using unique_session_attendance (conferenceUid='CONF0000813')  (cost=23.8 rows=68) (actual time=0.0282..0.201 rows=68 loops=1)\n"
+    },
+    {
+      "case": "T13 trainer Training List, page 1",
+      "path": "/admin/trainings/page?approval=approved&limit=10",
+      "runs": 30,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 23,
+      "db_ms_p50": 12.9,
+      "p50_ms": 39.2,
+      "p95_ms": 47.8,
+      "p99_ms": 49.8,
+      "est_production_ms": 249,
+      "statement_median_ms": [
+        2.6,
+        2.7,
+        3.5,
+        3.6,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s AND lower(conference.status) = %(lower_1)s) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference",
+        "EXPLAIN ANALYZE SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8"
+      ],
+      "slowest_statement_plan": "-> Table scan on <temporary>  (actual time=0.784..0.785 rows=10 loops=1)\n    -> Aggregate using temporary table  (actual time=0.784..0.784 rows=10 loops=1)\n        -> Table scan on anon_1  (cost=88.8..93.4 rows=165) (actual time=0.696..0.713 rows=161 loops=1)\n            -> Union materialize with deduplication  (cost=88.8..88.8 rows=165) (actual time=0.694..0.694 rows=161 loops=1)\n                -> Filter: ((attendance.conferenceUid in ('CONF0003289','CONF0003291','CONF0003292','CONF0003294','CONF0003298','CONF0003304','CONF0003309','CONF0003313','CONF0003317','CONF0003323')) and (attendance.`status` = 'Present'))  (cost=35.1 rows=148) (actual time=0.0257..0.221 rows=148 loops=1)\n                    -> Covering index range scan on attendance using ix_attendance_conf_status_trainee over (conferenceUid = 'CONF0003289' AND status = 'Present') OR (conferenceUid = 'CONF0003291' AND status = 'Present') OR (8 more)  (cost=35.1 rows=148) (actual time=0.0234..0.145 rows=148 loops=1)\n                -> Filter: ((assessment_results.conferenceUid in ('CONF0003289','CONF0003291','CONF0003292','CONF0003294','CONF0003298','CONF0003304','CONF0003309','CONF0003313','CONF0003317','CONF0003323')) and (assessment_results.`status` = 'Submitted'))  (cost=37.2 rows=17.2) (actual time=0.0124..0.283 rows=149 loops=1)\n                    -> Covering index range scan on assessment_results using ix_results_conf_trainee_status over (conferenceUid = 'CONF0003289') OR (conferenceUid = 'CONF0003291') OR (8 more)  (cost=37.2 rows=172) (actual time=0.0115..0.165 rows=170 loops=1)\n"
+    },
+    {
+      "case": "T14 trainer Attendance List, page 1",
+      "path": "/admin/attendance/page?mode=all&limit=10",
+      "runs": 30,
+      "statements": 5,
+      "checkouts": 1,
+      "rows_fetched": 24,
+      "db_ms_p50": 51.3,
+      "p50_ms": 84.1,
+      "p95_ms": 123.7,
+      "p99_ms": 124.0,
+      "est_production_ms": 336,
+      "statement_median_ms": [
+        2.4,
+        9.4,
+        33.4,
+        3.6,
+        2.7,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT attendance.id AS id FROM attendance INNER JOIN conference ON conference.`conferenceUid` = attendance.`conferenceUid` WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AS anon_1",
+        "SELECT attendance.id AS id, attendance.`attendanceUid` AS attendance_uid, attendance.`conferenceUid` AS conference_uid, attendance.`traineeUid` AS trainee_uid, attendance.phone AS phone, attendance.`markedOn` AS marked_on, attendance.timestamp AS timestamp, attendance.`checkOutTime` AS check_out_time, attendance.`updatedBy` AS updated_by, attendance.`updationOn` AS updation_on, attendance.status A",
+        "SELECT attendance.`traineeUid`, count(*) AS count_1, coalesce(sum(CASE WHEN (attendance.status = %(status_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_2)s) AS coalesce_1, coalesce(sum(CASE WHEN (attendance.status IN (%(status_2_1)s, %(status_2_2)s)) THEN %(param_3)s ELSE %(param_4)s END), %(coalesce_4)s) AS coalesce_3 FROM attendance INNER JOIN conference ON conference.`conferenceUid` =",
+        "SELECT assessment_results.`conferenceUid`, assessment_results.`traineeUid`, assessment_results.`totalScore`, assessment_results.`maxScore`, assessment_results.percentage FROM assessment_results INNER JOIN conference ON conference.`conferenceUid` = assessment_results.`conferenceUid` AND assessment_results.`assessmentSuiteUid` = conference.`postAssessmentUid` WHERE assessment_results.status = %(stat",
+        "EXPLAIN ANALYZE SELECT attendance.id AS id, attendance.`attendanceUid` AS attendance_uid, attendance.`conferenceUid` AS conference_uid, attendance.`traineeUid` AS trainee_uid, attendance.phone AS phone, attendance.`markedOn` AS marked_on, attendance.timestamp AS timestamp, attendance.`checkOutTime` AS check_out_time, attendance.`updatedBy` AS updated_by, attendance.`updationOn` AS updation_on, att"
+      ],
+      "slowest_statement_plan": "-> Nested loop left join  (cost=10.8 rows=0) (actual time=47.9..48 rows=11 loops=1)\n    -> Nested loop inner join  (cost=8.1 rows=0) (actual time=47.9..47.9 rows=11 loops=1)\n        -> Nested loop inner join  (cost=5.35 rows=0) (actual time=47.8..47.8 rows=11 loops=1)\n            -> Sort: page_rows.sort_value DESC, page_rows.id DESC  (cost=2.6..2.6 rows=0) (actual time=47.8..47.8 rows=11 loops=1)\n                -> Table scan on page_rows  (cost=2.5..2.5 rows=0) (actual time=47.8..47.8 rows=11 loops=1)\n                    -> Materialize  (cost=0..0 rows=0) (actual time=47.8..47.8 rows=11 loops=1)\n                        -> Limit: 11 row(s)  (actual time=47.7..47.8 rows=11 loops=1)\n                            -> Sort: attendance.`timestamp` DESC, attendance.id DESC, limit input to 11 row(s) per chunk  (actual time=47.7..47.7 rows=11 loops=1)\n                                -> Stream results  (cost=4999 rows=13940) (actual time=0.114..44.2 rows=14479 loops=1)\n                                    -> Nested loop inner join  (cost=4999 rows=13940) (actual time=0.111..39.9 rows=14479 loops=1)\n                                        -> Filter: (conference.conferenceUid is not null)  (cost=120 rows=475) (actual time=0.0953..2 rows=475 loops=1)\n                                            -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=120 rows=475) (actual time=0.0947..1.88 rows=475 loops=1)\n                                        -> Index lookup on attendance using ix_attendance_conferenceUid (conferenceUid=conference.conferenceUid)  (cost=7.34 rows=29.3) (actual time=0.0189..0.0769 rows=30.5 loops=475)\n            -> Single-row index lookup on attendance using PRIMARY (id=page_rows.id)  (cost=0.259 rows=1) (actual time=0.00406..0.00408 rows=1 loops=11)\n        -> Single-row index lookup on conference using conferenceUid (conferenceUid=attendance.conferenceUid)  (cost=0.259 rows=1) (actual time=0.00838..0.00839 rows=1 loops=11)\n    -> Single-row index lookup on trainee using traineeUid (traineeUid=attendance.traineeUid)  (cost=0.259 rows=1) (actual time=0.00725..0.00727 rows=1 loops=11)\n"
+    },
+    {
+      "case": "T15 trainer Trainee List, page 1",
+      "path": "/admin/trainees/page?mode=all&limit=10",
+      "runs": 30,
+      "statements": 3,
+      "checkouts": 1,
+      "rows_fetched": 13,
+      "db_ms_p50": 128.2,
+      "p50_ms": 155.6,
+      "p95_ms": 209.3,
+      "p99_ms": 218.2,
+      "est_production_ms": 324,
+      "statement_median_ms": [
+        2.3,
+        51.5,
+        76.8,
+        null
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT trainee.id AS id FROM trainee WHERE trainee.`traineeUid` IN (SELECT owned_trainees.`traineeUid` FROM (SELECT trainee_1.`traineeUid` AS `traineeUid` FROM trainee AS trainee_1 WHERE trainee_1.`trainerEmployeeId` = %(trainerEmployeeId_1)s UNION SELECT attendance.`traineeUid` AS `traineeUid` FROM attendance INNER JOIN conference ON conference.`conferenceUid` = a",
+        "SELECT trainee.id, trainee.`traineeUid`, trainee.name, trainee.email, trainee.phone, trainee.gender, trainee.designation, trainee.`supervisorName`, trainee.district, trainee.state, trainee.`profilePhoto`, trainee.uid, trainee.status, trainee.`tokenVersion`, trainee.timestamp, trainee.zone, trainee.region, trainee.company, trainee.`requestedBy`, trainee.`trainerEmployeeId`, trainee.`trainerName`, t",
+        "EXPLAIN ANALYZE SELECT trainee.id, trainee.`traineeUid`, trainee.name, trainee.email, trainee.phone, trainee.gender, trainee.designation, trainee.`supervisorName`, trainee.district, trainee.state, trainee.`profilePhoto`, trainee.uid, trainee.status, trainee.`tokenVersion`, trainee.timestamp, trainee.zone, trainee.region, trainee.company, trainee.`requestedBy`, trainee.`trainerEmployeeId`, trainee."
+      ],
+      "slowest_statement_plan": "-> Limit: 11 row(s)  (cost=42.6e+6 rows=11) (actual time=76.3..76.3 rows=11 loops=1)\n    -> Nested loop inner join  (cost=42.6e+6 rows=426e+6) (actual time=76.3..76.3 rows=11 loops=1)\n        -> Sort: trainee.`timestamp` DESC, trainee.id DESC  (cost=2600 rows=24555) (actual time=52.7..52.7 rows=49 loops=1)\n            -> Table scan on trainee  (cost=2600 rows=24555) (actual time=0.019..33.9 rows=25000 loops=1)\n        -> Single-row covering index lookup on owned_trainees using <auto_distinct_key> (traineeUid=trainee.traineeUid)  (cost=4453..4453 rows=1) (actual time=0.481..0.481 rows=0.224 loops=49)\n            -> Union materialize with deduplication  (cost=4453..4453 rows=17350) (actual time=23.6..23.6 rows=9770 loops=1)\n                -> Index lookup on trainee_1 using ix_trainee_trainer (trainerEmployeeId='T0000')  (cost=751 rows=3183) (actual time=0.0585..5.53 rows=3183 loops=1)\n                -> Nested loop inner join  (cost=1967 rows=14167) (actual time=0.11..10 rows=14479 loops=1)\n                    -> Filter: (conference.conferenceUid is not null)  (cost=120 rows=475) (actual time=0.097..0.908 rows=475 loops=1)\n                        -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0000')  (cost=120 rows=475) (actual time=0.096..0.86 rows=475 loops=1)\n                    -> Covering index lookup on attendance using unique_session_attendance (conferenceUid=conference.conferenceUid)  (cost=0.911 rows=29.8) (actual time=0.00495..0.0171 rows=30.5 loops=475)\n"
+    },
+    {
+      "case": "T16 Trainer dropdown",
+      "path": "/admin/trainers",
+      "runs": 30,
+      "statements": 4,
+      "checkouts": 2,
+      "rows_fetched": 62,
+      "db_ms_p50": 12.4,
+      "p50_ms": 43.9,
+      "p95_ms": 50.9,
+      "p99_ms": 51.0,
+      "est_production_ms": 296,
+      "statement_median_ms": [
+        3.0,
+        3.9,
+        5.4,
+        4.4
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT DISTINCT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `adm",
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "EXPLAIN ANALYZE SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `ag"
+      ],
+      "slowest_statement_plan": "-> Filter: ((agencyteam.`role` = 'trainer') and (lower(agencyteam.company) = 'samsung india'))  (cost=6.25 rows=6) (actual time=0.0346..0.126 rows=60 loops=1)\n    -> Table scan on agencyteam  (cost=6.25 rows=60) (actual time=0.0306..0.102 rows=60 loops=1)\n"
+    },
+    {
+      "case": "A01 admin dashboard stats",
+      "path": "/admin/dashboard/stats",
+      "runs": 30,
+      "statements": 6,
+      "checkouts": 2,
+      "rows_fetched": 212,
+      "db_ms_p50": 1222.8,
+      "p50_ms": 1263.9,
+      "p95_ms": 1906.5,
+      "p99_ms": 2675.1,
+      "est_production_ms": 1600,
+      "statement_median_ms": [
+        3.0,
+        2.1,
+        2.3,
+        1209.5,
+        3.2,
+        3.1
+      ],
+      "statements_sql": [
+        "SELECT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `admin`.`loca",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT %(param_1)s AS k, CAST(conference.`trainingType` AS CHAR) AS a, CAST(conference.`conferenceStatus` AS CHAR) AS b, CAST(conference.status AS CHAR) AS c, count(*) AS n1, min(conference.id) AS n2, NULL AS n3 FROM conference WHERE (conference.`conferenceStatus` IS NULL OR lower(conference.`conferenceStatus`) != %(lower_1)s) AND lower(trim(coalesce(conference.company, %(coalesce_1)s))) = %(lower",
+        "SELECT DISTINCT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `adm",
+        "EXPLAIN ANALYZE SELECT %(param_1)s AS k, CAST(conference.`trainingType` AS CHAR) AS a, CAST(conference.`conferenceStatus` AS CHAR) AS b, CAST(conference.status AS CHAR) AS c, count(*) AS n1, min(conference.id) AS n2, NULL AS n3 FROM conference WHERE (conference.`conferenceStatus` IS NULL OR lower(conference.`conferenceStatus`) != %(lower_1)s) AND lower(trim(coalesce(conference.company, %(coalesce_"
+      ],
+      "slowest_statement_plan": "-> Append  (cost=669..9300 rows=3214) (actual time=5.83..1442 rows=208 loops=1)\n    -> Stream results  (actual time=5.83..5.85 rows=34 loops=1)\n        -> Table scan on <temporary>  (actual time=5.81..5.82 rows=34 loops=1)\n            -> Aggregate using temporary table  (actual time=5.81..5.81 rows=34 loops=1)\n                -> Filter: ((lower(conference.conferenceStatus) <> 'cancelled') and (lower(trim(coalesce(conference.company,''))) = 'samsung india'))  (cost=345 rows=3209) (actual time=0.0296..3.35 rows=2179 loops=1)\n                    -> Table scan on conference  (cost=345 rows=3209) (actual time=0.0231..1.97 rows=3333 loops=1)\n    -> Stream results  (actual time=4.95..4.95 rows=4 loops=1)\n        -> Table scan on <temporary>  (actual time=4.94..4.95 rows=4 loops=1)\n            -> Aggregate using temporary table  (actual time=4.94..4.94 rows=4 loops=1)\n                -> Filter: ((lower(conference.conferenceStatus) <> 'cancelled') and (lower(trim(coalesce(conference.company,''))) = 'samsung india'))  (cost=345 rows=3209) (actual time=0.0228..3.32 rows=2179 loops=1)\n                    -> Table scan on conference  (cost=345 rows=3209) (actual time=0.0191..1.91 rows=3333 loops=1)\n    -> Stream results  (actual time=259..259 rows=48 loops=1)\n        -> Table scan on <temporary>  (actual time=259..259 rows=48 loops=1)\n            -> Aggregate using temporary table  (actual time=259..259 rows=48 loops=1)\n                -> Nested loop inner join  (cost=33307 rows=94178) (actual time=0.0528..125 rows=64856 loops=1)\n                    -> Filter: ((lower(conference.conferenceStatus) <> 'cancelled') and (lower(trim(coalesce(conference.company,''))) = 'samsung india') and (conference.conferenceUid is not null))  (cost=345 rows=3209) (actual time=0.0296..4.51 rows=2179 loops=1)\n                        -> Table scan on conference  (cost=345 rows=3209) (actual time=0.0255..2.41 rows=3333 loops=1)\n                    -> Index lookup on attendance using ix_attendance_conferenceUid (conferenceUid=conference.conferenceUid)  (cost=7.34 rows=29.3) (actual time=0.00482..0.053 rows=29.8 loops=2179)\n    -> Stream results  (cost=666..709 rows=3209) (actual time=4.12..4.14 rows=60 loops=1)\n        -> Table scan on <temporary>  (cost=666..709 rows=3209) (actual time=4.12..4.13 rows=60 loops=1)\n            -> Temporary table with deduplication  (cost=666..666 rows=3209) (actual time=4.12..4.12 rows=60 loops=1)\n                -> Filter: ((lower(conference.conferenceStatus) <> 'cancelled') and (lower(trim(coalesce(conference.company,''))) = 'samsung india') and ((lower(conference.conferenceStatus) = 'completed') or ((lower(conference.`status`) = 'approved') and (lower(conference.conferenceStatus) in ('scheduled','ongoing')))))  (cost=345 rows=3209) (actual time=0.0212..3.56 rows=2109 loops=1)\n                    -> Table scan on conference  (cost=345 rows=3209) (actual time=0.0173..1.84 rows=3333 loops=1)\n    -> Stream results  (cost=6.25 rows=6) (actual time=0.0169..0.0747 rows=60 loops=1)\n        -> Filter: ((agencyteam.`role` = 'trainer') and (lower(trim(coalesce(agencyteam.company,''))) = 'samsung india'))  (cost=6.25 rows=6) (actual time=0.015..0.058 rows=60 loops=1)\n            -> Table scan on agencyteam  (cost=6.25 rows=60) (actual time=0.0126..0.0331 rows=60 loops=1)\n    -> Stream results  (cost=8585 rows=1) (actual time=425..425 rows=1 loops=1)\n        -> Aggregate: sum(assessment_results.percentage), sum((case when (assessment_results.percentage >= 50) then 1 else 0 end)), count(0)  (cost=8585 rows=1) (actual time=425..425 rows=1 loops=1)\n            -> Nested loop inner join  (cost=8000 rows=5849) (actual time=0.0577..407 rows=34210 loops=1)\n                -> Filter: ((assessment_results.`status` = 'Submitted') and (assessment_results.conferenceUid is not null))  (cost=5953 rows=5849) (actual time=0.0382..45.9 rows=52947 loops=1)\n                    -> Table scan on assessment_results  (cost=5953 rows=58487) (actual time=0.0368..29.9 rows=58756 loops=1)\n                -> Filter: ((lower(conference.conferenceStatus) <> 'cancelled') and (lower(trim(coalesce(conference.company,''))) = 'samsung india'))  (cost=0.25 rows=1) (actual time=0.00654..0.00662 rows=0.646 loops=52947)\n                    -> Single-row index lookup on conference using conferenceUid (conferenceUid=assessment_results.conferenceUid), with index condition: (conference.conferenceUid = assessment_results.conferenceUid)  (cost=0.25 rows=1) (actual time=0.00575..0.00579 rows=1 loops=52947)\n    -> Stream results  (cost=0..0 rows=1) (actual time=743..743 rows=1 loops=1)\n        -> Rows fetched before execution  (cost=0..0 rows=1) (actual time=100e-6..200e-6 rows=1 loops=1)\n        -> Select #8 (subquery in projection; run only once)\n            -> Aggregate: count(0)  (cost=11565..11565 rows=1) (actual time=67.8..67.8 rows=1 loops=1)\n                -> Table scan on anon_1  (cost=8992..9280 rows=22851) (actual time=62.7..66.4 rows=28991 loops=1)\n                    -> Materialize  (cost=8992..8992 rows=22851) (actual time=62.7..62.7 rows=28991 loops=1)\n                        -> Table scan on <temporary>  (cost=6419..6707 rows=22851) (actual time=53.1..56.7 rows=28991 loops=1)\n                            -> Temporary table with deduplication  (cost=6419..6419 rows=22851) (actual time=53.1..53.1 rows=28991 loops=1)\n                                -> Nested loop inner join  (cost=4134 rows=22851) (actual time=0.0647..33 rows=28991 loops=1)\n                                    -> Filter: ((lower(conference.conferenceStatus) <> 'cancelled') and (lower(trim(coalesce(conference.company,''))) = 'samsung india') and (conference.conferenceUid is not null))  (cost=345 rows=3209) (actual time=0.0391..4.39 rows=2179 loops=1)\n                                        -> Table scan on conference  (cost=345 rows=3209) (actual time=0.0346..2.45 rows=3333 loops=1)\n                                    -> Covering index lookup on attendance using ix_attendance_conf_status_trainee (conferenceUid=conference.conferenceUid, status='Present')  (cost=0.469 rows=7.12) (actual time=0.00734..0.012 rows=13.3 loops=2179)\n        -> Select #10 (subquery in projection; run only once)\n            -> Aggregate: count(0)  (cost=28070..28070 rows=1) (actual time=218..218 rows=1 loops=1)\n                -> Table scan on anon_2  (cost=23320..23850 rows=42197) (actual time=215..217 rows=15380 loops=1)\n                    -> Materialize  (cost=23320..23320 rows=42197) (actual time=215..215 rows=15380 loops=1)\n                        -> Table scan on <temporary>  (cost=18571..19101 rows=42197) (actual time=209..211 rows=15380 loops=1)\n                            -> Temporary table with deduplication  (cost=18571..18571 rows=42197) (actual time=209..209 rows=15380 loops=1)\n                                -> Nested loop antijoin  (cost=14351 rows=42197) (actual time=0.148..196 rows=15380 loops=1)\n                                    -> Nested loop inner join  (cost=4134 rows=22851) (actual time=0.135..38.2 rows=28991 loops=1)\n                                        -> Filter: ((lower(conference.conferenceStatus) <> 'cancelled') and (lower(trim(coalesce(conference.company,''))) = 'samsung india') and (conference.conferenceUid is not null))  (cost=345 rows=3209) (actual time=0.0866..6.25 rows=2179 loops=1)\n                                            -> Table scan on conference  (cost=345 rows=3209) (actual time=0.0755..2.86 rows=3333 loops=1)\n                                        -> Covering index lookup on attendance using ix_attendance_conf_status_trainee (conferenceUid=conference.conferenceUid, status='Present')  (cost=0.469 rows=7.12) (actual time=0.00814..0.0136 rows=13.3 loops=2179)\n                                    -> Filter: ((conference.conferenceUid = assessment_results.conferenceUid) and (attendance.traineeUid = assessment_results.traineeUid))  (cost=0.485 rows=1.85) (actual time=0.00527..0.00527 rows=0.469 loops=28991)\n                                        -> Covering index lookup on assessment_results using ix_results_conf_trainee_status (conferenceUid=conference.conferenceUid, traineeUid=attendance.traineeUid, status='Submitted')  (cost=0.485 rows=1.85) (actual time=0.00499..0.00499 rows=0.469 loops=28991)\n        -> Select #13 (subquery in projection; run only once)\n            -> Aggregate: count(0)  (cost=7271..7271 rows=1) (actual time=458..458 rows=1 loops=1)\n                -> Table scan on anon_3  (cost=7104..7125 rows=1462) (actual time=454..457 rows=18309 loops=1)\n                    -> Materialize  (cost=7104..7104 rows=1462) (actual time=454..454 rows=18309 loops=1)\n                        -> Table scan on <temporary>  (cost=6937..6958 rows=1462) (actual time=445..448 rows=18309 loops=1)\n                            -> Temporary table with deduplication  (cost=6937..6937 rows=1462) (actual time=445..445 rows=18309 loops=1)\n                                -> Nested loop inner join  (cost=6791 rows=1462) (actual time=0.168..413 rows=34210 loops=1)\n                                    -> Filter: ((assessment_results.`status` = 'Submitted') and (assessment_results.conferenceUid <> '') and (assessment_results.traineeUid <> '') and (assessment_results.conferenceUid is not null))  (cost=6279 rows=1462) (actual time=0.0572..48.9 rows=52947 loops=1)\n                                        -> Covering index range scan on assessment_results using ix_results_conf_trainee_status over (NULL < conferenceUid < '') OR ('' < conferenceUid)  (cost=6279 rows=29244) (actual time=0.052..27.7 rows=58756 loops=1)\n                                    -> Limit: 1 row(s)  (cost=0.25 rows=1) (actual time=0.00666..0.00669 rows=0.646 loops=52947)\n                                        -> Filter: ((lower(conference.conferenceStatus) <> 'cancelled') and (lower(trim(coalesce(conference.company,''))) = 'samsung india'))  (cost=0.25 rows=1) (actual time=0.00652..0.00652 rows=0.646 loops=52947)\n                                            -> Single-row index lookup on conference using conferenceUid (conferenceUid=assessment_results.conferenceUid), with index condition: (conference.conferenceUid = assessment_results.conferenceUid)  (cost=0.25 rows=1) (actual time=0.00575..0.00576 rows=1 loops=52947)\n"
+    },
+    {
+      "case": "A02 admin Training List, page 1",
+      "path": "/admin/trainings/page?approval=reviewed&limit=10",
+      "runs": 30,
+      "statements": 6,
+      "checkouts": 2,
+      "rows_fetched": 25,
+      "db_ms_p50": 20.1,
+      "p50_ms": 56.6,
+      "p95_ms": 64.5,
+      "p99_ms": 65.7,
+      "est_production_ms": 393,
+      "statement_median_ms": [
+        3.0,
+        2.1,
+        2.2,
+        4.6,
+        4.0,
+        3.7,
+        null
+      ],
+      "statements_sql": [
+        "SELECT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `admin`.`loca",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE lower(trim(coalesce(conference.company, %(coalesce_1)s))) = %(lower_1)s AND (conference.status IS NULL OR lower(conference.status) != %(lower_2)s)) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference",
+        "EXPLAIN ANALYZE SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE lower(trim(coalesce(conference.company, %(coalesce_1)s))) = %(lower_1)s AND (conference.status IS NULL OR lower(conference.status) != %(lower_2)s)) AS anon_1"
+      ],
+      "slowest_statement_plan": "-> Aggregate: count(0)  (cost=666 rows=1) (actual time=3.11..3.11 rows=1 loops=1)\n    -> Filter: ((lower(trim(coalesce(conference.company,''))) = 'samsung india') and (lower(conference.`status`) <> 'pending'))  (cost=345 rows=3209) (actual time=0.0269..2.98 rows=2206 loops=1)\n        -> Table scan on conference  (cost=345 rows=3209) (actual time=0.0223..1.76 rows=3333 loops=1)\n"
+    },
+    {
+      "case": "A03 admin Attendance List, page 1",
+      "path": "/admin/attendance/page?mode=all&limit=10",
+      "runs": 30,
+      "statements": 7,
+      "checkouts": 2,
+      "rows_fetched": 36,
+      "db_ms_p50": 123.4,
+      "p50_ms": 161.1,
+      "p95_ms": 185.0,
+      "p99_ms": 192.2,
+      "est_production_ms": 539,
+      "statement_median_ms": [
+        2.8,
+        2.2,
+        2.1,
+        33.5,
+        73.1,
+        6.3,
+        3.1,
+        null
+      ],
+      "statements_sql": [
+        "SELECT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `admin`.`loca",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT count(*) AS count_1 FROM (SELECT attendance.id AS id FROM attendance INNER JOIN conference ON conference.`conferenceUid` = attendance.`conferenceUid` WHERE lower(trim(coalesce(conference.company, %(coalesce_1)s))) = %(lower_1)s) AS anon_1",
+        "SELECT attendance.id AS id, attendance.`attendanceUid` AS attendance_uid, attendance.`conferenceUid` AS conference_uid, attendance.`traineeUid` AS trainee_uid, attendance.phone AS phone, attendance.`markedOn` AS marked_on, attendance.timestamp AS timestamp, attendance.`checkOutTime` AS check_out_time, attendance.`updatedBy` AS updated_by, attendance.`updationOn` AS updation_on, attendance.status A",
+        "SELECT attendance.`traineeUid`, count(*) AS count_1, coalesce(sum(CASE WHEN (attendance.status = %(status_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_2)s) AS coalesce_1, coalesce(sum(CASE WHEN (attendance.status IN (%(status_2_1)s, %(status_2_2)s)) THEN %(param_3)s ELSE %(param_4)s END), %(coalesce_4)s) AS coalesce_3 FROM attendance INNER JOIN conference ON conference.`conferenceUid` =",
+        "SELECT assessment_results.`conferenceUid`, assessment_results.`traineeUid`, assessment_results.`totalScore`, assessment_results.`maxScore`, assessment_results.percentage FROM assessment_results INNER JOIN conference ON conference.`conferenceUid` = assessment_results.`conferenceUid` AND assessment_results.`assessmentSuiteUid` = conference.`postAssessmentUid` WHERE assessment_results.status = %(stat",
+        "EXPLAIN ANALYZE SELECT attendance.id AS id, attendance.`attendanceUid` AS attendance_uid, attendance.`conferenceUid` AS conference_uid, attendance.`traineeUid` AS trainee_uid, attendance.phone AS phone, attendance.`markedOn` AS marked_on, attendance.timestamp AS timestamp, attendance.`checkOutTime` AS check_out_time, attendance.`updatedBy` AS updated_by, attendance.`updationOn` AS updation_on, att"
+      ],
+      "slowest_statement_plan": "-> Nested loop left join  (cost=44822 rows=11) (actual time=82.9..83 rows=11 loops=1)\n    -> Nested loop inner join  (cost=44818 rows=11) (actual time=82.9..83 rows=11 loops=1)\n        -> Nested loop inner join  (cost=44814 rows=11) (actual time=82.9..82.9 rows=11 loops=1)\n            -> Sort: page_rows.sort_value DESC, page_rows.id DESC  (cost=44810..44810 rows=11) (actual time=82.9..82.9 rows=11 loops=1)\n                -> Table scan on page_rows  (cost=44803..44806 rows=11) (actual time=82.8..82.8 rows=11 loops=1)\n                    -> Materialize  (cost=44803..44803 rows=11) (actual time=82.8..82.8 rows=11 loops=1)\n                        -> Limit: 11 row(s)  (cost=44802 rows=11) (actual time=82.7..82.8 rows=11 loops=1)\n                            -> Nested loop inner join  (cost=44802 rows=99079) (actual time=82.7..82.8 rows=11 loops=1)\n                                -> Sort: attendance.`timestamp` DESC, attendance.id DESC  (cost=10124 rows=99079) (actual time=82.7..82.7 rows=14 loops=1)\n                                    -> Table scan on attendance  (cost=10124 rows=99079) (actual time=0.0359..40 rows=100001 loops=1)\n                                -> Filter: (lower(trim(coalesce(conference.company,''))) = 'samsung india')  (cost=0.25 rows=1) (actual time=0.0108..0.0109 rows=0.786 loops=14)\n                                    -> Single-row index lookup on conference using conferenceUid (conferenceUid=attendance.conferenceUid)  (cost=0.25 rows=1) (actual time=0.00977..0.00979 rows=1 loops=14)\n            -> Single-row index lookup on attendance using PRIMARY (id=page_rows.id)  (cost=0.259 rows=1) (actual time=0.00434..0.00436 rows=1 loops=11)\n        -> Single-row index lookup on conference using conferenceUid (conferenceUid=attendance.conferenceUid)  (cost=0.259 rows=1) (actual time=0.00548..0.00551 rows=1 loops=11)\n    -> Single-row index lookup on trainee using traineeUid (traineeUid=attendance.traineeUid)  (cost=0.259 rows=1) (actual time=0.00678..0.00683 rows=1 loops=11)\n"
+    },
+    {
+      "case": "A04 admin Trainee List, page 1",
+      "path": "/admin/trainees/page?mode=all&limit=10",
+      "runs": 30,
+      "statements": 5,
+      "checkouts": 2,
+      "rows_fetched": 15,
+      "db_ms_p50": 77.0,
+      "p50_ms": 107.4,
+      "p95_ms": 191.5,
+      "p99_ms": 198.6,
+      "est_production_ms": 401,
+      "statement_median_ms": [
+        3.4,
+        2.3,
+        2.2,
+        17.1,
+        51.6,
+        null
+      ],
+      "statements_sql": [
+        "SELECT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `admin`.`loca",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT count(*) AS count_1 FROM (SELECT trainee.id AS id FROM trainee WHERE lower(trim(coalesce(trainee.company, %(coalesce_1)s))) = %(lower_1)s) AS anon_1",
+        "SELECT trainee.id, trainee.`traineeUid`, trainee.name, trainee.email, trainee.phone, trainee.gender, trainee.designation, trainee.`supervisorName`, trainee.district, trainee.state, trainee.`profilePhoto`, trainee.uid, trainee.status, trainee.`tokenVersion`, trainee.timestamp, trainee.zone, trainee.region, trainee.company, trainee.`requestedBy`, trainee.`trainerEmployeeId`, trainee.`trainerName`, t",
+        "EXPLAIN ANALYZE SELECT trainee.id, trainee.`traineeUid`, trainee.name, trainee.email, trainee.phone, trainee.gender, trainee.designation, trainee.`supervisorName`, trainee.district, trainee.state, trainee.`profilePhoto`, trainee.uid, trainee.status, trainee.`tokenVersion`, trainee.timestamp, trainee.zone, trainee.region, trainee.company, trainee.`requestedBy`, trainee.`trainerEmployeeId`, trainee."
+      ],
+      "slowest_statement_plan": "-> Limit: 11 row(s)  (cost=2600 rows=11) (actual time=50.5..50.5 rows=11 loops=1)\n    -> Sort: trainee.`timestamp` DESC, trainee.id DESC, limit input to 11 row(s) per chunk  (cost=2600 rows=24555) (actual time=50.5..50.5 rows=11 loops=1)\n        -> Filter: (lower(trim(coalesce(trainee.company,''))) = 'samsung india')  (cost=2600 rows=24555) (actual time=0.0357..44 rows=16416 loops=1)\n            -> Table scan on trainee  (cost=2600 rows=24555) (actual time=0.0243..35.2 rows=25000 loops=1)\n"
+    },
+    {
+      "case": "R01 trainee Dashboard (Home, 5 rows)",
+      "path": "/sessions/dashboard?limit=5",
+      "runs": 30,
+      "statements": 11,
+      "checkouts": 2,
+      "rows_fetched": 798,
+      "db_ms_p50": 1080.6,
+      "p50_ms": 1159.6,
+      "p95_ms": 1686.5,
+      "p99_ms": 1762.6,
+      "est_production_ms": 1706,
+      "statement_median_ms": [
+        3.0,
+        2.7,
+        3.6,
+        3.7,
+        13.0,
+        9.9,
+        23.2,
+        5.9,
+        1014.4,
+        3.6,
+        3.2
+      ],
+      "statements_sql": [
+        "SELECT trainee.id AS trainee_id, trainee.`traineeUid` AS `trainee_traineeUid`, trainee.name AS trainee_name, trainee.email AS trainee_email, trainee.phone AS trainee_phone, trainee.gender AS trainee_gender, trainee.designation AS trainee_designation, trainee.`supervisorName` AS `trainee_supervisorName`, trainee.district AS trainee_district, trainee.state AS trainee_state, trainee.`profilePhoto` AS",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT assessment_results.id AS assessment_results_id, assessment_results.`resultUid` AS `assessment_results_resultUid`, assessment_results.`conferenceUid` AS `assessment_results_conferenceUid`, assessment_results.`traineeUid` AS `assessment_results_traineeUid`, assessment_results.`assessmentSuiteUid` AS `assessment_results_assessmentSuiteUid`, assessment_results.`attemptNumber` AS `assessment_res",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT anon_1.percent FROM (SELECT anon_2.`traineeUid` AS `traineeUid`, trainee.state AS state, CASE WHEN (coalesce(anon_3.maximum, %(coalesce_1)s) > %(coalesce_2)s) THEN ((anon_3.score * 1.0E0) / anon_3.maximum) * %(param_1)s ELSE 0.0E0 END AS percent FROM (SELECT DISTINCT attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.status = %(status_1)s AND attendance.`traineeUid` = ",
+        "SELECT count(*) AS count_1, coalesce(sum(CASE WHEN (anon_1.percent > %(percent_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_2)s) AS coalesce_1, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s) THEN %(param_3)s ELSE %(param_4)s END), %(coalesce_4)s) AS coalesce_3, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s AND anon_1.percent > %(percent_1)s) THEN %(param_5)s ELSE %(param_6)s E",
+        "SELECT mine.`conferenceUid`, count(others.`traineeUid`) AS count_1 FROM (SELECT mine_result.`conferenceUid` AS `conferenceUid`, mine_result.`traineeUid` AS `traineeUid`, mine_result.percentage AS percentage FROM assessment_results AS mine_result WHERE (mine_result.`conferenceUid`, mine_result.`assessmentSuiteUid`) IN ((%(param_1_1_1)s, %(param_1_1_2)s), (%(param_1_2_1)s, %(param_1_2_2)s), (%(param",
+        "EXPLAIN ANALYZE SELECT count(*) AS count_1, coalesce(sum(CASE WHEN (anon_1.percent > %(percent_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_2)s) AS coalesce_1, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s) THEN %(param_3)s ELSE %(param_4)s END), %(coalesce_4)s) AS coalesce_3, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s AND anon_1.percent > %(percent_1)s) THEN %(param_5)s EL"
+      ],
+      "slowest_statement_plan": "-> Aggregate: sum((case when ((trainee.state = 'Uttar Pradesh') and ((case when (coalesce(anon_3.maximum,0) > 0) then (((anon_3.score * 1.0E0) / anon_3.maximum) * 100) else 0.0E0 end) > 52.41573033707865e0)) then 1 else 0 end)), sum((case when (trainee.state = 'Uttar Pradesh') then 1 else 0 end)), sum((case when ((case when (coalesce(anon_3.maximum,0) > 0) then (((anon_3.score * 1.0E0) / anon_3.maximum) * 100) else 0.0E0 end) > 52.41573033707865e0) then 1 else 0 end)), count(0)  (cost=69576 rows=1) (actual time=1243..1243 rows=1 loops=1)\n    -> Nested loop left join  (cost=59600 rows=99762) (actual time=1049..1219 rows=18830 loops=1)\n        -> Nested loop left join  (cost=47147 rows=99762) (actual time=1049..1115 rows=18830 loops=1)\n            -> Table scan on anon_2  (cost=12106..12232 rows=9908) (actual time=313..318 rows=18830 loops=1)\n                -> Materialize  (cost=12106..12106 rows=9908) (actual time=313..313 rows=18830 loops=1)\n                    -> Group (no aggregates)  (cost=11115 rows=9908) (actual time=2.37..307 rows=18830 loops=1)\n                        -> Filter: (attendance.`status` = 'Present')  (cost=10124 rows=9908) (actual time=0.905..296 rows=44658 loops=1)\n                            -> Index scan on attendance using ix_attendance_traineeUid  (cost=10124 rows=99079) (actual time=0.246..279 rows=100001 loops=1)\n            -> Filter: (anon_3.traineeUid = anon_2.traineeUid)  (cost=0.25..2.52 rows=10.1) (actual time=0.0416..0.0421 rows=0.613 loops=18830)\n                -> Index lookup on anon_3 using <auto_key0> (traineeUid=anon_2.traineeUid)  (cost=0.25..2.52 rows=10.1) (actual time=0.0414..0.0418 rows=0.613 loops=18830)\n                    -> Materialize  (cost=0..0 rows=0) (actual time=735..735 rows=11543 loops=1)\n                        -> Table scan on <temporary>  (actual time=701..704 rows=11543 loops=1)\n                            -> Aggregate using temporary table  (actual time=701..701 rows=11543 loops=1)\n                                -> Nested loop inner join  (cost=10047 rows=585) (actual time=0.201..652 rows=30840 loops=1)\n                                    -> Nested loop inner join  (cost=8000 rows=5849) (actual time=0.15..354 rows=41341 loops=1)\n                                        -> Filter: ((assessment_results.`status` = 'Submitted') and (assessment_results.conferenceUid is not null) and (assessment_results.conferenceUid is not null) and (assessment_results.traineeUid is not null))  (cost=5953 rows=5849) (actual time=0.0703..53.6 rows=52947 loops=1)\n                                            -> Table scan on assessment_results  (cost=5953 rows=58487) (actual time=0.0675..36.2 rows=58756 loops=1)\n                                        -> Filter: ((lower(coalesce(conference.conferenceStatus,'')) <> 'cancelled') and ((assessment_results.assessmentSuiteUid = conference.postAssessmentUid) or ((case when json_valid(conference.sessionConfig) then coalesce((json_extract(conference.sessionConfig,'$.liveQuiz.assessmentSuiteUid') = cast(json_quote(assessment_results.assessmentSuiteUid) as json)),0) else 0 end) = 1)))  (cost=0.25 rows=1) (actual time=0.00542..0.00549 rows=0.781 loops=52947)\n                                            -> Single-row index lookup on conference using conferenceUid (conferenceUid=assessment_results.conferenceUid), with index condition: (conference.conferenceUid = assessment_results.conferenceUid)  (cost=0.25 rows=1) (actual time=0.00464..0.00467 rows=1 loops=52947)\n                                    -> Filter: (attendance.`status` = 'Present')  (cost=0.25 rows=0.1) (actual time=0.00693..0.007 rows=0.746 loops=41341)\n                                        -> Single-row index lookup on attendance using unique_session_attendance (conferenceUid=assessment_results.conferenceUid, traineeUid=assessment_results.traineeUid), with index condition: ((assessment_results.conferenceUid = attendance.conferenceUid) and (assessment_results.traineeUid = attendance.traineeUid))  (cost=0.25 rows=1) (actual time=0.00664..0.00667 rows=1 loops=41341)\n        -> Single-row index lookup on trainee using traineeUid (traineeUid=anon_2.traineeUid)  (cost=0.0248 rows=1) (actual time=0.0053..0.00534 rows=1 loops=18830)\n"
+    },
+    {
+      "case": "R02 trainee Training History (500 rows)",
+      "path": "/sessions/dashboard?limit=500",
+      "runs": 30,
+      "statements": 11,
+      "checkouts": 2,
+      "rows_fetched": 869,
+      "db_ms_p50": 1019.4,
+      "p50_ms": 1098.3,
+      "p95_ms": 1184.8,
+      "p99_ms": 1346.6,
+      "est_production_ms": 1644,
+      "statement_median_ms": [
+        2.5,
+        2.5,
+        2.9,
+        3.4,
+        12.6,
+        7.7,
+        20.8,
+        5.8,
+        923.4,
+        22.6,
+        23.8
+      ],
+      "statements_sql": [
+        "SELECT trainee.id AS trainee_id, trainee.`traineeUid` AS `trainee_traineeUid`, trainee.name AS trainee_name, trainee.email AS trainee_email, trainee.phone AS trainee_phone, trainee.gender AS trainee_gender, trainee.designation AS trainee_designation, trainee.`supervisorName` AS `trainee_supervisorName`, trainee.district AS trainee_district, trainee.state AS trainee_state, trainee.`profilePhoto` AS",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT assessment_results.id AS assessment_results_id, assessment_results.`resultUid` AS `assessment_results_resultUid`, assessment_results.`conferenceUid` AS `assessment_results_conferenceUid`, assessment_results.`traineeUid` AS `assessment_results_traineeUid`, assessment_results.`assessmentSuiteUid` AS `assessment_results_assessmentSuiteUid`, assessment_results.`attemptNumber` AS `assessment_res",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT anon_1.percent FROM (SELECT anon_2.`traineeUid` AS `traineeUid`, trainee.state AS state, CASE WHEN (coalesce(anon_3.maximum, %(coalesce_1)s) > %(coalesce_2)s) THEN ((anon_3.score * 1.0E0) / anon_3.maximum) * %(param_1)s ELSE 0.0E0 END AS percent FROM (SELECT DISTINCT attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.status = %(status_1)s AND attendance.`traineeUid` = ",
+        "SELECT count(*) AS count_1, coalesce(sum(CASE WHEN (anon_1.percent > %(percent_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_2)s) AS coalesce_1, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s) THEN %(param_3)s ELSE %(param_4)s END), %(coalesce_4)s) AS coalesce_3, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s AND anon_1.percent > %(percent_1)s) THEN %(param_5)s ELSE %(param_6)s E",
+        "SELECT mine.`conferenceUid`, count(others.`traineeUid`) AS count_1 FROM (SELECT mine_result.`conferenceUid` AS `conferenceUid`, mine_result.`traineeUid` AS `traineeUid`, mine_result.percentage AS percentage FROM assessment_results AS mine_result WHERE (mine_result.`conferenceUid`, mine_result.`assessmentSuiteUid`) IN ((%(param_1_1_1)s, %(param_1_1_2)s), (%(param_1_2_1)s, %(param_1_2_2)s), (%(param",
+        "EXPLAIN ANALYZE SELECT count(*) AS count_1, coalesce(sum(CASE WHEN (anon_1.percent > %(percent_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_2)s) AS coalesce_1, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s) THEN %(param_3)s ELSE %(param_4)s END), %(coalesce_4)s) AS coalesce_3, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s AND anon_1.percent > %(percent_1)s) THEN %(param_5)s EL"
+      ],
+      "slowest_statement_plan": "-> Aggregate: sum((case when ((trainee.state = 'Uttar Pradesh') and ((case when (coalesce(anon_3.maximum,0) > 0) then (((anon_3.score * 1.0E0) / anon_3.maximum) * 100) else 0.0E0 end) > 52.41573033707865e0)) then 1 else 0 end)), sum((case when (trainee.state = 'Uttar Pradesh') then 1 else 0 end)), sum((case when ((case when (coalesce(anon_3.maximum,0) > 0) then (((anon_3.score * 1.0E0) / anon_3.maximum) * 100) else 0.0E0 end) > 52.41573033707865e0) then 1 else 0 end)), count(0)  (cost=69576 rows=1) (actual time=1001..1001 rows=1 loops=1)\n    -> Nested loop left join  (cost=59600 rows=99762) (actual time=846..985 rows=18830 loops=1)\n        -> Nested loop left join  (cost=47147 rows=99762) (actual time=846..898 rows=18830 loops=1)\n            -> Table scan on anon_2  (cost=12106..12232 rows=9908) (actual time=211..214 rows=18830 loops=1)\n                -> Materialize  (cost=12106..12106 rows=9908) (actual time=211..211 rows=18830 loops=1)\n                    -> Group (no aggregates)  (cost=11115 rows=9908) (actual time=0.697..207 rows=18830 loops=1)\n                        -> Filter: (attendance.`status` = 'Present')  (cost=10124 rows=9908) (actual time=0.0862..199 rows=44658 loops=1)\n                            -> Index scan on attendance using ix_attendance_traineeUid  (cost=10124 rows=99079) (actual time=0.0823..187 rows=100001 loops=1)\n            -> Filter: (anon_3.traineeUid = anon_2.traineeUid)  (cost=0.25..2.52 rows=10.1) (actual time=0.0358..0.0361 rows=0.613 loops=18830)\n                -> Index lookup on anon_3 using <auto_key0> (traineeUid=anon_2.traineeUid)  (cost=0.25..2.52 rows=10.1) (actual time=0.0356..0.0359 rows=0.613 loops=18830)\n                    -> Materialize  (cost=0..0 rows=0) (actual time=635..635 rows=11543 loops=1)\n                        -> Table scan on <temporary>  (actual time=612..614 rows=11543 loops=1)\n                            -> Aggregate using temporary table  (actual time=612..612 rows=11543 loops=1)\n                                -> Nested loop inner join  (cost=10047 rows=585) (actual time=0.132..571 rows=30840 loops=1)\n                                    -> Nested loop inner join  (cost=8000 rows=5849) (actual time=0.0895..306 rows=41341 loops=1)\n                                        -> Filter: ((assessment_results.`status` = 'Submitted') and (assessment_results.conferenceUid is not null) and (assessment_results.conferenceUid is not null) and (assessment_results.traineeUid is not null))  (cost=5953 rows=5849) (actual time=0.0619..45.6 rows=52947 loops=1)\n                                            -> Table scan on assessment_results  (cost=5953 rows=58487) (actual time=0.0594..30.6 rows=58756 loops=1)\n                                        -> Filter: ((lower(coalesce(conference.conferenceStatus,'')) <> 'cancelled') and ((assessment_results.assessmentSuiteUid = conference.postAssessmentUid) or ((case when json_valid(conference.sessionConfig) then coalesce((json_extract(conference.sessionConfig,'$.liveQuiz.assessmentSuiteUid') = cast(json_quote(assessment_results.assessmentSuiteUid) as json)),0) else 0 end) = 1)))  (cost=0.25 rows=1) (actual time=0.00469..0.00476 rows=0.781 loops=52947)\n                                            -> Single-row index lookup on conference using conferenceUid (conferenceUid=assessment_results.conferenceUid), with index condition: (conference.conferenceUid = assessment_results.conferenceUid)  (cost=0.25 rows=1) (actual time=0.00405..0.00408 rows=1 loops=52947)\n                                    -> Filter: (attendance.`status` = 'Present')  (cost=0.25 rows=0.1) (actual time=0.00618..0.00624 rows=0.746 loops=41341)\n                                        -> Single-row index lookup on attendance using unique_session_attendance (conferenceUid=assessment_results.conferenceUid, traineeUid=assessment_results.traineeUid), with index condition: ((assessment_results.conferenceUid = attendance.conferenceUid) and (assessment_results.traineeUid = attendance.traineeUid))  (cost=0.25 rows=1) (actual time=0.00591..0.00594 rows=1 loops=41341)\n        -> Single-row index lookup on trainee using traineeUid (traineeUid=anon_2.traineeUid)  (cost=0.0248 rows=1) (actual time=0.00437..0.0044 rows=1 loops=18830)\n"
+    },
+    {
+      "case": "R03 trainee current session",
+      "path": "/sessions/current",
+      "runs": 30,
+      "statements": 10,
+      "checkouts": 2,
+      "rows_fetched": 8,
+      "db_ms_p50": 25.4,
+      "p50_ms": 52.8,
+      "p95_ms": 58.9,
+      "p99_ms": 60.2,
+      "est_production_ms": 557,
+      "statement_median_ms": [
+        2.6,
+        2.8,
+        3.0,
+        3.7,
+        2.0,
+        2.0,
+        1.9,
+        2.7,
+        2.3,
+        2.3,
+        null
+      ],
+      "statements_sql": [
+        "SELECT trainee.id AS trainee_id, trainee.`traineeUid` AS `trainee_traineeUid`, trainee.name AS trainee_name, trainee.email AS trainee_email, trainee.phone AS trainee_phone, trainee.gender AS trainee_gender, trainee.designation AS trainee_designation, trainee.`supervisorName` AS `trainee_supervisorName`, trainee.district AS trainee_district, trainee.state AS trainee_state, trainee.`profilePhoto` AS",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT conference_activity_log.id AS conference_activity_log_id, conference_activity_log.`conferenceUid` AS `conference_activity_log_conferenceUid`, conference_activity_log.`moduleId` AS `conference_activity_log_moduleId`, conference_activity_log.action AS conference_activity_log_action, conference_activity_log.timestamp AS conference_activity_log_timestamp, conference_activity_log.`performedBy` A",
+        "SELECT tenants.id AS tenants_id, tenants.tenant_uid AS tenants_tenant_uid, tenants.company_name AS tenants_company_name, tenants.database_host AS tenants_database_host, tenants.database_port AS tenants_database_port, tenants.database_name AS tenants_database_name, tenants.database_username AS tenants_database_username, tenants.database_password AS tenants_database_password, tenants.status AS tenan",
+        "SELECT conference_activity_log.id AS conference_activity_log_id, conference_activity_log.`conferenceUid` AS `conference_activity_log_conferenceUid`, conference_activity_log.`moduleId` AS `conference_activity_log_moduleId`, conference_activity_log.action AS conference_activity_log_action, conference_activity_log.timestamp AS conference_activity_log_timestamp, conference_activity_log.`performedBy` A",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT assessment_results.id AS assessment_results_id, assessment_results.`resultUid` AS `assessment_results_resultUid`, assessment_results.`conferenceUid` AS `assessment_results_conferenceUid`, assessment_results.`traineeUid` AS `assessment_results_traineeUid`, assessment_results.`assessmentSuiteUid` AS `assessment_results_assessmentSuiteUid`, assessment_results.`attemptNumber` AS `assessment_res",
+        "SELECT assessmentsuite.id AS assessmentsuite_id, assessmentsuite.`assessmentSuiteUid` AS `assessmentsuite_assessmentSuiteUid`, assessmentsuite.`courseUid` AS `assessmentsuite_courseUid`, assessmentsuite.`courseName` AS `assessmentsuite_courseName`, assessmentsuite.`examTitle` AS `assessmentsuite_examTitle`, assessmentsuite.description AS assessmentsuite_description, assessmentsuite.assessment_type",
+        "EXPLAIN ANALYZE SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerNa"
+      ],
+      "slowest_statement_plan": "-> Filter: (conference.conferenceStatus in ('Ongoing','Live'))  (cost=26.8 rows=5.2) (actual time=0.0432..0.375 rows=3 loops=1)\n    -> Index lookup on conference using ix_conference_trainer (trainerEmployeeId='T0005')  (cost=26.8 rows=105) (actual time=0.027..0.358 rows=105 loops=1)\n"
+    }
+  ],
+  "method": "FastAPI TestClient, one sequential client on the same machine as MySQL; nearest-rank percentiles"
+}

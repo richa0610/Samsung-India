@@ -1,0 +1,104 @@
+from fastapi import BackgroundTasks
+from sqlalchemy.orm import Session
+
+from app.core import rate_limit
+from app.core.exceptions import bad_request, unauthorized
+from app.core.media import media_subdir
+from app.core.security import create_access_token
+from app.models.trainee import Trainee
+from app.repositories import trainee_repository
+from app.routers.ws import manager as ws_manager
+from app.schemas.trainee import TokenResponse, TraineeLogin, TraineeRegister, TraineeUpdate
+from app.services.activity_log_service import log_activity
+from app.utils.validators import validate_profile_photo_upload
+
+
+def register(
+    db: Session,
+    payload: TraineeRegister,
+    background_tasks: BackgroundTasks,
+    ip_address: str | None = None,
+    tenant_id: str | None = None,
+) -> Trainee:
+    existing = trainee_repository.get_by_phone_or_email(db, payload.phone, payload.email)
+    if existing:
+        raise bad_request("Trainee with this phone or email already exists")
+
+    trainee = trainee_repository.create(db, Trainee(**payload.model_dump()))
+
+    background_tasks.add_task(ws_manager.broadcast, tenant_id, {"type": "trainee_created", "traineeUid": trainee.traineeUid})
+
+    log_activity(
+        db,
+        action="REGISTER",
+        username=str(trainee.phone),
+        role="trainee",
+        remarks=f"Self-registered as {trainee.traineeUid}",
+        ip_address=ip_address,
+    )
+
+    return trainee
+
+
+def login(db: Session, payload: TraineeLogin, tenant_id: str, ip_address: str | None = None) -> TokenResponse:
+    # Per-phone failure limit on top of the per-IP one (routers/trainee.py), keyed by tenant so
+    # one tenant's failures never lock the same number elsewhere.
+    account = f"{tenant_id}:{payload.phone}"
+    rate_limit.ensure_account_not_locked("trainee-login", account)
+    trainee = trainee_repository.get_by_phone(db, payload.phone)
+    if not trainee:
+        rate_limit.record_account_failure("trainee-login", account)
+        # Deliberately says neither "not found" nor "registered" - the same words for any failure.
+        raise unauthorized("Couldn't sign in with this phone number. Check it, or register first.")
+    rate_limit.clear_account_failures("trainee-login", account)
+
+    access_token = create_access_token(subject=str(trainee.phone), tenant_id=tenant_id, role="trainee", version=trainee.tokenVersion)
+    log_activity(db, action="LOGIN", username=str(trainee.phone), role="trainee", ip_address=ip_address)
+    return TokenResponse(access_token=access_token, trainee=trainee)
+
+
+def update_me(db: Session, trainee: Trainee, payload: TraineeUpdate, tenant_id: str) -> TokenResponse:
+    updates = payload.model_dump(exclude_unset=True, exclude_none=True)
+
+    # State is compulsory (it drives the State Ranking) - a profile save must
+    # leave the trainee with one, whether it's already saved or sent now.
+    if not (updates.get("state") or "").strip() and not (trainee.state or "").strip():
+        raise bad_request("State is required")
+    if "state" in updates:
+        updates["state"] = updates["state"].strip()
+
+    if "phone" in updates or "email" in updates:
+        conflict = trainee_repository.get_update_conflict(
+            db,
+            trainee.id,
+            updates.get("phone", trainee.phone),
+            updates.get("email", trainee.email),
+        )
+        if conflict:
+            raise bad_request("Another trainee already uses this phone or email")
+
+    for field, value in updates.items():
+        setattr(trainee, field, value)
+
+    trainee_repository.save(db, trainee)
+
+    # `get_current_trainee` looks a trainee up by phone (it's the JWT
+    # subject), so a changed phone number invalidates the token that was
+    # just used to make this request - issue a fresh one so the trainee
+    # doesn't get silently logged out by their own edit.
+    access_token = create_access_token(subject=str(trainee.phone), tenant_id=tenant_id, role="trainee", version=trainee.tokenVersion)
+    return TokenResponse(access_token=access_token, trainee=trainee)
+
+
+async def upload_profile_photo(db: Session, trainee: Trainee, file, tenant_id: str) -> Trainee:
+    contents = await file.read()
+    extension = validate_profile_photo_upload(file.content_type, contents, size_error_detail="Image must be 5MB or smaller")
+
+    # Named after the trainee (not the upload), so re-uploading replaces
+    # the old file instead of littering the disk with orphans.
+    photo_dir = media_subdir("trainee_photos", tenant_id)
+    filename = f"{trainee.traineeUid}.{extension}"
+    (photo_dir / filename).write_bytes(contents)
+
+    trainee.profilePhoto = f"trainee_photos/{filename}"
+    return trainee_repository.save(db, trainee)

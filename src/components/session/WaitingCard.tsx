@@ -1,37 +1,47 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 
-import Loading from "@/assets/images/svg/loading.svg";
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
-import { Fonts } from "@/theme/fonts";
-import { FontWeight } from "@/theme/fontWeight";
+import { FontWeight } from "@/theme/typography";
 
 type WaitingCardProps = {
   title?: string;
   subtitle?: string;
+  color?: string;
+  backgroundColor?: string;
+  icon?: keyof typeof Ionicons.glyphMap;
 };
 
 export default function WaitingCard({
   title = "Please Wait",
   subtitle = "Trainer will unlock soon...",
+  color = Colors.headerBlue,
+  backgroundColor = Colors.waitingBlueBg,
+  icon = "hourglass-outline",
 }: WaitingCardProps) {
   return (
-    <View style={styles.container}>
-      <Loading width={17} height={17} />
+    <View style={[styles.container, { backgroundColor }]}>
+      <Ionicons
+        name={icon}
+        size={24}
+        color={color}
+      />
 
-      <View>
+      <View style={styles.textWrap}>
         <AppText
-          style={styles.title}
-          color={Colors.primary}
-          weight={FontWeight.medium}
+          variant="label"
+          color={color}
+          weight={FontWeight.bold}
         >
           {title}
         </AppText>
 
         <AppText
-          style={styles.subtitle}
-          color={Colors.primary}
+          variant="caption"
+          color={color}
+          weight={FontWeight.medium}
         >
           {subtitle}
         </AppText>
@@ -44,19 +54,14 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    backgroundColor: "#DDEEFF",
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    marginTop: 7,
+    gap: 10,
+    backgroundColor: Colors.waitingBlueBg,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 10,
   },
-
-  title: {
-    fontSize: Fonts.caption,
-  },
-
-  subtitle: {
-    fontSize: Fonts.overline,
+  textWrap: {
+    gap: 1,
   },
 });

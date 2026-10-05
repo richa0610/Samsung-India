@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: samsung-india-backend
+    runtime: python
+    rootDir: backend
+    # Free plan can't attach a persistent disk at all - every deploy got a
+    # brand-new, empty filesystem, silently wiping every uploaded profile
+    # photo/Aadhaar doc/attendance photo from the previous deploy while the
+    # DB kept pointing at the now-gone file. Starter is the cheapest plan
+    # that supports a disk.
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    # Same command run_prod.py wraps (reload off, 1 worker - see its
+    # docstring for why: the rate limiter + WS registry hold in-memory
+    # state that isn't safe to share across multiple workers/instances).
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    # Backs MEDIA_ROOT_PATH below - survives deploys/restarts, unlike the
+    # container's own filesystem. 1GB is generous for photo/document
+    # uploads; resize from the Render dashboard if it's ever not enough.
+    disk:
+      name: media
+      mountPath: /var/data/media
+      sizeGB: 1
+    envVars:
+      - key: MEDIA_ROOT_PATH
+        value: /var/data/media
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      # Points at the Secret File uploaded in the Render dashboard (Settings
+      # -> Secret Files) - Render mounts it at /etc/secrets/<filename>.
+      - key: DB_SSL_CA
+        value: /etc/secrets/aiven-ca.pem
+      - key: SECRET_KEY
+        sync: false
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "480"
+      - key: ALLOW_ATTENDANCE_RETEST
+        value: "false"
+      - key: DEBUG
+        value: "false"
+      - key: FACE_DETECTION_API_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: ""

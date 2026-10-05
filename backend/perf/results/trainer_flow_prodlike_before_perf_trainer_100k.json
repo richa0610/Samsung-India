@@ -1,0 +1,662 @@
+{
+  "label": "prodlike_before",
+  "database": "perf_trainer_100k",
+  "when": "2026-09-30T16:32:06",
+  "mysql": "8.4.11",
+  "buffer_pool_mb": 32,
+  "rows": {
+    "conference": 3333,
+    "attendance": 100001,
+    "trainee": 25000,
+    "assessment_results": 58756
+  },
+  "rtt_ms_assumed": 42,
+  "warmup": 2,
+  "results": [
+    {
+      "case": "T01 trainer Home (today)",
+      "path": "/admin/trainings/summary",
+      "runs": 15,
+      "statements": 5,
+      "checkouts": 1,
+      "rows_fetched": 7,
+      "db_ms_p50": 258.6,
+      "p50_ms": 414.4,
+      "p95_ms": 514.2,
+      "p99_ms": 514.2,
+      "est_production_ms": 666,
+      "statement_median_ms": [
+        46.1,
+        48.2,
+        70.3,
+        47.4,
+        46.0
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT coalesce(sum(CASE WHEN (conference.`conferenceDate` = %(conferenceDate_1)s AND lower(coalesce(conference.`conferenceStatus`, %(coalesce_2)s)) != %(lower_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_3)s) AS coalesce_1, coalesce(sum(CASE WHEN (conference.`conferenceDate` = %(conferenceDate_1)s AND lower(coalesce(conference.`conferenceStatus`, %(coalesce_2)s)) != %(lower_1)s AND low",
+        "SELECT count(*) AS count_1 FROM (SELECT attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (SELECT conference.`conferenceUid` FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AND attendance.status = %(status_1)s UNION SELECT assessment_results.`traineeUid` AS `traineeUid` FROM assessment_results WHERE assessment_results.`confe",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s) AND attendance.status = %(status_1)s UNION SELECT assessment_results.`conferenceUid` AS `conferenceUid`, assessment_results.`traineeUid` AS `traineeUi"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T02 trainer Home (month range)",
+      "path": "/admin/trainings/summary?start=2026-09-01&end=2026-09-30",
+      "runs": 15,
+      "statements": 5,
+      "checkouts": 1,
+      "rows_fetched": 7,
+      "db_ms_p50": 244.1,
+      "p50_ms": 399.8,
+      "p95_ms": 415.7,
+      "p99_ms": 415.7,
+      "est_production_ms": 652,
+      "statement_median_ms": [
+        45.8,
+        47.8,
+        55.5,
+        46.4,
+        45.8
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT coalesce(sum(CASE WHEN (conference.`conferenceDate` >= %(conferenceDate_1)s AND conference.`conferenceDate` <= %(conferenceDate_2)s AND lower(coalesce(conference.`conferenceStatus`, %(coalesce_2)s)) != %(lower_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_3)s) AS coalesce_1, coalesce(sum(CASE WHEN (conference.`conferenceDate` >= %(conferenceDate_1)s AND conference.`conferenceDate`",
+        "SELECT count(*) AS count_1 FROM (SELECT attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (SELECT conference.`conferenceUid` FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s AND conference.`conferenceDate` >= %(conferenceDate_1)s AND conference.`conferenceDate` <= %(conferenceDate_2)s) AND attendance.status = %(status_1)s UNIO",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s) AND attendance.status = %(status_1)s UNION SELECT assessment_results.`conferenceUid` AS `conferenceUid`, assessment_results.`traineeUid` AS `traineeUi"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T03 Sessions: All, page 1",
+      "path": "/admin/trainings/page?sort=session&limit=20",
+      "runs": 15,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 43,
+      "db_ms_p50": 192.0,
+      "p50_ms": 353.8,
+      "p95_ms": 376.0,
+      "p99_ms": 376.0,
+      "est_production_ms": 564,
+      "statement_median_ms": [
+        45.8,
+        45.2,
+        51.5,
+        48.8
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T04 Sessions: All, page 3",
+      "path": "/admin/trainings/page?sort=session&limit=20&page=3",
+      "runs": 15,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 43,
+      "db_ms_p50": 193.1,
+      "p50_ms": 357.3,
+      "p95_ms": 407.8,
+      "p99_ms": 407.8,
+      "est_production_ms": 567,
+      "statement_median_ms": [
+        45.9,
+        45.5,
+        52.6,
+        49.2
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T05 Sessions: Today",
+      "path": "/admin/trainings/page?sort=session&limit=20&on_date=2026-09-30",
+      "runs": 15,
+      "statements": 5,
+      "checkouts": 2,
+      "rows_fetched": 23,
+      "db_ms_p50": 190.4,
+      "p50_ms": 357.0,
+      "p95_ms": 531.8,
+      "p99_ms": 531.8,
+      "est_production_ms": 651,
+      "statement_median_ms": [
+        46.4,
+        46.1,
+        48.5,
+        49.1
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE conference.`conferenceDate` = %(conferenceDate_1)s AND conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T06 Sessions: Completed",
+      "path": "/admin/trainings/page?sort=session&limit=20&status=completed",
+      "runs": 15,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 43,
+      "db_ms_p50": 193.6,
+      "p50_ms": 356.3,
+      "p95_ms": 381.7,
+      "p99_ms": 381.7,
+      "est_production_ms": 566,
+      "statement_median_ms": [
+        46.0,
+        46.4,
+        51.3,
+        49.1
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE lower(coalesce(conference.`conferenceStatus`, %(coalesce_1)s)) = %(lower_1)s AND conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T07 Sessions: search 'CONF00'",
+      "path": "/admin/trainings/page?sort=session&limit=20&q=CONF00",
+      "runs": 15,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 43,
+      "db_ms_p50": 195.7,
+      "p50_ms": 360.6,
+      "p95_ms": 397.2,
+      "p99_ms": 397.2,
+      "est_production_ms": 571,
+      "statement_median_ms": [
+        45.7,
+        47.2,
+        52.0,
+        49.2
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s AND ((lower(coalesce(conference.`conferenceUid`, %(coalesce_1)s)) LIKE concat('%%', %(lower_1)s, '%%') ESCAPE '/') OR (lower(coalesce(conference.`trainerName`, %(coalesce_2)s)) LIKE concat('%%', %(lower_2)s, '%%') ESCAPE '/') OR (lower(coalesce(conference.`trai",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T08 Sessions filter options",
+      "path": "/admin/trainings/facets",
+      "runs": 15,
+      "statements": 3,
+      "checkouts": 1,
+      "rows_fetched": 5,
+      "db_ms_p50": 138.9,
+      "p50_ms": 294.3,
+      "p95_ms": 312.0,
+      "p99_ms": 312.0,
+      "est_production_ms": 462,
+      "statement_median_ms": [
+        46.0,
+        46.1,
+        46.7
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT DISTINCT conference.`trainingHub` AS `conference_trainingHub` FROM conference WHERE conference.`trainingHub` IS NOT NULL AND conference.`trainingHub` != %(trainingHub_1)s AND conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s",
+        "SELECT DISTINCT conference.`trainingType` AS `conference_trainingType` FROM conference WHERE conference.`trainingType` IS NOT NULL AND conference.`trainingType` != %(trainingType_1)s AND conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T09 Session dashboard (live, largest)",
+      "path": "/admin/trainings/CONF0002225",
+      "runs": 15,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 89,
+      "db_ms_p50": 192.9,
+      "p50_ms": 348.7,
+      "p95_ms": 431.1,
+      "p99_ms": 431.1,
+      "est_production_ms": 559,
+      "statement_median_ms": [
+        46.3,
+        47.7,
+        48.6,
+        49.2
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT trainee.id AS trainee_id, trainee.`traineeUid` AS `trainee_traineeUid`, trainee.name AS trainee_name, trainee.email AS trainee_email, trainee.phone AS trainee_phone, trainee.gender AS trainee_gender, trainee.designation AS trainee_designation, trainee.`supervisorName` AS `trainee_supervisorName`, trainee.district AS trainee_district, trainee.state AS trainee_state, trainee.`profilePhoto` AS"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T10 Session dashboard (completed, largest)",
+      "path": "/admin/trainings/CONF0000813",
+      "runs": 15,
+      "statements": 5,
+      "checkouts": 2,
+      "rows_fetched": 120,
+      "db_ms_p50": 192.1,
+      "p50_ms": 346.3,
+      "p95_ms": 521.6,
+      "p99_ms": 521.6,
+      "est_production_ms": 640,
+      "statement_median_ms": [
+        45.6,
+        46.3,
+        49.3,
+        49.5
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT trainee.id AS trainee_id, trainee.`traineeUid` AS `trainee_traineeUid`, trainee.name AS trainee_name, trainee.email AS trainee_email, trainee.phone AS trainee_phone, trainee.gender AS trainee_gender, trainee.designation AS trainee_designation, trainee.`supervisorName` AS `trainee_supervisorName`, trainee.district AS trainee_district, trainee.state AS trainee_state, trainee.`profilePhoto` AS"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T11 All performers (completed)",
+      "path": "/admin/trainings/CONF0000813/performers",
+      "runs": 15,
+      "statements": 2,
+      "checkouts": 1,
+      "rows_fetched": 2,
+      "db_ms_p50": 92.8,
+      "p50_ms": 245.3,
+      "p95_ms": 276.9,
+      "p99_ms": 276.9,
+      "est_production_ms": 371,
+      "statement_median_ms": [
+        46.1,
+        46.7
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference."
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T12 Session report (completed)",
+      "path": "/admin/trainings/CONF0000813/report",
+      "runs": 15,
+      "statements": 3,
+      "checkouts": 1,
+      "rows_fetched": 70,
+      "db_ms_p50": 141.4,
+      "p50_ms": 291.1,
+      "p95_ms": 299.0,
+      "p99_ms": 299.0,
+      "est_production_ms": 459,
+      "statement_median_ms": [
+        45.8,
+        46.2,
+        49.7
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T13 trainer Training List, page 1",
+      "path": "/admin/trainings/page?approval=approved&limit=10",
+      "runs": 15,
+      "statements": 4,
+      "checkouts": 1,
+      "rows_fetched": 23,
+      "db_ms_p50": 188.3,
+      "p50_ms": 352.6,
+      "p95_ms": 375.4,
+      "p99_ms": 375.4,
+      "est_production_ms": 563,
+      "statement_median_ms": [
+        46.2,
+        46.5,
+        47.5,
+        47.4
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s AND lower(conference.status) = %(lower_1)s) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T14 trainer Attendance List, page 1",
+      "path": "/admin/attendance/page?mode=all&limit=10",
+      "runs": 15,
+      "statements": 6,
+      "checkouts": 2,
+      "rows_fetched": 25,
+      "db_ms_p50": 579.8,
+      "p50_ms": 741.5,
+      "p95_ms": 950.1,
+      "p99_ms": 950.1,
+      "est_production_ms": 1078,
+      "statement_median_ms": [
+        45.5,
+        126.2,
+        271.6,
+        67.4,
+        46.2
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT attendance.id AS id FROM attendance INNER JOIN conference ON conference.`conferenceUid` = attendance.`conferenceUid` LEFT OUTER JOIN trainee ON trainee.`traineeUid` = attendance.`traineeUid` WHERE conference.`trainerEmployeeId` = %(trainerEmployeeId_1)s) AS anon_1",
+        "SELECT attendance.id AS id, attendance.`attendanceUid` AS attendance_uid, attendance.`conferenceUid` AS conference_uid, attendance.`traineeUid` AS trainee_uid, attendance.phone AS phone, attendance.`markedOn` AS marked_on, attendance.timestamp AS timestamp, attendance.`checkOutTime` AS check_out_time, attendance.`updatedBy` AS updated_by, attendance.`updationOn` AS updation_on, attendance.status A",
+        "SELECT attendance.`traineeUid`, count(*) AS count_1, coalesce(sum(CASE WHEN (attendance.status = %(status_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_2)s) AS coalesce_1, coalesce(sum(CASE WHEN (attendance.status IN (%(status_2_1)s, %(status_2_2)s)) THEN %(param_3)s ELSE %(param_4)s END), %(coalesce_4)s) AS coalesce_3 FROM attendance INNER JOIN conference ON conference.`conferenceUid` =",
+        "SELECT assessment_results.`conferenceUid`, assessment_results.`traineeUid`, assessment_results.`totalScore`, assessment_results.`maxScore`, assessment_results.percentage FROM assessment_results INNER JOIN conference ON conference.`conferenceUid` = assessment_results.`conferenceUid` AND assessment_results.`assessmentSuiteUid` = conference.`postAssessmentUid` WHERE assessment_results.status = %(stat"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T15 trainer Trainee List, page 1",
+      "path": "/admin/trainees/page?mode=all&limit=10",
+      "runs": 15,
+      "statements": 4,
+      "checkouts": 2,
+      "rows_fetched": 14,
+      "db_ms_p50": 1876.6,
+      "p50_ms": 2029.5,
+      "p95_ms": 2882.5,
+      "p99_ms": 2882.5,
+      "est_production_ms": 2282,
+      "statement_median_ms": [
+        48.9,
+        740.7,
+        1048.0
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT count(*) AS count_1 FROM (SELECT trainee.id AS id FROM trainee WHERE trainee.`trainerEmployeeId` = %(trainerEmployeeId_1)s OR (EXISTS (SELECT * FROM attendance, conference WHERE attendance.`traineeUid` = trainee.`traineeUid` AND attendance.`conferenceUid` = conference.`conferenceUid` AND conference.`trainerEmployeeId` = %(trainerEmployeeId_2)s))) AS anon_1",
+        "SELECT trainee.id, trainee.`traineeUid`, trainee.name, trainee.email, trainee.phone, trainee.gender, trainee.designation, trainee.`supervisorName`, trainee.district, trainee.state, trainee.`profilePhoto`, trainee.uid, trainee.status, trainee.`tokenVersion`, trainee.timestamp, trainee.zone, trainee.region, trainee.company, trainee.`requestedBy`, trainee.`trainerEmployeeId`, trainee.`trainerName`, t"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "T16 Trainer dropdown",
+      "path": "/admin/trainers",
+      "runs": 15,
+      "statements": 3,
+      "checkouts": 2,
+      "rows_fetched": 61,
+      "db_ms_p50": 139.7,
+      "p50_ms": 424.5,
+      "p95_ms": 433.2,
+      "p99_ms": 433.2,
+      "est_production_ms": 634,
+      "statement_median_ms": [
+        45.8,
+        46.0,
+        47.2
+      ],
+      "statements_sql": [
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia",
+        "SELECT DISTINCT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `adm",
+        "SELECT agencyteam.id AS agencyteam_id, agencyteam.`agencyTeamUid` AS `agencyteam_agencyTeamUid`, agencyteam.`companyUid` AS `agencyteam_companyUid`, agencyteam.company AS agencyteam_company, agencyteam.name AS agencyteam_name, agencyteam.email AS agencyteam_email, agencyteam.phone AS agencyteam_phone, agencyteam.`altPhone` AS `agencyteam_altPhone`, agencyteam.`officialEmail` AS `agencyteam_officia"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "A01 admin dashboard stats",
+      "path": "/admin/dashboard/stats",
+      "runs": 15,
+      "statements": 6,
+      "checkouts": 2,
+      "rows_fetched": 212,
+      "db_ms_p50": 2241.8,
+      "p50_ms": 2541.4,
+      "p95_ms": 3074.6,
+      "p99_ms": 3074.6,
+      "est_production_ms": 2877,
+      "statement_median_ms": [
+        48.3,
+        48.1,
+        45.7,
+        1995.2,
+        48.5
+      ],
+      "statements_sql": [
+        "SELECT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `admin`.`loca",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT %(param_1)s AS k, CAST(conference.`trainingType` AS CHAR) AS a, CAST(conference.`conferenceStatus` AS CHAR) AS b, CAST(conference.status AS CHAR) AS c, count(*) AS n1, min(conference.id) AS n2, NULL AS n3 FROM conference WHERE (conference.`conferenceStatus` IS NULL OR lower(conference.`conferenceStatus`) != %(lower_1)s) AND lower(trim(coalesce(conference.company, %(coalesce_1)s))) = %(lower",
+        "SELECT DISTINCT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `adm"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "A02 admin Training List, page 1",
+      "path": "/admin/trainings/page?approval=reviewed&limit=10",
+      "runs": 15,
+      "statements": 6,
+      "checkouts": 2,
+      "rows_fetched": 25,
+      "db_ms_p50": 278.9,
+      "p50_ms": 573.9,
+      "p95_ms": 655.0,
+      "p99_ms": 655.0,
+      "est_production_ms": 910,
+      "statement_median_ms": [
+        46.5,
+        45.3,
+        45.3,
+        48.2,
+        46.6,
+        46.7
+      ],
+      "statements_sql": [
+        "SELECT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `admin`.`loca",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT count(*) AS count_1 FROM (SELECT conference.id AS id FROM conference WHERE lower(trim(coalesce(conference.company, %(coalesce_1)s))) = %(lower_1)s AND (conference.status IS NULL OR lower(conference.status) != %(lower_2)s)) AS anon_1",
+        "SELECT conference.id, conference.`conferenceUid`, conference.zone, conference.region, conference.company, conference.`requestedBy`, conference.`trainerEmployeeId`, conference.`trainerName`, conference.`conferenceType`, conference.`conferenceDate`, conference.`conferenceEndsOn`, conference.`conferenceTime`, conference.`conferenceStatus`, conference.`activeModuleId`, conference.`liveQuizState`, conf",
+        "SELECT anon_1.`conferenceUid`, count(*) AS count_1 FROM (SELECT attendance.`conferenceUid` AS `conferenceUid`, attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.`conferenceUid` IN (%(conferenceUid_1_1)s, %(conferenceUid_1_2)s, %(conferenceUid_1_3)s, %(conferenceUid_1_4)s, %(conferenceUid_1_5)s, %(conferenceUid_1_6)s, %(conferenceUid_1_7)s, %(conferenceUid_1_8)s, %(conference"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "A03 admin Attendance List, page 1",
+      "path": "/admin/attendance/page?mode=all&limit=10",
+      "runs": 15,
+      "statements": 8,
+      "checkouts": 2,
+      "rows_fetched": 37,
+      "db_ms_p50": 1092.0,
+      "p50_ms": 1404.2,
+      "p95_ms": 1777.7,
+      "p99_ms": 1777.7,
+      "est_production_ms": 1824,
+      "statement_median_ms": [
+        47.8,
+        46.4,
+        45.5,
+        498.4,
+        342.7,
+        48.4,
+        47.7
+      ],
+      "statements_sql": [
+        "SELECT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `admin`.`loca",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT count(*) AS count_1 FROM (SELECT attendance.id AS id FROM attendance INNER JOIN conference ON conference.`conferenceUid` = attendance.`conferenceUid` LEFT OUTER JOIN trainee ON trainee.`traineeUid` = attendance.`traineeUid` WHERE lower(trim(coalesce(conference.company, %(coalesce_1)s))) = %(lower_1)s) AS anon_1",
+        "SELECT attendance.id AS id, attendance.`attendanceUid` AS attendance_uid, attendance.`conferenceUid` AS conference_uid, attendance.`traineeUid` AS trainee_uid, attendance.phone AS phone, attendance.`markedOn` AS marked_on, attendance.timestamp AS timestamp, attendance.`checkOutTime` AS check_out_time, attendance.`updatedBy` AS updated_by, attendance.`updationOn` AS updation_on, attendance.status A",
+        "SELECT attendance.`traineeUid`, count(*) AS count_1, coalesce(sum(CASE WHEN (attendance.status = %(status_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_2)s) AS coalesce_1, coalesce(sum(CASE WHEN (attendance.status IN (%(status_2_1)s, %(status_2_2)s)) THEN %(param_3)s ELSE %(param_4)s END), %(coalesce_4)s) AS coalesce_3 FROM attendance INNER JOIN conference ON conference.`conferenceUid` =",
+        "SELECT assessment_results.`conferenceUid`, assessment_results.`traineeUid`, assessment_results.`totalScore`, assessment_results.`maxScore`, assessment_results.percentage FROM assessment_results INNER JOIN conference ON conference.`conferenceUid` = assessment_results.`conferenceUid` AND assessment_results.`assessmentSuiteUid` = conference.`postAssessmentUid` WHERE assessment_results.status = %(stat"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "A04 admin Trainee List, page 1",
+      "path": "/admin/trainees/page?mode=all&limit=10",
+      "runs": 15,
+      "statements": 5,
+      "checkouts": 2,
+      "rows_fetched": 15,
+      "db_ms_p50": 326.6,
+      "p50_ms": 640.6,
+      "p95_ms": 1012.0,
+      "p99_ms": 1012.0,
+      "est_production_ms": 935,
+      "statement_median_ms": [
+        47.9,
+        46.1,
+        45.9,
+        65.4,
+        122.5
+      ],
+      "statements_sql": [
+        "SELECT `admin`.id AS admin_id, `admin`.`adminUid` AS `admin_adminUid`, `admin`.name AS admin_name, `admin`.email AS admin_email, `admin`.phone AS admin_phone, `admin`.`altPhone` AS `admin_altPhone`, `admin`.gender AS admin_gender, `admin`.dob AS admin_dob, `admin`.`fatherName` AS `admin_fatherName`, `admin`.`motherName` AS `admin_motherName`, `admin`.`localCity` AS `admin_localCity`, `admin`.`loca",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT admin_access.id AS admin_access_id, admin_access.admin_id AS admin_access_admin_id, admin_access.`role` AS admin_access_role, admin_access.tenant_uid AS admin_access_tenant_uid, admin_access.company AS admin_access_company, admin_access.zone AS admin_access_zone, admin_access.region AS admin_access_region, admin_access.active AS admin_access_active, admin_access.granted_by AS admin_access_g",
+        "SELECT count(*) AS count_1 FROM (SELECT trainee.id AS id FROM trainee WHERE lower(trim(coalesce(trainee.company, %(coalesce_1)s))) = %(lower_1)s) AS anon_1",
+        "SELECT trainee.id, trainee.`traineeUid`, trainee.name, trainee.email, trainee.phone, trainee.gender, trainee.designation, trainee.`supervisorName`, trainee.district, trainee.state, trainee.`profilePhoto`, trainee.uid, trainee.status, trainee.`tokenVersion`, trainee.timestamp, trainee.zone, trainee.region, trainee.company, trainee.`requestedBy`, trainee.`trainerEmployeeId`, trainee.`trainerName`, t"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "R01 trainee Dashboard (Home, 5 rows)",
+      "path": "/sessions/dashboard?limit=5",
+      "runs": 15,
+      "statements": 11,
+      "checkouts": 2,
+      "rows_fetched": 796,
+      "db_ms_p50": 2586.7,
+      "p50_ms": 2795.4,
+      "p95_ms": 3518.4,
+      "p99_ms": 3518.4,
+      "est_production_ms": 3341,
+      "statement_median_ms": [
+        48.7,
+        46.9,
+        46.7,
+        53.6,
+        73.6,
+        64.5,
+        77.4,
+        58.5,
+        1974.4,
+        69.2
+      ],
+      "statements_sql": [
+        "SELECT trainee.id AS trainee_id, trainee.`traineeUid` AS `trainee_traineeUid`, trainee.name AS trainee_name, trainee.email AS trainee_email, trainee.phone AS trainee_phone, trainee.gender AS trainee_gender, trainee.designation AS trainee_designation, trainee.`supervisorName` AS `trainee_supervisorName`, trainee.district AS trainee_district, trainee.state AS trainee_state, trainee.`profilePhoto` AS",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT assessment_results.id AS assessment_results_id, assessment_results.`resultUid` AS `assessment_results_resultUid`, assessment_results.`conferenceUid` AS `assessment_results_conferenceUid`, assessment_results.`traineeUid` AS `assessment_results_traineeUid`, assessment_results.`assessmentSuiteUid` AS `assessment_results_assessmentSuiteUid`, assessment_results.`attemptNumber` AS `assessment_res",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT anon_1.percent FROM (SELECT anon_2.`traineeUid` AS `traineeUid`, trainee.state AS state, CASE WHEN (coalesce(anon_3.maximum, %(coalesce_1)s) > %(coalesce_2)s) THEN ((anon_3.score * 1.0E0) / anon_3.maximum) * %(param_1)s ELSE 0.0E0 END AS percent FROM (SELECT DISTINCT attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.status = %(status_1)s AND attendance.`traineeUid` = ",
+        "SELECT count(*) AS count_1, coalesce(sum(CASE WHEN (anon_1.percent > %(percent_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_2)s) AS coalesce_1, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s) THEN %(param_3)s ELSE %(param_4)s END), %(coalesce_4)s) AS coalesce_3, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s AND anon_1.percent > %(percent_1)s) THEN %(param_5)s ELSE %(param_6)s E",
+        "SELECT mine.`conferenceUid`, count(others.`traineeUid`) AS count_1 FROM (SELECT mine_result.`conferenceUid` AS `conferenceUid`, mine_result.`traineeUid` AS `traineeUid`, mine_result.percentage AS percentage FROM assessment_results AS mine_result WHERE (mine_result.`conferenceUid`, mine_result.`assessmentSuiteUid`) IN ((%(param_1_1_1)s, %(param_1_1_2)s), (%(param_1_2_1)s, %(param_1_2_2)s), (%(param"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "R02 trainee Training History (500 rows)",
+      "path": "/sessions/dashboard?limit=500",
+      "runs": 15,
+      "statements": 11,
+      "checkouts": 2,
+      "rows_fetched": 867,
+      "db_ms_p50": 2571.9,
+      "p50_ms": 2819.3,
+      "p95_ms": 3341.4,
+      "p99_ms": 3341.4,
+      "est_production_ms": 3365,
+      "statement_median_ms": [
+        48.5,
+        45.9,
+        46.7,
+        51.0,
+        60.7,
+        52.6,
+        69.2,
+        57.9,
+        1934.7,
+        158.7
+      ],
+      "statements_sql": [
+        "SELECT trainee.id AS trainee_id, trainee.`traineeUid` AS `trainee_traineeUid`, trainee.name AS trainee_name, trainee.email AS trainee_email, trainee.phone AS trainee_phone, trainee.gender AS trainee_gender, trainee.designation AS trainee_designation, trainee.`supervisorName` AS `trainee_supervisorName`, trainee.district AS trainee_district, trainee.state AS trainee_state, trainee.`profilePhoto` AS",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT assessment_results.id AS assessment_results_id, assessment_results.`resultUid` AS `assessment_results_resultUid`, assessment_results.`conferenceUid` AS `assessment_results_conferenceUid`, assessment_results.`traineeUid` AS `assessment_results_traineeUid`, assessment_results.`assessmentSuiteUid` AS `assessment_results_assessmentSuiteUid`, assessment_results.`attemptNumber` AS `assessment_res",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT anon_1.percent FROM (SELECT anon_2.`traineeUid` AS `traineeUid`, trainee.state AS state, CASE WHEN (coalesce(anon_3.maximum, %(coalesce_1)s) > %(coalesce_2)s) THEN ((anon_3.score * 1.0E0) / anon_3.maximum) * %(param_1)s ELSE 0.0E0 END AS percent FROM (SELECT DISTINCT attendance.`traineeUid` AS `traineeUid` FROM attendance WHERE attendance.status = %(status_1)s AND attendance.`traineeUid` = ",
+        "SELECT count(*) AS count_1, coalesce(sum(CASE WHEN (anon_1.percent > %(percent_1)s) THEN %(param_1)s ELSE %(param_2)s END), %(coalesce_2)s) AS coalesce_1, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s) THEN %(param_3)s ELSE %(param_4)s END), %(coalesce_4)s) AS coalesce_3, coalesce(sum(CASE WHEN (anon_1.state = %(state_1)s AND anon_1.percent > %(percent_1)s) THEN %(param_5)s ELSE %(param_6)s E",
+        "SELECT mine.`conferenceUid`, count(others.`traineeUid`) AS count_1 FROM (SELECT mine_result.`conferenceUid` AS `conferenceUid`, mine_result.`traineeUid` AS `traineeUid`, mine_result.percentage AS percentage FROM assessment_results AS mine_result WHERE (mine_result.`conferenceUid`, mine_result.`assessmentSuiteUid`) IN ((%(param_1_1_1)s, %(param_1_1_2)s), (%(param_1_2_1)s, %(param_1_2_2)s), (%(param"
+      ],
+      "slowest_statement_plan": null
+    },
+    {
+      "case": "R03 trainee current session",
+      "path": "/sessions/current",
+      "runs": 15,
+      "statements": 11,
+      "checkouts": 3,
+      "rows_fetched": 9,
+      "db_ms_p50": 475.7,
+      "p50_ms": 801.4,
+      "p95_ms": 1212.2,
+      "p99_ms": 1212.2,
+      "est_production_ms": 1389,
+      "statement_median_ms": [
+        46.5,
+        46.6,
+        47.3,
+        47.8,
+        46.1,
+        46.4,
+        46.1,
+        46.9,
+        46.4,
+        46.2,
+        44.9
+      ],
+      "statements_sql": [
+        "SELECT tenants.id AS tenants_id, tenants.tenant_uid AS tenants_tenant_uid, tenants.company_name AS tenants_company_name, tenants.database_host AS tenants_database_host, tenants.database_port AS tenants_database_port, tenants.database_name AS tenants_database_name, tenants.database_username AS tenants_database_username, tenants.database_password AS tenants_database_password, tenants.status AS tenan",
+        "SELECT trainee.id AS trainee_id, trainee.`traineeUid` AS `trainee_traineeUid`, trainee.name AS trainee_name, trainee.email AS trainee_email, trainee.phone AS trainee_phone, trainee.gender AS trainee_gender, trainee.designation AS trainee_designation, trainee.`supervisorName` AS `trainee_supervisorName`, trainee.district AS trainee_district, trainee.state AS trainee_state, trainee.`profilePhoto` AS",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT conference.id AS conference_id, conference.`conferenceUid` AS `conference_conferenceUid`, conference.zone AS conference_zone, conference.region AS conference_region, conference.company AS conference_company, conference.`requestedBy` AS `conference_requestedBy`, conference.`trainerEmployeeId` AS `conference_trainerEmployeeId`, conference.`trainerName` AS `conference_trainerName`, conference.",
+        "SELECT conference_activity_log.id AS conference_activity_log_id, conference_activity_log.`conferenceUid` AS `conference_activity_log_conferenceUid`, conference_activity_log.`moduleId` AS `conference_activity_log_moduleId`, conference_activity_log.action AS conference_activity_log_action, conference_activity_log.timestamp AS conference_activity_log_timestamp, conference_activity_log.`performedBy` A",
+        "SELECT tenants.id AS tenants_id, tenants.tenant_uid AS tenants_tenant_uid, tenants.company_name AS tenants_company_name, tenants.database_host AS tenants_database_host, tenants.database_port AS tenants_database_port, tenants.database_name AS tenants_database_name, tenants.database_username AS tenants_database_username, tenants.database_password AS tenants_database_password, tenants.status AS tenan",
+        "SELECT conference_activity_log.id AS conference_activity_log_id, conference_activity_log.`conferenceUid` AS `conference_activity_log_conferenceUid`, conference_activity_log.`moduleId` AS `conference_activity_log_moduleId`, conference_activity_log.action AS conference_activity_log_action, conference_activity_log.timestamp AS conference_activity_log_timestamp, conference_activity_log.`performedBy` A",
+        "SELECT attendance.id AS attendance_id, attendance.`attendanceUid` AS `attendance_attendanceUid`, attendance.`conferenceUid` AS `attendance_conferenceUid`, attendance.`trainerUid` AS `attendance_trainerUid`, attendance.`traineeUid` AS `attendance_traineeUid`, attendance.phone AS attendance_phone, attendance.`markedOn` AS `attendance_markedOn`, attendance.`filePath` AS `attendance_filePath`, attenda",
+        "SELECT assessment_results.id AS assessment_results_id, assessment_results.`resultUid` AS `assessment_results_resultUid`, assessment_results.`conferenceUid` AS `assessment_results_conferenceUid`, assessment_results.`traineeUid` AS `assessment_results_traineeUid`, assessment_results.`assessmentSuiteUid` AS `assessment_results_assessmentSuiteUid`, assessment_results.`attemptNumber` AS `assessment_res",
+        "SELECT assessmentsuite.id AS assessmentsuite_id, assessmentsuite.`assessmentSuiteUid` AS `assessmentsuite_assessmentSuiteUid`, assessmentsuite.`courseUid` AS `assessmentsuite_courseUid`, assessmentsuite.`courseName` AS `assessmentsuite_courseName`, assessmentsuite.`examTitle` AS `assessmentsuite_examTitle`, assessmentsuite.description AS assessmentsuite_description, assessmentsuite.assessment_type"
+      ],
+      "slowest_statement_plan": null
+    }
+  ],
+  "method": "FastAPI TestClient, one sequential client on the same machine as MySQL; nearest-rank percentiles"
+}

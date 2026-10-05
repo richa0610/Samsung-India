@@ -1,13 +1,14 @@
 from sqlalchemy import Column, DateTime, Integer, Numeric, String, Text
 from sqlalchemy.sql import func
 
-from app.database.database import Base
+from app.database.connection import Base
 
 
 class ConferenceActivityLog(Base):
-    """Mirrors the `conference_activity_log` table from the legacy
-    tecsoui_tops_aman schema - one row per module STARTED/STOPPED event,
-    the source for the trainer's Execution Flow timeline."""
+    """A `conference_activity_log` table doesn't exist on the real
+    mmtbtwob_tops schema - SQLAlchemy's create_all() adds it automatically.
+    One row per module STARTED/STOPPED event, the source for the
+    trainer's Execution Flow timeline."""
 
     __tablename__ = "conference_activity_log"
 
