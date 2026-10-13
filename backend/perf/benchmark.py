@@ -2,7 +2,7 @@
 
     PERF_DB_URL=... python -m perf.benchmark --db perf_attendance_100k --label baseline --runs 60
 
-Calls the real `training_service.list_attendance_page` (so the numbers are for the actual
+Calls the real `training.listing.list_attendance_page` (so the numbers are for the actual
 Phase A SQL), one sequential client, against the local perf database. For every case it records:
   - request latency p50 / p95 / p99 (warm-up runs discarded),
   - SQL statement count and each statement's median time (page / count / results / tallies),
@@ -26,7 +26,8 @@ from sqlalchemy import event, text  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 from app.dependencies.filters import ConferenceFilters  # noqa: E402
-from app.services import training_service  # noqa: E402
+from app.dependencies.paging import PageRequest  # noqa: E402
+from app.services.training import listing  # noqa: E402
 
 COUNTERS = (
     "Created_tmp_tables", "Created_tmp_disk_tables", "Sort_rows", "Sort_merge_passes",
@@ -91,19 +92,19 @@ def main():
     everyone = ConferenceFilters()
 
     def request(filters=broad, mode="all", q=None, sort="markedAt", desc=True, cursor=None, limit=10, page=None):
-        return lambda db: training_service.list_attendance_page(db, filters, mode, q, sort, desc, cursor, limit, page)
+        return lambda db: listing.list_attendance_page(db, None, filters, mode, q, sort, desc, PageRequest(cursor, limit, page))
 
     def deep_cursor(pages):
         db = Session()
         cursor = None
         for _ in range(pages):
-            cursor = training_service.list_attendance_page(db, broad, "all", None, "markedAt", True, cursor, 10, None).nextCursor
+            cursor = listing.list_attendance_page(db, None, broad, "all", None, "markedAt", True, PageRequest(cursor, 10, None)).nextCursor
         db.close()
         return cursor
 
     total_rows = None
     db0 = Session()
-    first = training_service.list_attendance_page(db0, broad, "all", None, "markedAt", True, None, 10, None)
+    first = listing.list_attendance_page(db0, None, broad, "all", None, "markedAt", True, PageRequest(None, 10, None))
     total_rows = first.total
     db0.close()
     last_page = math.ceil(total_rows / 10)

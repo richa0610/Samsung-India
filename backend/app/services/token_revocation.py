@@ -25,4 +25,4 @@ def revoke_all_tokens(
     account_db.commit()
     username = str(account.phone) if isinstance(account, Trainee) else account.username
     role = "trainee" if isinstance(account, Trainee) else account.role
-    log_activity(log_db, action="LOGOUT", username=username, role=role, ip_address=ip_address)
+    log_activity(log_db, action="LOGOUT", username=username, role=role, ip_address=ip_address, ends_session=True)

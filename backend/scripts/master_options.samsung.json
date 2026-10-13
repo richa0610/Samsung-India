@@ -1,0 +1,40 @@
+{
+  "_comment": "Add Training dropdown options for the Samsung tenant (user, 2026-10-13): the user's lists, plus every value trainings already use, each under its own category. Zones are categories marked 'Zone'; their options are the regions. Preview / --apply with scripts/add_master_options.py.",
+  "categories": [
+    {
+      "name": "Audience",
+      "visibleOnWeb": "Conference",
+      "options": ["PC Training", "SEC Plan", "SEC", "SEC LITE GT", "OT SEC", "FESTIVE SEC", "SGC", "Retail Sales Executives"]
+    },
+    {
+      "name": "Session Type",
+      "visibleOnWeb": "Conference",
+      "options": ["Classroom Training", "Webinar", "PC Training", "MX Training", "ASE and ZSE", "Sales Team", "Partner Staff", "Online Training"]
+    },
+    {
+      "name": "Training Type",
+      "visibleOnWeb": "Conference",
+      "options": ["Classroom Training", "Webinar", "BROADCAST", "NHIT Training", "Product Training"]
+    },
+    {
+      "name": "East",
+      "visibleOnWeb": "Zone",
+      "options": ["East 1", "East 2", "East 3", "East 4"]
+    },
+    {
+      "name": "North",
+      "visibleOnWeb": "Zone",
+      "options": ["North 1", "North 2", "North 3", "North 4", "Delhi NCR", "Haryana", "Haryana Region", "UP West", "Uttar Pradesh Region", "Karnataka Region", "Maharashtra Region"]
+    },
+    {
+      "name": "South",
+      "visibleOnWeb": "Zone",
+      "options": ["South 1", "South 2", "South 3", "South 4", "South 1 [KR]", "South 1 [TN]"]
+    },
+    {
+      "name": "West",
+      "visibleOnWeb": "Zone",
+      "options": ["West 1", "West 2", "West 3", "West 4"]
+    }
+  ]
+}

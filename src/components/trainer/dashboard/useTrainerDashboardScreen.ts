@@ -145,7 +145,10 @@ export function useTrainerDashboardScreen() {
       end: toApiDate(dateRange.end),
     };
 
-    if (cardKey === "total") {
+    if (cardKey === "ongoing") {
+      // Ongoing ignores the date filter: it counts, and opens, every running training.
+      router.push({ pathname: "/sessions", params: { tab: "all", status: "ongoing" } });
+    } else if (cardKey === "total") {
       router.push({
         pathname: "/sessions",
         params: { ...dateParams, tab: "all", status: "total" },

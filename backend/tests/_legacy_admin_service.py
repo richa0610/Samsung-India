@@ -10,6 +10,7 @@ from app.dependencies.filters import ConferenceFilters
 from app.models.attendance import Attendance
 from app.models.conference import Conference
 from app.repositories import admin_repository, assessment_repository, conference_repository
+from app.services.module_flow import scored_suite_uids
 from app.schemas.admin import (
     AdminAuthSession,
     AdminDashboardStatsOut,
@@ -29,7 +30,7 @@ from app.schemas.admin import (
     TrainingTypeStatusCount,
 )
 from app.services.activity_log_service import log_activity
-from app.services.training_service import _audience_class
+from app.services.training.session_dashboard import audience_class as _audience_class
 from app.utils.status import title_status
 from tests import _legacy_queries as legacy_queries
 
@@ -343,10 +344,20 @@ def build_admin_dashboard_stats(
         statusAnalysis=trainer_status_analysis,
     )
 
-    results = [
+    submitted = [
         r
         for r in legacy_queries.list_all_submitted_results(db)
         if r.conferenceUid not in cancelled_uids and (not filtering or r.conferenceUid in kept_uids)
+    ]
+    # Marks only (module_flow.scored_suite_uids - the rule changed on 2026-10-12): a Survey's 0% is
+    # never a failed attempt, and a result for no training's test or quiz isn't one either.
+    # Participation below still counts every submission, a Survey's included.
+    conference_by_uid = {c.conferenceUid: c for c in all_conferences}
+    results = [
+        r
+        for r in submitted
+        if r.conferenceUid in conference_by_uid
+        and r.assessmentSuiteUid in scored_suite_uids(conference_by_uid[r.conferenceUid])
     ]
     attempts = len(results)
     passed = sum(1 for r in results if float(r.percentage) >= PASS_THRESHOLD_PERCENT)
@@ -359,7 +370,7 @@ def build_admin_dashboard_stats(
     }
     submitted_pairs = {
         (r.conferenceUid, r.traineeUid)
-        for r in results
+        for r in submitted
         if r.conferenceUid and r.traineeUid
     }
     missed_count = len(present_pairs - submitted_pairs) if present_pairs else 0

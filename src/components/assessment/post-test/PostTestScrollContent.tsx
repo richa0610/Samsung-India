@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 16,
     backgroundColor: Colors.white,
-    ...createShadow({ x: 0, y: 2, blur: 8, opacity: 0.06, elevation: 2, color: "#000000" }),
+    ...createShadow({ x: 0, y: 2, blur: 8, opacity: 0.06, elevation: 2, color: Colors.black }),
   },
   title: {
     fontSize: FontSize.body,

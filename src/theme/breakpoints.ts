@@ -4,3 +4,4 @@ export const Breakpoints = {
   tabletMaxWidth: 1024,
   desktopMinWidth: 1025,
 } as const;
+

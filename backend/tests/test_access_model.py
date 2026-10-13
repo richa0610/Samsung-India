@@ -281,10 +281,10 @@ class SafetyTests(unittest.TestCase):
 
     def test_the_running_app_only_uses_the_access_model_for_the_one_approved_check(self):
         """Phase C started as "designed but not wired in": nothing imported access_service or
-        admin_access. That changed with one specific, approved wiring - training_service now
+        admin_access. That changed with one specific, approved wiring - the training service now
         calls resolve_scope so an admin-table account (Super Admin / Company Admin /
         Coordinator / Sub-coordinator) can start and operate a conference inside their granted
-        scope, the same way the assigned trainer does (see training_service._get_owned_conference
+        scope, the same way the assigned trainer does (see training.common.owned_conference
         and live_quiz_service._owned_live_conference). So the module IS now imported - this test
         pins that fact rather than its absence. What still must hold, and is pinned by
         test_app_startup_cannot_create_the_table, is that importing the app can never CREATE the

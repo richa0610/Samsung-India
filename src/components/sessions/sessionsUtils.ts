@@ -56,7 +56,7 @@ export function getSessionStatusConfig(
       badgeTextColor: "#0D9488",
       borderColor: "#99F6E4",
       buttonType: "report",
-      buttonBg: "#1E293B",
+      buttonBg: Colors.black,
       buttonText: "REPORT",
     };
   }
@@ -74,9 +74,9 @@ export function getSessionStatusConfig(
 }
 
 export function parseSessionDate(dateStr?: string | null, timeStr?: string | null) {
-  let day = "07";
-  let month = "JUL";
-  let time = timeStr || "09:00";
+  let day = "--";
+  let month = "--";
+  const time = timeStr || "--";
 
   if (dateStr) {
     const parsed = new Date(`${dateStr}T00:00:00`);

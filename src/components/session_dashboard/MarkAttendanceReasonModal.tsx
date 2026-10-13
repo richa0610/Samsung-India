@@ -68,12 +68,12 @@ export default function MarkAttendanceReasonModal({
 }
 
 const styles = StyleSheet.create({
-  sheet: { backgroundColor: "#1F2530", borderRadius: 12, padding: 18, width: "88%" },
+  sheet: { backgroundColor: Colors.black, borderRadius: 12, padding: 18, width: "88%" },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   title: { flex: 1, fontSize: 14, fontWeight: "800", color: Colors.gray100, lineHeight: 19 },
   label: { fontSize: 12, color: Colors.gray300, marginTop: 18, marginBottom: 8 },
   input: {
-    backgroundColor: "#343B47",
+    backgroundColor: Colors.gray700,
     borderRadius: 8,
     minHeight: 44,
     paddingHorizontal: 12,

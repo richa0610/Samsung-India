@@ -82,7 +82,7 @@ export default function SessionCard({
         <View style={styles.locationRow}>
           <Ionicons name="location" size={13} color={Colors.red} />
           <AppText style={styles.locationText} numberOfLines={1}>
-            {item.trainingHub || item.state || "New Delhi"}
+            {item.trainingHub || item.state || "--"}
           </AppText>
         </View>
       </View>

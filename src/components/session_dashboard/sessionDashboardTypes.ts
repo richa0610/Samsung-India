@@ -1,3 +1,5 @@
+import type { ParticipantModuleProgress } from "@/api/training";
+
 export type TopPerformer = {
   id: string;
   name: string;
@@ -33,18 +35,30 @@ export type ProctoringStatus = {
   // Already-formatted strike / unlock lines from the backend
   // (`attendance.theftRemarks`), newest first.
   logs: string[];
+  /** Times a trainer already unlocked them in this training, and the most allowed - once equal,
+   *  the server refuses another unlock. */
+  unlocksUsed: number;
+  maxUnlocks: number;
 };
 
-export type ParticipantStatus = "PRESENT" | "ABSENT" | "PENDING";
+export type ParticipantStatus = "PRESENT" | "ABSENT" | "NOT_MARKED";
 
 export type ParticipantItem = {
   id: string;
   name: string;
   employeeId: string;
   phone: string;
-  attendeeType: "ASSIGNED" | "NOT ALLOCATED";
+  /** How they reached the session - shown as ASN / UASN / FRESH under the phone number. */
+  attendeeType: "ASSIGNED" | "UNASSIGNED" | "FRESH";
   status: ParticipantStatus;
+  /** "Attendance" once marked Present, else "Not Started". */
+  stage: string;
+  stageModules: ParticipantModuleProgress[];
   inTime: string;
   outTime: string;
+  /** Latest Post Test score ("95%"), or null before they've submitted one. */
+  score: string | null;
+  /** Green when it passes, red when it doesn't; null without a score. */
+  scorePassed: boolean | null;
   proctoring?: ProctoringStatus;
 };

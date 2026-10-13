@@ -31,6 +31,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   securityTextColumn: { flex: 1, gap: 1 },
-  securityTitle: { fontSize: 12, color: "#1E293B" },
-  securitySubtitle: { fontSize: 10.5, color: "#64748B" },
+  securityTitle: { fontSize: 12, color: Colors.black },
+  securitySubtitle: { fontSize: 10.5, color: Colors.gray500 },
 });

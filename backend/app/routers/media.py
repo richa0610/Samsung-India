@@ -33,7 +33,8 @@ def get_media_file(
     resolved = _locate(file_path, account.tenant_id)
     if resolved is None:
         raise not_found
-    return FileResponse(resolved)
+    # Served as the type its extension names, never sniffed into something else (e.g. HTML).
+    return FileResponse(resolved, headers={"X-Content-Type-Options": "nosniff"})
 
 
 def _locate(file_path: str, tenant_id: str) -> Optional[Path]:

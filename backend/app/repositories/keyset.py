@@ -63,7 +63,7 @@ class Page:
     rows: list
     next_cursor: Optional[str]
     total: Optional[int]
-    page: Optional[int]  # the page number served; None for a cursor continuation
+    page_number: Optional[int]  # the page served; None for a cursor continuation
     page_size: int
 
     @property
@@ -79,7 +79,7 @@ class Page:
         return {
             "nextCursor": self.next_cursor,
             "total": self.total,
-            "page": self.page,
+            "page": self.page_number,
             "pageSize": self.page_size,
             "totalPages": self.total_pages,
         }
@@ -141,35 +141,60 @@ def paginate(
     - in the SAME statement. The count runs on the narrow `stmt` as well. For lists whose display
     joins can't change which rows match (e.g. a LEFT JOIN on a unique key)."""
     limit = max(1, min(limit, MAX_PAGE_SIZE))
-    total = None
-    if cursor is None:
-        counted = stmt.with_only_columns(order.id_column, maintain_column_froms=True).order_by(None)
-        total = _count(db, select(func.count()).select_from(counted.subquery()))
-
+    total = _total(db, stmt, order) if cursor is None else None   # a continuation's caller already has it
     if cursor:
-        if order.keyset_expression is None:
-            raise ValueError("this sort supports page numbers only")
-        value, last_id = decode_cursor(order.key, cursor, order.datetime_value)
-        after = tuple_(order.keyset_expression, order.id_column)
-        stmt = stmt.where(after < tuple_(value, last_id) if order.descending else after > tuple_(value, last_id))
-
-    stmt = stmt.order_by(*order.clauses)
+        stmt = _after_cursor(stmt, order, cursor)
     page_number = None if cursor else (page or 1)
+    rows = _fetch(db, _ordered_page(stmt, order, page_number, limit), order, limit, entities, enrich)
+    rows, next_cursor = _trim(rows, order, limit)
+    return Page(rows, next_cursor, total, page_number, limit)
+
+
+def _total(db: Session, stmt: Select, order: SortOrder) -> int:
+    """The list's size: the same query counted by id, without its ORDER BY."""
+    counted = stmt.with_only_columns(order.id_column, maintain_column_froms=True).order_by(None)
+    return _count(db, select(func.count()).select_from(counted.subquery()))
+
+
+def _after_cursor(stmt: Select, order: SortOrder, cursor: str) -> Select:
+    """Only the rows after the one `cursor` names (keyset). Refused for a multi-key order, and -
+    in decode_cursor - for a cursor issued for another sort."""
+    if order.keyset_expression is None:
+        raise ValueError("this sort supports page numbers only")
+    value, last_id = decode_cursor(order.key, cursor, order.datetime_value)
+    after, boundary = tuple_(order.keyset_expression, order.id_column), tuple_(value, last_id)
+    return stmt.where(after < boundary if order.descending else after > boundary)
+
+
+def _ordered_page(stmt: Select, order: SortOrder, page_number: Optional[int], limit: int) -> Select:
+    """Sorted (ending with the id tie-breaker) and, for a numbered page past the first, offset to it."""
+    stmt = stmt.order_by(*order.clauses)
     if page_number and page_number > 1:
         stmt = stmt.offset((page_number - 1) * limit)
-    if enrich is not None:
-        if order.keyset_expression is None:
-            raise ValueError("a deferred join needs a single-expression order")
-        page_rows = stmt.limit(limit + 1).subquery("page_rows")
-        direction = desc if order.descending else asc
-        result = db.execute(enrich(page_rows).order_by(direction(page_rows.c.sort_value), direction(page_rows.c.id)))
-    else:
-        result = db.scalars(stmt.limit(limit + 1)) if entities else db.execute(stmt.limit(limit + 1))
-    rows = list(result.all())
+    return stmt
 
-    next_cursor = None
-    if len(rows) > limit:
-        rows = rows[:limit]
-        if order.cursor_value is not None:
-            next_cursor = encode_cursor(order.key, order.cursor_value(rows[-1]), rows[-1].id)
-    return Page(rows, next_cursor, total, page_number, limit)
+
+def _fetch(
+    db: Session, stmt: Select, order: SortOrder, limit: int, entities: bool, enrich: Optional[Callable[[Any], Select]]
+) -> list:
+    """The page plus one extra row (whether more follow). With `enrich`, the narrow page is joined to
+    its display columns in the same statement (see paginate)."""
+    if enrich is None:
+        result = db.scalars(stmt.limit(limit + 1)) if entities else db.execute(stmt.limit(limit + 1))
+        return list(result.all())
+    if order.keyset_expression is None:
+        raise ValueError("a deferred join needs a single-expression order")
+    page_rows = stmt.limit(limit + 1).subquery("page_rows")
+    direction = desc if order.descending else asc
+    return list(db.execute(enrich(page_rows).order_by(direction(page_rows.c.sort_value), direction(page_rows.c.id))).all())
+
+
+def _trim(rows: list, order: SortOrder, limit: int) -> tuple[list, Optional[str]]:
+    """Drops the extra row; when there was one, the cursor that continues after the last row kept
+    (none for a multi-key order, which pages by number only)."""
+    if len(rows) <= limit:
+        return rows, None
+    rows = rows[:limit]
+    if order.cursor_value is None:
+        return rows, None
+    return rows, encode_cursor(order.key, order.cursor_value(rows[-1]), rows[-1].id)

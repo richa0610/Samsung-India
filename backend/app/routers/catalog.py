@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.dependencies.auth import get_current_admin
 from app.dependencies.database import get_db
 from app.models.admin import Admin
-from app.schemas.catalog import SelectOptionOut
+from app.schemas.catalog import MasterGroupOut, SelectOptionOut
 from app.services import catalog_service
 
 router = APIRouter(prefix="/admin", tags=["catalog"])
@@ -19,6 +19,22 @@ def list_venues(
     _admin: Admin = Depends(get_current_admin),
 ):
     return catalog_service.list_venues(db, district)
+
+
+@router.get("/zones", response_model=list[MasterGroupOut])
+def list_zones(
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(get_current_admin),
+):
+    return catalog_service.list_zones(db)
+
+
+@router.get("/states", response_model=list[MasterGroupOut])
+def list_states(
+    db: Session = Depends(get_db),
+    _admin: Admin = Depends(get_current_admin),
+):
+    return catalog_service.list_states(db)
 
 
 @router.get("/checklist-items", response_model=list[SelectOptionOut])

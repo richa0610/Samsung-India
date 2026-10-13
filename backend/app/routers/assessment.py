@@ -14,11 +14,11 @@ router = APIRouter(prefix="/assessments", tags=["assessments"])
 @router.get("/{suite_uid}/questions", response_model=AssessmentQuestionsOut)
 def get_questions(
     suite_uid: str,
-    conferenceUid: IdStr = Query(...),
+    conference_uid: IdStr = Query(..., alias="conferenceUid"),
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return assessment_service.get_questions(db, trainee, suite_uid, conferenceUid)
+    return assessment_service.get_questions(db, trainee, suite_uid, conference_uid)
 
 
 @router.post("/{suite_uid}/submit", response_model=SubmitResult)

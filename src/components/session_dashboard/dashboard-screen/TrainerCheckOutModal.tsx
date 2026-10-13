@@ -42,7 +42,8 @@ export default function TrainerCheckOutModal({ visible, submitting, onClose, onC
 
   const pickSheet = async () => {
     const result = await DocumentPicker.getDocumentAsync({
-      type: ["application/pdf", "image/*"],
+      // The server accepts only JPG or PDF documents.
+      type: ["application/pdf", "image/jpeg"],
       copyToCacheDirectory: true,
       multiple: false,
       base64: false,

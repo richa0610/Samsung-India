@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from fastapi import BackgroundTasks
@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.exceptions import bad_request, not_found
 from app.core.security import hash_password
+from app.dependencies.paging import PageRequest
 from app.models.admin import Admin
 from app.models.trainee import Trainee
 from app.repositories import dashboard_repository, trainee_repository
@@ -14,13 +15,20 @@ from app.schemas.trainee_admin import TraineeAdminIn, TraineeAdminOut, TraineePa
 from app.services import placement_rules, trainee_service
 from app.services.access_service import resolve_scope
 from app.services.activity_log_service import log_activity
+from app.utils.date_utils import utc_naive_to_ist
 from app.utils.status import title_status
+
+
+def _ist_stamp(stored_utc: Optional[datetime]) -> Optional[str]:
+    """A stored (UTC) timestamp as IST wall-clock text - the days the list's date range filters by."""
+    ist = utc_naive_to_ist(stored_utc)
+    return ist.strftime("%Y-%m-%d %H:%M:%S") if ist else None
 
 
 def _trainee_to_admin_out(t: Trainee) -> TraineeAdminOut:
     return TraineeAdminOut(
         traineeUid=t.traineeUid,
-        registeredAt=t.timestamp.strftime("%Y-%m-%d %H:%M:%S") if t.timestamp else "",
+        registeredAt=_ist_stamp(t.timestamp) or "",
         approvalStatus=title_status(t.status),
         profilePhoto=t.profilePhoto,
         agencyId=t.agencyId,
@@ -52,7 +60,7 @@ def _trainee_to_admin_out(t: Trainee) -> TraineeAdminOut:
         username=t.username,
         updatedBy=t.updatedBy,
         updationOn=t.updationOn.strftime("%Y-%m-%d %H:%M:%S") if t.updationOn else None,
-        timestamp=t.timestamp.strftime("%Y-%m-%d %H:%M:%S") if t.timestamp else None,
+        timestamp=_ist_stamp(t.timestamp),
     )
 
 
@@ -152,6 +160,7 @@ async def upload_trainee_photo(
         username=admin.username,
         role=admin.role,
         remarks=f"Uploaded the profile photo of trainee {trainee.traineeUid}",
+        file_path=trainee.profilePhoto,
     )
     return _trainee_to_admin_out(trainee)
 
@@ -163,9 +172,7 @@ def list_trainees_page(
     search: Optional[str],
     sort: str,
     descending: bool,
-    cursor: Optional[str],
-    limit: int,
-    page: Optional[int] = None,
+    paging: PageRequest,
     common_db: Optional[Session] = None,
     tenant_id: Optional[str] = None,
     registered_from: Optional[date] = None,
@@ -178,7 +185,9 @@ def list_trainees_page(
         resolve_scope(common_db, admin, tenant_id), listing=True
     ) + trainee_repository.registered_between(registered_from, registered_to)
     try:
-        result = trainee_repository.list_page(db, conditions, mode, search, sort, descending, cursor, limit, page)
+        result = trainee_repository.list_page(
+            db, conditions, mode, search, sort, descending, paging.cursor, paging.limit, paging.page
+        )
     except (ValueError, KeyError, TypeError):
         raise bad_request("Invalid page cursor")
     return TraineePageResponse(items=[_trainee_to_admin_out(t) for t in result.rows], **result.meta())

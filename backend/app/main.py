@@ -9,16 +9,17 @@ from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 
 from app.core.config import settings
+from app.core.body_limit import BodySizeLimit
+from app.core.request_context import RequestContextMiddleware
 from app.core.tenant_limit import TenantConcurrencyLimit
 from app.core.log_redaction import install_token_redaction
-from app.core.media import MEDIA_ROOT
+from app.core.media import MAX_REQUEST_BYTES, MEDIA_ROOT
 from app.database.common import common_engine
 from app.database.connection import CommonBase, TenantBase
 from app.database.schema_sync import sync_missing_columns, sync_missing_indexes
 from app.database.tenant import tenant_manager
 
 # Import all models
-from app.models import *
 from app.routers.admin import router as admin_router
 from app.routers.assessment import router as assessment_router
 from app.routers.attendance import router as attendance_router
@@ -171,6 +172,8 @@ class _ApiGZipMiddleware(GZipMiddleware):
         await super().__call__(scope, receive, send)
 
 
+# Innermost: records the request (path, caller IP, user agent, token) the activity log describes.
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(_ApiGZipMiddleware, minimum_size=1024)
 # A tenant over its cap waits here, before routing takes a worker thread.
 app.add_middleware(
@@ -178,6 +181,8 @@ app.add_middleware(
     limit=settings.TENANT_MAX_CONCURRENT_REQUESTS,
     wait_seconds=settings.TENANT_QUEUE_WAIT_SECONDS,
 )
+# An oversized body is refused before it takes a tenant slot or is written to a temp file.
+app.add_middleware(BodySizeLimit, max_bytes=MAX_REQUEST_BYTES)
 # Middleware runs in the REVERSE order of add_middleware(): the last one added is the outermost.
 # CORS is added last so it is outermost: a browser's preflight (OPTIONS) is answered here without
 # touching the tenant limit, and every response - the tenant limit's 503 "busy" and gzipped ones

@@ -1,7 +1,45 @@
-import type { NewTraineeRecord } from "@/data/mockData";
 import type { PickedImage } from "./auth";
 import { apiRequest, apiUpload } from "./client";
 import type { PageMeta } from "./training";
+
+/** A trainee as the admin / trainer side sees them (GET/POST /admin/trainees - TraineeAdminOut). */
+export type NewTraineeRecord = {
+  traineeUid: string;
+  registeredAt: string;
+  approvalStatus: "Approved" | "Pending" | "Rejected";
+  profilePhoto: string | null;
+  agencyId: string | null;
+  fullName: string;
+  designation: string;
+  gender: string;
+  dob: string | null;
+  primaryEmail: string;
+  primaryPhone: string;
+  altEmail: string | null;
+  altPhone: string | null;
+  address: string | null;
+  state: string | null;
+  district: string | null;
+  zone: string;
+  region: string;
+  company: string;
+  requestedBy: string;
+  trainerId: string;
+  trainerName: string;
+  supervisorId: string;
+  supervisorName: string;
+  supervisorDesignation: string | null;
+  joinedOn: string;
+  jobStatus: string;
+  jobCity: string | null;
+  jobPincode: string | null;
+  resignedOn: string | null;
+  username: string;
+  password: string;
+  updatedBy: string | null;
+  updationOn: string | null;
+  timestamp: string | null;
+};
 
 export type NewTraineeInput = Omit<NewTraineeRecord, "registeredAt" | "approvalStatus" | "updatedBy" | "updationOn" | "timestamp">;
 export type TraineeListItem = NewTraineeRecord;

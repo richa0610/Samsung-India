@@ -95,6 +95,7 @@ export async function requestNativeLocationPermission(): Promise<LocationPermiss
  * Safely retrieves current device GPS coordinates within a strict time limit (default: 1000ms).
  * Checks the device's last-known position first for near-instant (<50ms) resolution, and
  * bounds any fresh hardware fix request to 1 second to avoid long freezes.
+ * Throws when no real position is available at all (never a made-up one).
  */
 export async function getCurrentCoordinates(timeoutMs: number = 1000): Promise<LocationCoordinates> {
   try {
@@ -138,12 +139,9 @@ export async function getCurrentCoordinates(timeoutMs: number = 1000): Promise<L
       // Ignore
     }
 
-    // Fallback coordinates for testing/emulator environment if GPS fails or times out
-    return {
-      latitude: 28.4595,
-      longitude: 77.0266,
-      accuracy: null,
-    };
+    // No real position at all: say so. Callers treat it as "location unavailable" - a made-up
+    // position would pass or fail a geofence check falsely and be recorded as where someone was.
+    throw new Error("LOCATION_UNAVAILABLE");
   }
 }
 

@@ -97,18 +97,20 @@ def create_assessment_suite(db: Session, payload: AssessmentSuiteCreate) -> Asse
     return _suite_to_detail(db, suite)
 
 
-def get_assessment_suite(db: Session, suite_uid: str) -> AssessmentSuiteDetail:
+def _existing_suite(db: Session, suite_uid: str) -> AssessmentSuite:
+    """The question set, or 404 when there is none with this ID."""
     suite = assessment_repository.get_suite_by_uid(db, suite_uid)
     if not suite:
         raise not_found("Assessment suite not found")
-    return _suite_to_detail(db, suite)
+    return suite
+
+
+def get_assessment_suite(db: Session, suite_uid: str) -> AssessmentSuiteDetail:
+    return _suite_to_detail(db, _existing_suite(db, suite_uid))
 
 
 def add_question(db: Session, suite_uid: str, payload: QuestionCreate) -> AssessmentSuiteDetail:
-    suite = assessment_repository.get_suite_by_uid(db, suite_uid)
-    if not suite:
-        raise not_found("Assessment suite not found")
-
+    suite = _existing_suite(db, suite_uid)
     next_order = assessment_repository.count_questions_for_suite(db, suite_uid) + 1
 
     assessment_repository.add_question(
@@ -131,10 +133,7 @@ def add_question(db: Session, suite_uid: str, payload: QuestionCreate) -> Assess
 
 
 def delete_question(db: Session, suite_uid: str, question_id: int) -> AssessmentSuiteDetail:
-    suite = assessment_repository.get_suite_by_uid(db, suite_uid)
-    if not suite:
-        raise not_found("Assessment suite not found")
-
+    suite = _existing_suite(db, suite_uid)
     assessment_repository.delete_question(db, question_id, suite_uid)
     suite.noOfQuestion = assessment_repository.count_questions_for_suite(db, suite_uid)
     assessment_repository.save_suite(db)

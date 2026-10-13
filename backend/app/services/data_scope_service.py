@@ -6,6 +6,7 @@ from app.dependencies.filters import ConferenceFilters
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.models.data_scope import DataScope
+from app.utils.zones import zone_key
 
 
 def apply_identity_scope(
@@ -22,13 +23,13 @@ def apply_identity_scope(
     can't silently lock anyone out."""
     table_type = "admin" if isinstance(principal, Admin) else "agencyteam"
     allowed_zones = [
-        row.scope_value.strip().lower()
+        zone_key(row.scope_value)
         for row in db.query(DataScope).filter(
             DataScope.table_type == table_type,
             DataScope.user_id == principal.id,
             DataScope.scope_type == "zone",
         )
-        if row.scope_value and row.scope_value.strip()
+        if zone_key(row.scope_value)
     ]
 
     zones = filters.zones

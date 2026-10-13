@@ -15,6 +15,7 @@ from app.models.conference import Conference
 from app.models.conference_activity_log import ConferenceActivityLog
 from app.repositories import activity_log_repository, attendance_repository, conference_repository
 from app.utils.date_utils import ist_now, parse_module_start, time_to_minutes, utc_now
+from app.utils.helpers import distance_meters, geofence_enabled
 
 # sessionConfig key + planned-start-time field for each module, used to order
 # the flow by time.
@@ -45,6 +46,8 @@ __all__ = [
     "log_module_action",
     "auto_advance_if_due",
     "live_quiz_suite_uid",
+    "module_suite_uid",
+    "scored_suite_uids",
     "mark_checkout_if_last_module",
 ]
 
@@ -59,6 +62,26 @@ def live_quiz_suite_uid(conference: Conference) -> str | None:
         return json.loads(conference.sessionConfig).get("liveQuiz", {}).get("assessmentSuiteUid")
     except (ValueError, AttributeError):
         return None
+
+
+def module_suite_uid(conference: Conference, module_key: str) -> str | None:
+    """The question set a trainee answers in this module: the Standard Test, Live Quiz or Survey
+    suite. None for ATTENDANCE, or a module whose suite isn't set."""
+    if module_key == "STANDARD_TEST":
+        return conference.postAssessmentUid
+    if module_key == "LIVE_QUIZ":
+        return live_quiz_suite_uid(conference)
+    if module_key == "SURVEY":
+        return conference.surveyUid
+    return None
+
+
+def scored_suite_uids(conference: Conference) -> set[str]:
+    """The question sets whose results count as marks: the Standard Test and the Live Quiz. A
+    Survey has no right answers, so its result only records that it was submitted - it never
+    counts toward a score, pass / fail, average or rank (dashboard_repository.scored_suite_condition
+    is the same rule in SQL)."""
+    return {suite for suite in (conference.postAssessmentUid, live_quiz_suite_uid(conference)) if suite}
 
 
 def _module_start_minutes(module_key: str, config: dict, conference: Conference) -> int | None:
@@ -126,7 +149,18 @@ def module_planned_minutes(conference: Conference) -> dict[str, int]:
     return planned
 
 
-def log_module_action(db: Session, conference_uid: str, module_id: str, action: str, performed_by: str) -> None:
+def log_module_action(
+    db: Session,
+    conference_uid: str,
+    module_id: str | None,
+    action: str,
+    performed_by: str,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    location_remark: str | None = None,
+) -> None:
+    """One Execution Flow event, with where the trainer was when they triggered it (none for a
+    module the server auto-started)."""
     activity_log_repository.add(
         db,
         ConferenceActivityLog(
@@ -134,8 +168,53 @@ def log_module_action(db: Session, conference_uid: str, module_id: str, action: 
             moduleId=module_id,
             action=action,
             performedBy=performed_by,
+            trainerLat=latitude,
+            trainerLng=longitude,
+            locationRemark=location_remark,
         ),
     )
+
+
+def trainer_position(conference: Conference, latitude: float | None, longitude: float | None) -> dict:
+    """log_module_action's location arguments for a trainer action: the trainer's coordinates and a
+    remark on how far they were from this session's venue."""
+    return {
+        "latitude": latitude,
+        "longitude": longitude,
+        "location_remark": _distance_remark(conference, latitude, longitude),
+    }
+
+
+def venue_override_remark(
+    original: tuple[float | None, float | None], conference: Conference, latitude: float | None, longitude: float | None
+) -> str:
+    """The location remark when the trainer moves this session's venue location (the "you're not at
+    the venue" prompt at session start): from where, to where, and how far they were from the old one."""
+    def point(lat, lng) -> str:
+        return f"{float(lat):.6f}, {float(lng):.6f}" if lat is not None and lng is not None else "not set"
+
+    remark = (
+        f"Venue location overridden by the trainer: from {point(*original)} "
+        f"to {point(conference.geoLatitude, conference.geoLongitude)}"
+    )
+    # The stored coordinates are Decimals (Numeric columns) - as floats to measure against.
+    away = distance_meters(latitude, longitude, float(original[0]), float(original[1])) if None not in original else None
+    if away is not None:
+        remark += f" - the trainer was {away:.0f} m from the original venue (allowed {conference.geoRadius or 100} m)"
+    return remark
+
+
+def _distance_remark(conference: Conference, latitude: float | None, longitude: float | None) -> str:
+    if latitude is None or longitude is None:
+        return "Trainer location not shared"
+    if conference.geoLatitude is None or conference.geoLongitude is None:
+        return "No venue location set for this session"
+    away = distance_meters(latitude, longitude, float(conference.geoLatitude), float(conference.geoLongitude))
+    if not geofence_enabled(conference):
+        return f"{away:.0f} m from the venue (no geofence)"
+    radius = conference.geoRadius or 100
+    where = "At the venue" if away <= radius else "Outside the venue"
+    return f"{where} - {away:.0f} m from it (allowed {radius} m)"
 
 
 def auto_advance_if_due(db: Session, conference: Conference) -> bool:

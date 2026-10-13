@@ -43,9 +43,9 @@ export default function TimelineItem({
   const activityData: SessionActivityData = {
     id: session.key,
     key: session.key,
-    startTime: session.time || "09:00",
-    endTime: session.endTime || "10:00",
-    duration: session.duration || "1h",
+    startTime: session.time || "--",
+    endTime: session.endTime || "--",
+    duration: session.duration || "--",
     type: session.type,
     title: "",
     isLive: session.isLive,

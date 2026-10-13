@@ -57,9 +57,9 @@ def _probe(env_overrides, module="app.main"):
 class TestSuiteSafetyTests(unittest.TestCase):
     def test_settings_point_only_at_an_unusable_local_database(self):
         self.assertTrue(settings.TESTING)
-        for host in (settings.DB_HOST, settings.common_db_host):
+        for host in (settings.DB_HOST, settings.resolved_common_db_host):
             self.assertEqual(host, "127.0.0.1")
-        for port in (settings.DB_PORT, settings.common_db_port):
+        for port in (settings.DB_PORT, settings.resolved_common_db_port):
             self.assertEqual(port, 1)
         self.assertEqual(settings.DB_SSL_CA, "")
 

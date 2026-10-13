@@ -85,7 +85,7 @@ export default function QrScannerView() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#000000" },
+  container: { flex: 1, backgroundColor: Colors.black },
   overlay: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   closeBtn: { position: "absolute", top: 12, left: 12, padding: 8 },
   // UPI-style: a plain icon button right under the scan frame.

@@ -19,7 +19,13 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    # bcrypt 5 raises - rather than returning False - for a stored value that isn't a bcrypt hash
+    # (another system also writes these tables) and for a password over its 72-byte limit; either
+    # way the password doesn't match, so a login answers 401 instead of failing with a 500.
+    try:
+        return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    except ValueError:
+        return False
 
 
 def create_access_token(
@@ -28,11 +34,12 @@ def create_access_token(
     role: Optional[str] = None,
     version: int = 0,
 ) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-    )
+    issued = datetime.now(timezone.utc)
+    expire = issued + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "sub": subject,
+        # When this login session began - the activity log's loginTime for every action in it.
+        "iat": issued,
         "exp": expire,
         "tenant_id": tenant_id or settings.DEFAULT_TENANT_ID,
         # The account's tokenVersion when issued - see is_token_current.

@@ -32,7 +32,7 @@ class Venue(Base):
     # NOTE: the physical `venue.geoLocationLocked` column still exists on the
     # real table (added briefly, now unused) - a trainer's "not at the venue"
     # correction is scoped to Conference.venueLocationOverridden instead (see
-    # training_service._resolve_start_geofence), so it never touches this
+    # training.session_start._resolve_start_geofence), so it never touches this
     # shared row. Left unmapped here rather than dropped; harmless as-is.
     state = Column(String(100))
     pincode = Column(String(100))

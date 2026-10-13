@@ -49,7 +49,7 @@ export default function TrainerProfileScreen() {
     <SafeAreaView style={styles.container} edges={["top"]}>
       <ScrollView contentContainerStyle={styles.content}>
         <ProfileHeaderCard
-          name={admin?.name ?? "Demo Trainer"}
+          name={admin?.name ?? "Trainer"}
           onLogout={requestLogout}
           photoUrl={form.profile?.profilePicture}
           uploading={form.uploadingPhoto}

@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
     height: 20,
     borderRadius: 5,
     borderWidth: 1.5,
-    borderColor: "#CBD5E1",
+    borderColor: Colors.gray300,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Colors.white,
@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
   optionText: {
     fontSize: FontSize.label,
     lineHeight: LineHeight.label,
-    color: "#000000",
+    color: Colors.black,
     flex: 1,
   },
 });

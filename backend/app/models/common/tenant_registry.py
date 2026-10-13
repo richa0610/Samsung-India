@@ -30,6 +30,9 @@ class Tenant(CommonBase):
     # (e.g. multiple faces in frame) before the session is considered failed.
     live_proctoring_enabled = Column(Integer, nullable=False, server_default=text("0"))  # 0 = off, 1 = on
     proctoring_max_warnings = Column(Integer, nullable=False, server_default=text("3"))
+    # Trainee security check-in: 1 = the face check runs before the photo (place face, look
+    # straight, move head; one face in the photo), 0 = the photo is just captured. Super Admin only.
+    checkin_face_detection_enabled = Column(Integer, nullable=False, server_default=text("1"))
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(

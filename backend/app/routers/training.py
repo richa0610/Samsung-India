@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_admin, require_admin_role
@@ -27,6 +27,7 @@ from app.schemas.training import (
     SessionReportOut,
     TopPerformer,
     TrainerSummaryOut,
+    TrainerLocation,
     TrainingAdminUpdate,
     TrainingCreate,
     TrainingDetailOut,
@@ -35,14 +36,20 @@ from app.schemas.training import (
     TrainingPageResponse,
     TrainingStatusActionRequest,
 )
-from app.services import (
-    assessment_builder_service,
-    live_quiz_service,
-    trainee_admin_service,
-    training_service,
+from app.services import assessment_builder_service, live_quiz_service, trainee_admin_service
+from app.services.training import (
+    attendance_actions,
+    listing,
+    management,
+    session_control,
+    session_dashboard,
+    session_start,
 )
 
 router = APIRouter(prefix="/admin", tags=["training"])
+
+# A calendar date query parameter: YYYY-MM-DD.
+_ISO_DATE = r"^\d{4}-\d{2}-\d{2}$"
 
 
 @router.get("/assessment-suites", response_model=list[AssessmentSuiteOut])
@@ -101,20 +108,20 @@ def create_training(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.create_training(db, payload, background_tasks, admin, tenant_id, common_db=common_db)
+    return management.create_training(db, payload, background_tasks, admin, tenant_id, common_db=common_db)
 
 
 @router.get("/trainings/summary", response_model=TrainerSummaryOut)
 def get_trainer_summary(
-    start: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
-    end: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    start: Optional[str] = Query(None, pattern=_ISO_DATE),
+    end: Optional[str] = Query(None, pattern=_ISO_DATE),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
     """The trainer Home dashboard (counts for today, or for start..end, plus recent sessions)."""
-    return training_service.trainer_summary(db, admin, start, end, common_db=common_db, tenant_id=tenant_id)
+    return listing.trainer_summary(db, admin, start, end, common_db=common_db, tenant_id=tenant_id)
 
 
 # Declared before the "/trainings/{conference_uid}" routes below so "page" is
@@ -131,7 +138,7 @@ def list_trainings_page(
     dir: Literal["asc", "desc"] = "desc",
     # The trainer Sessions screen: its Today tab (the device's date), Completed tab and location
     # filter; sort="session" is its grouped order (page numbers only).
-    on_date: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    on_date: Optional[str] = Query(None, pattern=_ISO_DATE),
     status: Optional[str] = Query(None, max_length=50),
     location: Optional[str] = Query(None, max_length=200),
     paging: PageRequest = Depends(page_request(50)),
@@ -144,8 +151,8 @@ def list_trainings_page(
     # Authorization comes from the caller's verified scope (resolved inside list_trainings_page):
     # an admin's admin_access grant, or an active trainer's own assignments. `filters` here is
     # only ever a further narrowing, never the authorization boundary.
-    return training_service.list_trainings_page(
-        db, admin, filters, approval, q, sort, dir == "desc", paging.cursor, paging.limit, paging.page,
+    return listing.list_trainings_page(
+        db, admin, filters, approval, q, sort, dir == "desc", paging,
         common_db=common_db, tenant_id=tenant_id, on_date=on_date, status=status, location=location,
     )
 
@@ -158,7 +165,7 @@ def get_training_facets(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.training_facets(db, admin, filters, common_db=common_db, tenant_id=tenant_id)
+    return listing.training_facets(db, admin, filters, common_db=common_db, tenant_id=tenant_id)
 
 
 @router.post("/trainings/{conference_uid}/approve", response_model=TrainingOut)
@@ -172,7 +179,7 @@ def approve_training(
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
     reason = payload.reason if payload else None
-    return training_service.approve_training(
+    return management.approve_training(
         db, admin, conference_uid, reason=reason, background_tasks=background_tasks,
         common_db=common_db, tenant_id=tenant_id,
     )
@@ -189,7 +196,7 @@ def reject_training(
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
     reason = payload.reason if payload else None
-    return training_service.reject_training(
+    return management.reject_training(
         db, admin, conference_uid, reason=reason, background_tasks=background_tasks,
         common_db=common_db, tenant_id=tenant_id,
     )
@@ -203,7 +210,7 @@ def get_session_dashboard(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.get_session_dashboard(db, admin, conference_uid, common_db, tenant_id)
+    return session_dashboard.get_session_dashboard(db, admin, conference_uid, common_db, tenant_id)
 
 
 @router.get("/trainings/{conference_uid}/join-code", response_model=JoinCodeOut)
@@ -215,7 +222,7 @@ def get_join_code(
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
     """The signed code the trainer's QR code and share link carry."""
-    return training_service.get_join_code(db, admin, conference_uid, common_db, tenant_id)
+    return session_dashboard.get_join_code(db, admin, conference_uid, common_db, tenant_id)
 
 
 @router.get("/trainings/{conference_uid}/detail", response_model=TrainingDetailOut)
@@ -226,7 +233,7 @@ def get_training_detail(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.get_training_detail(db, admin, conference_uid, common_db, tenant_id)
+    return management.get_training_detail(db, admin, conference_uid, common_db, tenant_id)
 
 
 @router.patch("/trainings/{conference_uid}", response_model=TrainingOut)
@@ -239,7 +246,7 @@ def update_training(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.update_training(
+    return management.update_training(
         db, admin, conference_uid, payload, background_tasks, common_db=common_db, tenant_id=tenant_id
     )
 
@@ -252,7 +259,7 @@ def list_all_performers(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.list_all_performers(db, admin, conference_uid, common_db, tenant_id)
+    return session_dashboard.list_all_performers(db, admin, conference_uid, common_db, tenant_id)
 
 
 @router.get("/trainings/{conference_uid}/report", response_model=SessionReportOut)
@@ -263,7 +270,7 @@ def get_session_report(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.get_session_report(db, admin, conference_uid, common_db, tenant_id)
+    return session_dashboard.get_session_report(db, admin, conference_uid, common_db, tenant_id)
 
 
 @router.get("/trainings/{conference_uid}/schedule-check")
@@ -274,7 +281,7 @@ def check_training_schedule(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.check_schedule(db, admin, conference_uid, common_db, tenant_id)
+    return session_start.check_schedule(db, admin, conference_uid, common_db, tenant_id)
 
 
 @router.post("/trainings/{conference_uid}/start", response_model=TrainingOut)
@@ -282,17 +289,17 @@ async def start_training(
     conference_uid: str,
     background_tasks: BackgroundTasks,
     photo: UploadFile = File(...),
-    latitude: Optional[float] = Form(None),
-    longitude: Optional[float] = Form(None),
-    venueLatitude: Optional[float] = Form(None),
-    venueLongitude: Optional[float] = Form(None),
-    scheduleOverrideReason: Optional[str] = Form(None),
+    latitude: Optional[float] = Form(None, ge=-90, le=90),
+    longitude: Optional[float] = Form(None, ge=-180, le=180),
+    venue_latitude: Optional[float] = Form(None, ge=-90, le=90, alias="venueLatitude"),
+    venue_longitude: Optional[float] = Form(None, ge=-180, le=180, alias="venueLongitude"),
+    schedule_override_reason: Optional[str] = Form(None, alias="scheduleOverrideReason"),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return await training_service.start_training(
+    return await session_start.start_training(
         db,
         admin,
         conference_uid,
@@ -300,24 +307,33 @@ async def start_training(
         background_tasks,
         latitude=latitude,
         longitude=longitude,
-        venue_latitude=venueLatitude,
-        venue_longitude=venueLongitude,
-        schedule_override_reason=scheduleOverrideReason,
+        venue_latitude=venue_latitude,
+        venue_longitude=venue_longitude,
+        schedule_override_reason=schedule_override_reason,
         common_db=common_db,
         tenant_id=tenant_id,
     )
+
+
+def _coordinates(location: Optional[TrainerLocation]) -> dict:
+    """The trainer's position for a module action's activity-log row (none when the app sent none)."""
+    return {"latitude": location.latitude, "longitude": location.longitude} if location else {}
 
 
 @router.post("/trainings/{conference_uid}/advance-module", response_model=TrainingOut)
 def advance_module(
     conference_uid: str,
     background_tasks: BackgroundTasks,
+    location: Optional[TrainerLocation] = Body(None),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.advance_module(db, admin, conference_uid, background_tasks, common_db, tenant_id)
+    return session_control.advance_module(
+        db, admin, conference_uid, background_tasks, common_db, tenant_id,
+        **_coordinates(location),
+    )
 
 
 @router.post("/trainings/{conference_uid}/modules/{module_key}/start", response_model=TrainingOut)
@@ -325,13 +341,15 @@ def start_module(
     conference_uid: str,
     module_key: str,
     background_tasks: BackgroundTasks,
+    location: Optional[TrainerLocation] = Body(None),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.start_module(
-        db, admin, conference_uid, module_key, background_tasks, common_db, tenant_id
+    return session_control.start_module(
+        db, admin, conference_uid, module_key, background_tasks, common_db, tenant_id,
+        **_coordinates(location),
     )
 
 
@@ -340,13 +358,15 @@ def restart_module(
     conference_uid: str,
     module_key: str,
     background_tasks: BackgroundTasks,
+    location: Optional[TrainerLocation] = Body(None),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.restart_module(
-        db, admin, conference_uid, module_key, background_tasks, common_db, tenant_id
+    return session_control.restart_module(
+        db, admin, conference_uid, module_key, background_tasks, common_db, tenant_id,
+        **_coordinates(location),
     )
 
 
@@ -354,12 +374,16 @@ def restart_module(
 def stop_active_module(
     conference_uid: str,
     background_tasks: BackgroundTasks,
+    location: Optional[TrainerLocation] = Body(None),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.stop_active_module(db, admin, conference_uid, background_tasks, common_db, tenant_id)
+    return session_control.stop_active_module(
+        db, admin, conference_uid, background_tasks, common_db, tenant_id,
+        **_coordinates(location),
+    )
 
 
 @router.post("/trainings/{conference_uid}/live-quiz/broadcast", response_model=SessionDashboardOut)
@@ -433,15 +457,18 @@ async def end_training(
     conference_uid: str,
     background_tasks: BackgroundTasks,
     photo: UploadFile = File(...),
-    attendanceSheet: UploadFile = File(...),
-    totalPax: int = Form(...),
+    attendance_sheet: UploadFile = File(..., alias="attendanceSheet"),
+    total_pax: int = Form(..., alias="totalPax"),
+    latitude: Optional[float] = Form(None, ge=-90, le=90),
+    longitude: Optional[float] = Form(None, ge=-180, le=180),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return await training_service.end_training(
-        db, admin, conference_uid, background_tasks, photo, attendanceSheet, totalPax, common_db, tenant_id
+    return await session_control.end_training(
+        db, admin, conference_uid, background_tasks, photo, attendance_sheet, total_pax, common_db, tenant_id,
+        latitude=latitude, longitude=longitude,
     )
 
 
@@ -456,7 +483,7 @@ def mark_attendance(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.mark_attendance(
+    return attendance_actions.mark_attendance(
         db, admin, conference_uid, trainee_uid, payload, background_tasks, common_db, tenant_id
     )
 
@@ -475,7 +502,7 @@ def unlock_proctoring(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.unlock_proctoring(
+    return attendance_actions.unlock_proctoring(
         db, admin, conference_uid, trainee_uid, payload, background_tasks, common_db, tenant_id
     )
 
@@ -491,7 +518,7 @@ def reset_attendance(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.reset_attendance(
+    return attendance_actions.reset_attendance(
         db, admin, conference_uid, trainee_uid, payload, background_tasks, common_db, tenant_id
     )
 
@@ -513,9 +540,8 @@ def list_attendance_page(
     common_db: Session = Depends(get_common_db),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return training_service.list_attendance_page(
-        db, admin, filters, mode, q, sort, dir == "desc", paging.cursor, paging.limit, paging.page,
-        common_db=common_db, tenant_id=tenant_id,
+    return listing.list_attendance_page(
+        db, admin, filters, mode, q, sort, dir == "desc", paging, common_db=common_db, tenant_id=tenant_id,
     )
 
 
@@ -561,6 +587,6 @@ def list_trainees_page(
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
     return trainee_admin_service.list_trainees_page(
-        db, admin, mode, q, sort, dir == "desc", paging.cursor, paging.limit, paging.page,
+        db, admin, mode, q, sort, dir == "desc", paging,
         common_db=common_db, tenant_id=tenant_id, registered_from=start, registered_to=end,
     )

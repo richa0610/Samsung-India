@@ -54,7 +54,7 @@ export default function SuspiciousActivityModal({ participant, onClose }: Suspic
 
 const styles = StyleSheet.create({
   sheet: {
-    backgroundColor: "#0B0F19",
+    backgroundColor: Colors.black,
     borderRadius: 12,
     padding: 16,
     width: "88%",

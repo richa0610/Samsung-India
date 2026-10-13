@@ -146,7 +146,7 @@ def responders_by_question(db: Session, conference_uid: str, suite_uid: str) -> 
         .group_by(Assessment.questionId)
         .all()
     )
-    return {question_id: count for question_id, count in rows}
+    return dict(rows)
 
 
 # --- AssessmentResult ----------------------------------------------------------
@@ -201,6 +201,45 @@ def get_latest_result(
     )
 
 
+def get_started_result(
+    db: Session, conference_uid: str, trainee_uid: str, suite_uid: str
+) -> Optional[AssessmentResult]:
+    """The trainee's unfinished attempt at this test here: the row written (status "Started", with
+    startedAt) when they first opened its questions, which their submit then completes."""
+    return (
+        db.query(AssessmentResult)
+        .filter(
+            AssessmentResult.conferenceUid == conference_uid,
+            AssessmentResult.traineeUid == trainee_uid,
+            AssessmentResult.assessmentSuiteUid == suite_uid,
+            AssessmentResult.status == "Started",
+        )
+        .order_by(AssessmentResult.attemptNumber.desc())
+        .first()
+    )
+
+
+def submitted_trainees_by_suite(db: Session, conference_uid: str, suite_uids: list[str]) -> dict[str, set[str]]:
+    """{suite: trainees with a Submitted result for it in this training} - one query, however many
+    suites. A suite nobody submitted is left out."""
+    if not suite_uids:
+        return {}
+    rows = (
+        db.query(AssessmentResult.assessmentSuiteUid, AssessmentResult.traineeUid)
+        .filter(
+            AssessmentResult.conferenceUid == conference_uid,
+            AssessmentResult.assessmentSuiteUid.in_(suite_uids),
+            AssessmentResult.status == "Submitted",
+        )
+        .distinct()
+        .all()
+    )
+    submitted: dict[str, set[str]] = {}
+    for suite_uid, trainee_uid in rows:
+        submitted.setdefault(suite_uid, set()).add(trainee_uid)
+    return submitted
+
+
 def list_results_for_conference_suite(db: Session, conference_uid: str, suite_uid: str) -> list[AssessmentResult]:
     return (
         db.query(AssessmentResult)
@@ -226,9 +265,10 @@ def list_results_for_conferences(db: Session, conference_uids: list[str]) -> lis
 
 
 def list_results_for_trainee(db: Session, trainee_uid: str) -> list[AssessmentResult]:
+    """The trainee's finished results (a test opened but not yet submitted is "Started" - not a result)."""
     return (
         db.query(AssessmentResult)
-        .filter(AssessmentResult.traineeUid == trainee_uid)
+        .filter(AssessmentResult.traineeUid == trainee_uid, AssessmentResult.status == "Submitted")
         .order_by(AssessmentResult.submittedAt.desc())
         .all()
     )

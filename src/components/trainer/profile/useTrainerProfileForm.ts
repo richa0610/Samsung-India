@@ -171,13 +171,8 @@ export function useTrainerProfileForm() {
 
   const handlePickAadhar = async () => {
     const result = await DocumentPicker.getDocumentAsync({
-      type: [
-        "image/jpeg",
-        "image/png",
-        "application/pdf",
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      ],
+      // The server accepts only JPG or PDF documents.
+      type: ["image/jpeg", "application/pdf"],
       copyToCacheDirectory: true,
       multiple: false,
     });

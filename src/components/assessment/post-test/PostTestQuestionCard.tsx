@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
     borderColor: Colors.mainColour1,
     overflow: "hidden",
     backgroundColor: Colors.white,
-    ...createShadow({ x: 0, y: 4, blur: 12, opacity: 0.08, elevation: 4, color: "#000000" }),
+    ...createShadow({ x: 0, y: 4, blur: 12, opacity: 0.08, elevation: 4, color: Colors.black }),
   },
   questionBody: { padding: 14 },
   tags: {
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     color: Colors.brandBlue,
   },
   multiTagWrapper: {
-    backgroundColor: "#F1F3F5",
+    backgroundColor: Colors.gray100,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   question: {
     fontSize: 18,
     lineHeight: LineHeight.body,
-    color: "#000000",
+    color: Colors.black,
     marginVertical: 10,
   },
   inlineError: {

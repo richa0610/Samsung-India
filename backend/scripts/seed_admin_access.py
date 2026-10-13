@@ -32,7 +32,7 @@ def main() -> int:
     args = parser.parse_args()
 
     tenant_uid, assignments = load_assignments(args.plan)
-    common_engine = _engine(settings.common_db_host, settings.common_db_port, settings.common_db_user, settings.common_db_password, settings.common_db_name)
+    common_engine = _engine(settings.resolved_common_db_host, settings.resolved_common_db_port, settings.resolved_common_db_user, settings.resolved_common_db_password, settings.resolved_common_db_name)
     common = sessionmaker(bind=common_engine)()
     record = common.query(Tenant).filter(Tenant.tenant_uid == tenant_uid).first()
     if record is not None:

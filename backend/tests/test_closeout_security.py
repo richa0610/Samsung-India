@@ -73,13 +73,14 @@ class UploadsAreStoredPerTenant(MediaTestCase):
         beta.add(twin)
         beta.commit()
         self.assertEqual(twin.id, self.w.agency["trainer1"].id)  # same row id in each tenant database
-        for who, tenant, body in (("trainer1", ALPHA, b"%PDF alpha"), ("beta_agent", BETA, b"%PDF beta")):
+        for who, tenant, body in (("trainer1", ALPHA, b"%PDF-1.4 alpha"), ("beta_agent", BETA, b"%PDF-1.4 beta")):
             response = self.w.client.post("/admin/profile/aadhar", files={"file": ("a.pdf", body, "application/pdf")},
                                           headers=self.w.headers(who, tenant))
             self.assertEqual(response.status_code, 200, response.text)
         path = f"trainer_documents/aadhar/agency_{twin.id}.pdf"
         own = self.w.client.get(f"/media/{path}", headers=self.w.headers("trainer1"))
-        self.assertEqual(own.content, b"%PDF alpha")
+        self.assertEqual(own.content, b"%PDF-1.4 alpha")
+        self.assertEqual(own.headers["x-content-type-options"], "nosniff")   # never sniffed into another type
 
 
 class FilesFollowTheirOwnersRule(MediaTestCase):

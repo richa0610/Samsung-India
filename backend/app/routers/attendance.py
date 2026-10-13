@@ -1,4 +1,3 @@
-import json
 import uuid
 
 from fastapi import (
@@ -15,11 +14,11 @@ from fastapi import (
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.media import ALLOWED_IMAGE_CONTENT_TYPES, MAX_UPLOAD_BYTES, media_subdir
+from app.core.exceptions import bad_request
+from app.core.media import media_subdir
+from app.core.request_context import caller_device
 from app.dependencies.auth import get_current_trainee
-from app.dependencies.database import get_db, get_tenant_id_from_request
-from app.models.attendance import Attendance
-from app.models.attendance_log import AttendanceLog
+from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.models.trainee import Trainee
 from app.schemas.attendance import (
     AttendanceOut,
@@ -28,14 +27,9 @@ from app.schemas.attendance import (
     VerifyLocationRequest,
 )
 from app.routers.ws import manager as ws_manager
-from app.services import attendance_service
-from app.utils.date_utils import utc_now
-from app.utils.helpers import (
-    client_ip,
-    distance_meters,
-    geofence_enabled,
-    within_geofence,
-)
+from app.services import attendance_service, tenant_settings_service
+from app.utils.helpers import geofence_enabled
+from app.utils.validators import read_photo_upload
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
@@ -65,120 +59,19 @@ def check_in(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This session needs a location check-in. Please use secure check-in.",
         )
-    module_id = (
-        conference.activeModuleId
-        if (conference and conference.activeModuleId)
-        else "ATTENDANCE"
-    )
+    attendance = attendance_service.joined_attendance(db, conference, payload.conferenceUid, trainee)
 
-    existing = (
-        db.query(Attendance)
-        .filter(
-            Attendance.conferenceUid == payload.conferenceUid,
-            Attendance.traineeUid == trainee.traineeUid,
-        )
-        .first()
-    )
-    if not existing:
-        existing = Attendance(
-            conferenceUid=payload.conferenceUid,
-            trainerUid=conference.trainerEmployeeId if conference else None,
-            traineeUid=trainee.traineeUid,
-            phone=trainee.phone,
-            status="Joined",
-        )
-        audience = (
-            "ASSIGNED"
-            if conference and trainee.trainerEmployeeId == conference.trainerEmployeeId
-            else "UNASSIGNED"
-        )
-        existing.sessionMeta = json.dumps({"audience": audience})
-        db.add(existing)
-        db.flush()
-    if existing.status == "Absent":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You've been marked absent for this session.",
-        )
-    # Any trainee who has joined (Joined/Pending, assigned or not) can
-    # self-admit here - only a trainer's already-final Present/Absent
-    # decision blocks a self check-in, same rule as the trainee app's
-    # plain (non-secure) check-in on the other branch.
-
-    if existing.status != "Present":
-        now_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
-        existing.status = "Present"
-        existing.markedOn = now_str
-        existing.trainerUid = existing.trainerUid or (conference.trainerEmployeeId if conference else None)
-        db.query(AttendanceLog).filter(
-            AttendanceLog.conferenceUid == payload.conferenceUid,
-            AttendanceLog.traineeUid == trainee.traineeUid,
-            AttendanceLog.moduleId == module_id,
-        ).delete()
-        db.add(
-            AttendanceLog(
-                conferenceUid=payload.conferenceUid,
-                traineeUid=trainee.traineeUid,
-                moduleId=module_id,
-                markedAt=utc_now(),
-                status="Present",
-            )
-        )
+    if attendance.status != "Present":
+        attendance_service.mark_self_present(attendance, conference)
+        attendance_service.record_check_in_log(db, conference, payload.conferenceUid, trainee.traineeUid)
         db.commit()
-        db.refresh(existing)
+        db.refresh(attendance)
         _nudge_dashboard(background_tasks, get_tenant_id_from_request(request), payload.conferenceUid)
-        return AttendanceOut(status=existing.status, markedOn=existing.markedOn)
-
-    if not settings.ALLOW_ATTENDANCE_RETEST:
-        return AttendanceOut(status=existing.status, markedOn=existing.markedOn)
-    db.delete(existing)
-
-    existing_logs = (
-        db.query(AttendanceLog)
-        .filter(
-            AttendanceLog.conferenceUid == payload.conferenceUid,
-            AttendanceLog.traineeUid == trainee.traineeUid,
-            AttendanceLog.moduleId == module_id,
+    elif settings.ALLOW_ATTENDANCE_RETEST:
+        device = caller_device()
+        attendance = attendance_service.retake_check_in(
+            db, attendance, conference, payload.conferenceUid, trainee, device["ipAddress"], device["deviceInfo"]
         )
-        .all()
-    )
-    for log in existing_logs:
-        db.delete(log)
-
-    db.flush()
-
-    now_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
-    attendance = Attendance(
-        conferenceUid=payload.conferenceUid,
-        trainerUid=conference.trainerEmployeeId if conference else None,
-        traineeUid=trainee.traineeUid,
-        phone=trainee.phone,
-        markedOn=now_str,
-        status="Present",
-        attemptCount=1,
-    )
-    db.add(attendance)
-
-    caller_ip = client_ip(request)
-    user_agent = (
-        request.headers.get("user-agent", "")[:255]
-        if request.headers.get("user-agent")
-        else None
-    )
-
-    attendance_log = AttendanceLog(
-        conferenceUid=payload.conferenceUid,
-        traineeUid=trainee.traineeUid,
-        moduleId=module_id,
-        markedAt=utc_now(),
-        status="Present",
-        ipAddress=caller_ip,
-        deviceInfo=user_agent,
-    )
-    db.add(attendance_log)
-
-    db.commit()
-    db.refresh(attendance)
     return AttendanceOut(status=attendance.status, markedOn=attendance.markedOn)
 
 
@@ -186,16 +79,21 @@ def check_in(
 def verify_location(
     payload: VerifyLocationRequest,
     db: Session = Depends(get_db),
+    common_db: Session = Depends(get_common_db),
+    tenant_id: str = Depends(get_tenant_id_from_request),
     _trainee: Trainee = Depends(get_current_trainee),
 ):
-    return attendance_service.verify_location(db, payload)
+    return attendance_service.verify_location(
+        db, payload, face_detection_required=tenant_settings_service.checkin_face_detection_enabled(common_db, tenant_id)
+    )
 
 
 @router.post("/check-in/secure", response_model=AttendanceOut)
 async def check_in_secure(
     background_tasks: BackgroundTasks,
     request: Request,
-    conferenceUid: str = Form(...),
+    # Snake case here; the form field stays `conferenceUid`, which is what the app sends.
+    conference_uid: str = Form(..., alias="conferenceUid"),
     latitude: float = Form(...),
     longitude: float = Form(...),
     photo: UploadFile = File(...),
@@ -205,122 +103,45 @@ async def check_in_secure(
     """Geofenced check-in: captures the trainee's location and a face photo
     alongside the usual attendance row. Stores records in both `attendance`
     and `attendance_logs` tables."""
-    extension = ALLOWED_IMAGE_CONTENT_TYPES.get(photo.content_type or "")
-    if not extension:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only JPEG, PNG or WEBP images are allowed",
-        )
-
-    contents = await photo.read()
-    if len(contents) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Photo must be 5MB or smaller",
-        )
+    contents, extension = await read_photo_upload(photo, size_error_detail="Photo must be 5MB or smaller")
 
     # Exists, running, Attendance module open - and locked, so this trainee's row is created once.
-    conference = attendance_service.open_check_in(db, conferenceUid)
-
-    # Geofence: a geofenced session rejects a check-in from outside the venue
-    # radius. Checked before any DB write so a failed attempt changes nothing.
-    if geofence_enabled(conference):
-        is_within, distance_from_venue = within_geofence(conference, latitude, longitude)
-        if not is_within:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"You appear to be about {distance_from_venue:.0f} m from the venue. "
-                    f"Move within {conference.geoRadius or 100} m to check in."
-                ),
-            )
-
-    module_id = (
-        conference.activeModuleId
-        if (conference and conference.activeModuleId)
-        else "ATTENDANCE"
-    )
+    conference = attendance_service.open_check_in(db, conference_uid)
 
     # Any trainee who has joined this conference (Attendance row exists from
     # session_service.join_session) can self-admit via Secure Check-In -
-    # only a trainer's already-final Present/Absent decision blocks it.
-    existing = (
-        db.query(Attendance)
-        .filter(
-            Attendance.conferenceUid == conferenceUid,
-            Attendance.traineeUid == trainee.traineeUid,
-        )
-        .first()
-    )
-    if not existing:
-        existing = Attendance(
-            conferenceUid=conferenceUid,
-            trainerUid=conference.trainerEmployeeId if conference else None,
-            traineeUid=trainee.traineeUid,
-            phone=trainee.phone,
-            status="Joined",
-        )
-        audience = (
-            "ASSIGNED"
-            if conference and trainee.trainerEmployeeId == conference.trainerEmployeeId
-            else "UNASSIGNED"
-        )
-        existing.sessionMeta = json.dumps({"audience": audience})
-        db.add(existing)
-        db.flush()
-    if existing.status == "Absent":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You've been marked absent for this session.",
-        )
-    if existing.checkInPhoto and not settings.ALLOW_ATTENDANCE_RETEST:
-        return AttendanceOut(status=existing.status, markedOn=existing.markedOn)
+    # only a trainer's already-final Absent decision blocks it.
+    attendance = attendance_service.joined_attendance(db, conference, conference_uid, trainee)
+    if attendance.checkInPhoto and not settings.ALLOW_ATTENDANCE_RETEST:
+        return AttendanceOut(status=attendance.status, markedOn=attendance.markedOn)
 
-    venue_lat = float(conference.geoLatitude) if conference and conference.geoLatitude is not None else None
-    venue_lng = float(conference.geoLongitude) if conference and conference.geoLongitude is not None else None
-    distance = distance_meters(latitude, longitude, venue_lat, venue_lng)
+    # Outside a geofenced venue: the try is counted (attemptCount), nothing else is saved - no
+    # photo, no Present, no log.
+    refusal = attendance_service.outside_venue_refusal(conference, latitude, longitude)
+    if refusal:
+        attendance_service.count_refused_check_in(attendance)
+        db.commit()
+        raise bad_request(refusal)
 
-    photo_dir = media_subdir("attendance_photos", get_tenant_id_from_request(request))
+    distance = attendance_service.distance_from_venue(conference, latitude, longitude)
+    tenant_id = get_tenant_id_from_request(request)
+    photo_dir = media_subdir("attendance_photos", tenant_id)
     filename = f"{uuid.uuid4().hex}.{extension}"
     (photo_dir / filename).write_bytes(contents)
 
-    now_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
     # Trainee self-admitting - promote Joined/Pending -> Present (no-op if
     # the trainer already marked them).
-    existing.status = "Present"
-    existing.markedOn = now_str
-    existing.trainerUid = existing.trainerUid or (conference.trainerEmployeeId if conference else None)
-    existing.checkInDistance = f"{distance:.0f}" if distance is not None else None
-    existing.checkInPhoto = f"attendance_photos/{filename}"
-
-    caller_ip = client_ip(request)
-    user_agent = (
-        request.headers.get("user-agent", "")[:255]
-        if request.headers.get("user-agent")
-        else None
-    )
-
-    db.query(AttendanceLog).filter(
-        AttendanceLog.conferenceUid == conferenceUid,
-        AttendanceLog.traineeUid == trainee.traineeUid,
-        AttendanceLog.moduleId == module_id,
-    ).delete()
-    db.add(
-        AttendanceLog(
-            conferenceUid=conferenceUid,
-            traineeUid=trainee.traineeUid,
-            moduleId=module_id,
-            markedAt=utc_now(),
-            status="Present",
-            ipAddress=caller_ip,
-            deviceInfo=user_agent,
-            locationData=f"{latitude},{longitude}",
-        )
+    attendance_service.mark_self_present(attendance, conference)
+    attendance.checkInDistance = f"{distance:.0f}" if distance is not None else None
+    attendance.checkInPhoto = f"attendance_photos/{filename}"
+    attendance_service.record_check_in_log(
+        db, conference, conference_uid, trainee.traineeUid,
+        **caller_device(), locationData=f"{latitude},{longitude}",
     )
 
     db.commit()
-    db.refresh(existing)
-    _nudge_dashboard(background_tasks, get_tenant_id_from_request(request), conferenceUid)
-    return AttendanceOut(status=existing.status, markedOn=existing.markedOn, distanceMeters=distance)
+    db.refresh(attendance)
+    _nudge_dashboard(background_tasks, tenant_id, conference_uid)
+    return AttendanceOut(status=attendance.status, markedOn=attendance.markedOn, distanceMeters=distance)
 
 

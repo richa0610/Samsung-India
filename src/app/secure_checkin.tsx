@@ -26,6 +26,7 @@ export default function SecureCheckInScreen() {
     setStep,
     error,
     locationResult,
+    faceDetectionRequired,
     verifiedAt,
     liveLocationLabel,
     permissionState,
@@ -68,7 +69,13 @@ export default function SecureCheckInScreen() {
   }
 
   if (step === "security-checkin") {
-    return <SecurityCheckInView onProceed={handleProceedFromCheckIn} onBack={() => setStep("location-verified")} />;
+    return (
+      <SecurityCheckInView
+        faceDetection={faceDetectionRequired}
+        onProceed={handleProceedFromCheckIn}
+        onBack={() => setStep("location-verified")}
+      />
+    );
   }
 
   return <AccessGrantedStep params={params} locationResult={locationResult} router={router} />;

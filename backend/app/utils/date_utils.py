@@ -1,10 +1,15 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 # The venue clock. Every conference in this system is in India, and
 # `conferenceDate`/`conferenceTime` (and the per-module times) are entered in
 # local venue time. IST is a fixed UTC+5:30 with no DST, so a plain offset is
 # exact and needs no tz database.
 IST = timezone(timedelta(hours=5, minutes=30))
+
+# How the admin panel writes `conferenceTime` and every per-module start/end
+# time (e.g. "10:00 AM"). Parse and format venue times with this, never a
+# literal, so a change to the admin panel's format is a one-line change here.
+VENUE_TIME_FORMAT = "%I:%M %p"
 
 
 def ist_now() -> datetime:
@@ -28,6 +33,12 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+def utc_from_epoch_ms(epoch_ms: int) -> datetime:
+    """A Unix-epoch reading in milliseconds (the Live Quiz clock, `time.time() * 1000` - e.g.
+    `conference.liveTimerEndsAt`) as this stack's naive UTC datetime, to store next to `utc_now()`."""
+    return datetime.fromtimestamp(epoch_ms / 1000, tz=timezone.utc).replace(tzinfo=None)
+
+
 def utc_naive_to_ist(dt: datetime | None) -> datetime | None:
     """Convert a naive UTC datetime (how timestamps are stored on this stack -
     e.g. `conference.actualStartedAt`) to naive IST wall-clock time, so it can
@@ -35,6 +46,13 @@ def utc_naive_to_ist(dt: datetime | None) -> datetime | None:
     if dt is None:
         return None
     return dt.replace(tzinfo=timezone.utc).astimezone(IST).replace(tzinfo=None)
+
+
+def ist_day_start_utc(day: date) -> datetime:
+    """The naive UTC instant (how timestamps are stored on this stack) at which the IST calendar
+    day `day` begins - 18:30 UTC the evening before. For matching a stored timestamp against the
+    IST dates the app sends, e.g. a list's From/To range."""
+    return datetime.combine(day, time.min, tzinfo=IST).astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def ist_to_iso(dt: datetime | None) -> str | None:
@@ -67,7 +85,7 @@ def parse_module_start(conference_date: str | None, time_str: str | None) -> dat
     if not conference_date or not time_str:
         return None
     try:
-        return datetime.strptime(f"{conference_date} {time_str}", "%Y-%m-%d %I:%M %p")
+        return datetime.strptime(f"{conference_date} {time_str}", f"%Y-%m-%d {VENUE_TIME_FORMAT}")
     except ValueError:
         return None
 
@@ -78,7 +96,7 @@ def time_to_minutes(raw: str | None) -> int | None:
     value so callers can sort those last."""
     if not raw:
         return None
-    for fmt in ("%I:%M %p", "%H:%M"):
+    for fmt in (VENUE_TIME_FORMAT, "%H:%M"):
         try:
             parsed = datetime.strptime(raw.strip(), fmt)
             return parsed.hour * 60 + parsed.minute
@@ -92,8 +110,8 @@ def duration(start: str | None, end: str | None) -> str | None:
     if not start or not end:
         return None
     try:
-        started = datetime.strptime(start, "%I:%M %p")
-        ended = datetime.strptime(end, "%I:%M %p")
+        started = datetime.strptime(start, VENUE_TIME_FORMAT)
+        ended = datetime.strptime(end, VENUE_TIME_FORMAT)
     except ValueError:
         return None
 

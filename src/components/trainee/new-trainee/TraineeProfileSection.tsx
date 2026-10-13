@@ -38,7 +38,12 @@ export function TraineeProfileSection({ form }: { form: NewTraineeForm }) {
       if (!result.canceled && result.assets?.[0]) {
         const asset = result.assets[0];
         const type = asset.mimeType ?? "image/jpeg";
-        form.setProfilePhoto({ uri: asset.uri, name: asset.fileName ?? `photo.${type.split("/")[1] ?? "jpg"}`, type });
+        // The server accepts only JPG photos - say so now, not after the trainee is saved.
+        if (type !== "image/jpeg") {
+          Alert.alert("JPG photo needed", "Please choose a JPG photo (PNG, GIF and other formats aren't accepted).");
+          return;
+        }
+        form.setProfilePhoto({ uri: asset.uri, name: asset.fileName ?? "photo.jpg", type });
       }
     } finally {
       setPicking(false);

@@ -15,3 +15,11 @@ class SelectOptionOut(BaseModel):
     label: str
     value: str
     name: Optional[str] = None
+
+
+class MasterGroupOut(BaseModel):
+    """A master-list option and the options that depend on it - a zone and its regions, a
+    state and its districts. Both are saved on a training as these names."""
+
+    name: str
+    options: list[str]

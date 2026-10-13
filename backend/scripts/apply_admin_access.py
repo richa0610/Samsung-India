@@ -35,7 +35,7 @@ def main() -> int:
         return 2
 
     tenant_uid, assignments = load_assignments(args.plan)
-    cfg = (settings.common_db_host, settings.common_db_port, settings.common_db_user, settings.common_db_password, settings.common_db_name)
+    cfg = (settings.resolved_common_db_host, settings.resolved_common_db_port, settings.resolved_common_db_user, settings.resolved_common_db_password, settings.resolved_common_db_name)
     ro_common = sessionmaker(bind=_read_only_engine(*cfg))()
     rec = ro_common.query(Tenant).filter(Tenant.tenant_uid == tenant_uid).first()
     ro_tenant = sessionmaker(bind=_read_only_engine(rec.database_host, rec.database_port, rec.database_username, rec.database_password, rec.database_name))()

@@ -7,10 +7,22 @@ from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.exceptions import invalid_session
 from app.database.common import get_common_db
 from app.database.tenant import tenant_manager
 
 logger = logging.getLogger("tenant_session")
+
+_BEARER_PREFIX = "bearer "
+
+
+def bearer_token(request: Request) -> str | None:
+    """The token of an `Authorization: Bearer <token>` header (scheme matched in any case), or None
+    without one. An empty token is returned as "" - it was presented, and must fail verification."""
+    auth_header = request.headers.get("Authorization")  # Starlette header lookups ignore case
+    if auth_header and auth_header.lower().startswith(_BEARER_PREFIX):
+        return auth_header[len(_BEARER_PREFIX):].strip()
+    return None
 
 
 def get_tenant_id_from_request(request: Request) -> str:
@@ -24,9 +36,8 @@ def get_tenant_id_from_request(request: Request) -> str:
     identically whether it's used as a route dependency (`Depends(...)`)
     or called as a plain function from inside a handler (both patterns are
     used across the routers)."""
-    auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
-    if auth_header and auth_header.lower().startswith("bearer "):
-        token = auth_header[len("bearer "):].strip()
+    token = bearer_token(request)
+    if token is not None:
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
             tenant_id = payload.get("tenant_id")
@@ -66,25 +77,25 @@ def get_db(
     answer from the response. This is only a cheap decode (no lookup, no claims used) - the real
     auth dependency still does its own full check right after; the point here is only sequencing,
     a tenant is never touched on a token that was never going to be accepted anyway."""
-    auth_header = request.headers.get("Authorization") or request.headers.get("authorization")
-    if auth_header and auth_header.lower().startswith("bearer "):
+    token = bearer_token(request)
+    if token is not None:
         try:
-            jwt.decode(auth_header[len("bearer "):].strip(), settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+            jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         except JWTError:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
+            raise invalid_session()
 
     tenant_id = get_tenant_id_from_request(request)
     session = tenant_manager.get_session(tenant_id, common_db)
     try:
         yield session
-    except OperationalError as exc:
-        logger.error("Database connectivity error on tenant '%s': %s", tenant_id, exc)
+    except OperationalError:
+        logger.exception("Database connectivity error on tenant '%s'", tenant_id)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Tenant database is temporarily unavailable",
         )
-    except SQLAlchemyError as exc:
-        logger.error("Database query error on tenant '%s': %s", tenant_id, exc)
+    except SQLAlchemyError:
+        logger.exception("Database query error on tenant '%s'", tenant_id)
         raise
     finally:
         session.close()

@@ -2,13 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 
 import { SelectOption } from "@/components/ui/SearchableSelect";
-import { STATES } from "@/data/states";
 import { useAuth } from "@/hooks/useAuth";
 import { subscribe } from "@/services/liveEvents";
 import {
   ApiError,
   AssessmentSuiteOut,
   ApprovalStatus,
+  MasterGroup,
   ModuleConfig,
   TrainingStatus,
   createTraining,
@@ -17,13 +17,16 @@ import {
   fetchChecklistItems,
   fetchRequestedByOptions,
   fetchSessionTypes,
+  fetchStates,
   fetchTrainers,
   fetchTrainingDetail,
   fetchTrainingHubs,
   fetchTrainingTypes,
   fetchVenues,
+  fetchZones,
   updateTraining,
 } from "@/api/training";
+import { zoneKey } from "@/utils/zones";
 import {
   MODULE_LABELS,
   ModuleKey,
@@ -59,6 +62,21 @@ const toTrainingStatus = (value: string): TrainingStatus =>
 // a backstop for a missed live push.
 const LIVE_REFRESH_MS = 8000;
 
+const asOptions = (names: string[]): SelectOption[] => names.map((name) => ({ label: name, value: name }));
+
+// How a saved value is matched to the master list: names ignore case and spaces; a zone also
+// ignores " Zone" ("North Zone" = "North"); a district also reads "_" as a space ("new_delhi",
+// the code older builds saved, = "New Delhi").
+const nameKey = (value: string) => value.trim().toLowerCase();
+const districtKey = (value: string) => nameKey(value).replace(/_/g, " ");
+
+function findBy<T>(items: T[], value: string, key: (value: string) => string, nameOf: (item: T) => string): T | undefined {
+  const wanted = key(value);
+  return wanted ? items.find((item) => key(nameOf(item)) === wanted) : undefined;
+}
+const groupName = (group: MasterGroup) => group.name;
+const itself = (name: string) => name;
+
 // Passing an existing training's UID switches the form into edit mode: it
 // loads that training's current detail into the same fields this hook
 // already exposes (so the existing section components render unchanged),
@@ -82,7 +100,7 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
 
   const [trainerId, setTrainerId] = useState("");
   const [trainerName, setTrainerName] = useState("");
-  const [stateValue, setStateValue] = useState("");
+  const [stateName, setStateName] = useState("");
   const [district, setDistrict] = useState("");
   const [venue, setVenue] = useState("");
 
@@ -155,13 +173,13 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
   const [trainerOptions, setTrainerOptions] = useState<SelectOption[]>([]);
   const [checklistOptions, setChecklistOptions] = useState<SelectOption[]>([]);
   const [venueOptions, setVenueOptions] = useState<SelectOption[]>([]);
-  // Seeded with the static fallback list, replaced once the backend returns
-  // real distinct values already used across past conferences - same
-  // "learn from history" pattern as the trainer/venue/checklist pickers
-  // above, just for fields that don't have a dedicated lookup table.
-  // These pickers have no master table - their options are whatever values
-  // this tenant has already used on past trainings (served by the /admin
-  // catalog endpoints). Empty until the first fetch resolves.
+  // Zone / Region, State / District, Audience, Session Type and Training Type come from the
+  // master list (a category's approved options - the zones and states each with their own
+  // regions / districts); Training Hub and Requested By, which have none, from the values this
+  // tenant already used on past trainings. All served by the /admin catalog endpoints and
+  // empty until the first fetch resolves.
+  const [zoneGroups, setZoneGroups] = useState<MasterGroup[]>([]);
+  const [stateGroups, setStateGroups] = useState<MasterGroup[]>([]);
   const [trainingHubOptions, setTrainingHubOptions] = useState<SelectOption[]>([]);
   const [audienceOptions, setAudienceOptions] = useState<SelectOption[]>([]);
   const [sessionTypeOptions, setSessionTypeOptions] = useState<SelectOption[]>([]);
@@ -178,6 +196,12 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
     fetchTrainers(adminToken)
       .then(setTrainerOptions)
       .catch(() => setTrainerOptions([]));
+    fetchZones(adminToken)
+      .then(setZoneGroups)
+      .catch(() => setZoneGroups([]));
+    fetchStates(adminToken)
+      .then(setStateGroups)
+      .catch(() => setStateGroups([]));
     fetchChecklistItems(adminToken)
       .then(setChecklistOptions)
       .catch(() => setChecklistOptions([]));
@@ -205,6 +229,19 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
     load.then(setVenueOptions).catch(() => setVenueOptions([]));
   }, [adminToken, district]);
 
+  // A value an older training saved ("North Zone", "new_delhi") is shown - and re-saved - as the
+  // master spells it ("North", "New Delhi"); one the master doesn't have is kept as it is.
+  const zoneGroup = findBy(zoneGroups, zone, zoneKey, groupName);
+  const stateGroup = findBy(stateGroups, stateName, nameKey, groupName);
+  const shownZone = zoneGroup?.name ?? zone;
+  const shownRegion = findBy(zoneGroup?.options ?? [], region, nameKey, itself) ?? region;
+  const shownState = stateGroup?.name ?? stateName;
+  const shownDistrict = findBy(stateGroup?.options ?? [], district, districtKey, itself) ?? district;
+  const zoneOptions = useMemo(() => asOptions(zoneGroups.map((group) => group.name)), [zoneGroups]);
+  const regionOptions = useMemo(() => asOptions(zoneGroup?.options ?? []), [zoneGroup]);
+  const stateOptions = useMemo(() => asOptions(stateGroups.map((group) => group.name)), [stateGroups]);
+  const districtOptions = useMemo(() => asOptions(stateGroup?.options ?? []), [stateGroup]);
+
   useEffect(() => {
     if (!editing || !adminToken) return;
     let cancelled = false;
@@ -221,7 +258,7 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
 
         setTrainerId(detail.trainerEmployeeId ?? "");
         setTrainerName(detail.trainerName ?? "");
-        setStateValue(STATES.find((s) => s.label === detail.state)?.value ?? "");
+        setStateName(detail.state ?? "");
         setDistrict(detail.district ?? "");
         setVenue(detail.venue ?? "");
 
@@ -359,8 +396,6 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
     suitesByModule[key]
       .filter((suite) => suite.category === category)
       .map((suite) => ({ label: suite.name, value: suite.assessmentSuiteUid }));
-
-  const selectedState = useMemo(() => STATES.find((item) => item.value === stateValue), [stateValue]);
 
   const toggleResidential = (value: boolean) => {
     setIsResidential(value);
@@ -503,14 +538,14 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
     setNotice(null);
     try {
       const payload = {
-        zone: cleanText(zone, 100) || undefined,
-        region: cleanText(region, 100) || undefined,
+        zone: cleanText(shownZone, 100) || undefined,
+        region: cleanText(shownRegion, 100) || undefined,
         company: cleanText(company, 120) || undefined,
         requestedBy: cleanText(requestedBy, 120) || undefined,
         trainerEmployeeId: trainerId || undefined,
         trainerName: trainerName || undefined,
-        state: selectedState?.label,
-        district: district || undefined,
+        state: shownState || undefined,
+        district: shownDistrict || undefined,
         venue: venue || undefined,
         isResidential,
         conferenceDate,
@@ -569,8 +604,10 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
     loadingDetail,
     loadError,
 
-    zone, setZone,
-    region, setRegion,
+    zone: shownZone, setZone,
+    zoneOptions,
+    region: shownRegion, setRegion,
+    regionOptions,
     company,
     requestedByOption, setRequestedByOption,
     requestedByOther, setRequestedByOther,
@@ -580,11 +617,12 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
     trainerId, setTrainerId,
     trainerName, setTrainerName,
     trainerOptions,
-    stateValue, setStateValue,
-    district, setDistrict,
+    stateName: shownState, setStateName,
+    stateOptions,
+    district: shownDistrict, setDistrict,
+    districtOptions,
     venue, setVenue,
     venueOptions,
-    selectedState,
 
     isResidential, setIsResidential, toggleResidential,
     conferenceDate, setConferenceDate,

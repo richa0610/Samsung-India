@@ -20,6 +20,13 @@ type SelectOption = { label: string; value: string };
 const laterOf = (a?: string, b?: string) => (a && b ? (a > b ? a : b) : a || b || "");
 const earlierOf = (a?: string, b?: string) => (a && b ? (a < b ? a : b) : a || b || "");
 
+/** "2026-10-05" -> "05 Oct", the subtitle's short form; an unparseable value is shown as is. */
+const shortDate = (iso: string) => {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${String(date.getDate()).padStart(2, "0")} ${date.toLocaleDateString("en-GB", { month: "short" })}`;
+};
+
 const toOptions = (values: string[]): SelectOption[] =>
   values.filter((v) => v && v !== "Not Assigned").map((v) => ({ label: v, value: v }));
 
@@ -27,12 +34,6 @@ export function useSessionsScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ start?: string; end?: string; tab?: string; status?: string }>();
   const { adminToken } = useAuth();
-
-  // When arriving without explicit stats card date parameters (e.g. via Plan tab), the default
-  // date filter is the 1st of this month to today in IST - like every trainer list.
-  const defaultMonthRange = useMemo(() => monthToTodayRange(), []);
-  const baseStart = params.start ?? defaultMonthRange.start;
-  const baseEnd = params.end ?? defaultMonthRange.end;
 
   const initialTab: SessionTab = params.tab === "today" || params.tab === "completed" ? params.tab : "all";
   const [activeTab, setActiveTab] = useState<SessionTab>(initialTab);
@@ -42,6 +43,15 @@ export function useSessionsScreen() {
     setSyncedStatusParam(params.status);
     setStatusFilter(params.status);
   }
+
+  // When arriving without explicit stats card date parameters (e.g. via Plan tab), the default
+  // date filter is the 1st of this month to today in IST - like every trainer list. The Ongoing
+  // card is the exception: it counts every running training whatever the date, so its list has no
+  // default range (a From/To picked in the filter panel still narrows it).
+  const defaultMonthRange = useMemo(() => monthToTodayRange(), []);
+  const allDates = activeTab !== "completed" && statusFilter === "ongoing";
+  const baseStart = allDates ? "" : (params.start ?? defaultMonthRange.start);
+  const baseEnd = allDates ? "" : (params.end ?? defaultMonthRange.end);
 
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [query, setQuery] = useState<string>("");
@@ -76,18 +86,14 @@ export function useSessionsScreen() {
   const dateRangeSubtitle = useMemo(() => {
     const sDate = filters.fromDate || baseStart;
     const eDate = filters.toDate || baseEnd;
-    let datePart = `${sDate} - ${eDate}`;
-    if (sDate && eDate) {
-      try {
-        const s = new Date(sDate);
-        const e = new Date(eDate);
-        const sStr = `${String(s.getDate()).padStart(2, "0")} ${s.toLocaleDateString("en-GB", { month: "short" })}`;
-        const eStr = `${String(e.getDate()).padStart(2, "0")} ${e.toLocaleDateString("en-GB", { month: "short" })}`;
-        datePart = `${sStr} - ${eStr}`;
-      } catch {
-        // Fallback
-      }
-    }
+    const datePart =
+      sDate && eDate
+        ? `${shortDate(sDate)} - ${shortDate(eDate)}`
+        : sDate
+          ? `From ${shortDate(sDate)}`
+          : eDate
+            ? `Until ${shortDate(eDate)}`
+            : "All dates";
     const effectiveStatus = activeTab === "completed" ? undefined : statusFilter;
     if (effectiveStatus && effectiveStatus !== "all" && effectiveStatus !== "total") {
       const capStatus = effectiveStatus.charAt(0).toUpperCase() + effectiveStatus.slice(1);

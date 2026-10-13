@@ -28,3 +28,6 @@ class VerifyLocationOut(BaseModel):
     # 100). Lets the trainee app tell the user exactly how close they need to be.
     radiusMeters: Optional[int] = None
     venueLabel: Optional[str] = None
+    # The tenant's check-in setting (Tenant.checkin_face_detection_enabled): run the face check
+    # before the photo, or just capture it. On unless a Super Admin turned it off.
+    faceDetectionRequired: bool = True

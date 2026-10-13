@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: Colors.gray100,
   },
-  rowAlt: { backgroundColor: "#FAFAFA" },
+  rowAlt: { backgroundColor: Colors.gray50 },
   noteRow: { flexDirection: "column", alignItems: "stretch", gap: 2 },
   noteHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   note: { fontSize: 9, color: "#B45309", lineHeight: 13 },

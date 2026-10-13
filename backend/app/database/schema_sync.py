@@ -1,7 +1,7 @@
 import logging
 
-from sqlalchemy import inspect, text
-from sqlalchemy.engine import Engine
+from sqlalchemy import Column, inspect, text
+from sqlalchemy.engine import Dialect, Engine
 
 logger = logging.getLogger("schema_sync")
 
@@ -26,19 +26,30 @@ def sync_missing_columns(engine: Engine, base) -> None:
             continue  # create_all() already creates a brand-new table in full
         existing = {c["name"] for c in inspector.get_columns(table.name)}
         for column in table.columns:
-            if column.name in existing:
-                continue
-            ddl = f"ALTER TABLE {table.name} ADD COLUMN {column.name} {column.type.compile(engine.dialect)}"
-            if column.server_default is not None:
-                ddl += f" DEFAULT {column.server_default.arg}"
-            if not column.nullable:
-                ddl += " NOT NULL"
-            try:
-                with engine.begin() as conn:
-                    conn.execute(text(ddl))
-                logger.warning("Schema sync: added missing column %s.%s", table.name, column.name)
-            except Exception as exc:
-                logger.error("Schema sync: failed to add %s.%s: %s", table.name, column.name, exc)
+            if column.name not in existing:
+                _add_column(engine, table.name, column)
+
+
+def add_column_ddl(table_name: str, column: Column, dialect: Dialect) -> str:
+    """The ALTER TABLE that adds `column` as its model declares it: its type, its own
+    server_default (so existing rows get a sane value) and NOT NULL when it isn't nullable."""
+    ddl = f"ALTER TABLE {table_name} ADD COLUMN {column.name} {column.type.compile(dialect)}"
+    if column.server_default is not None:
+        ddl += f" DEFAULT {column.server_default.arg}"
+    if not column.nullable:
+        ddl += " NOT NULL"
+    return ddl
+
+
+def _add_column(engine: Engine, table_name: str, column: Column) -> None:
+    """Adds one missing column. A failure to run it is logged, never raised, so it can't block the rest."""
+    ddl = add_column_ddl(table_name, column, engine.dialect)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(ddl))
+        logger.warning("Schema sync: added missing column %s.%s", table_name, column.name)
+    except Exception:
+        logger.exception("Schema sync: failed to add %s.%s", table_name, column.name)
 
 
 def sync_missing_indexes(engine: Engine, base) -> None:
@@ -58,5 +69,5 @@ def sync_missing_indexes(engine: Engine, base) -> None:
             try:
                 index.create(bind=engine)
                 logger.warning("Schema sync: created index %s on %s", index.name, table.name)
-            except Exception as exc:
-                logger.error("Schema sync: failed to create index %s: %s", index.name, exc)
+            except Exception:
+                logger.exception("Schema sync: failed to create index %s", index.name)

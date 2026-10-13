@@ -28,7 +28,7 @@ export function createShadow({
   y = 2,
   blur = 6,
   spread = 0,
-  color = "#000000",
+  color = Colors.black,
   opacity = 0.08,
   elevation = 2,
 }: ShadowOptions = {}): ViewStyle {

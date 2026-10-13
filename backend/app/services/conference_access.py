@@ -1,5 +1,5 @@
 """The one rule for "may this caller open or operate this conference" - shared by every
-conference-level endpoint (training_service), the Live Quiz controls (live_quiz_service) and the
+conference-level endpoint (services/training/), the Live Quiz controls (live_quiz_service) and the
 live WebSocket room (routers/ws.py), so none of them keeps its own copy.
 
     verified principal + verified tenant  ->  access_service.resolve_scope

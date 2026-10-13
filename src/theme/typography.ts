@@ -6,10 +6,10 @@ export const FontSize = {
   h2: 24,
   h3: 20,
   heading: 14,
-  body: 16,
+  body: 14,
   bodySmall: 15,
   label: 14,
-    caption: 12,
+  caption: 12,
   overline: 11,
   tiny: 10,
 } as const;

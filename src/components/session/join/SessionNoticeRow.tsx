@@ -15,7 +15,7 @@ export default function SessionNoticeRow({ loading, notice }: SessionNoticeRowPr
       {loading ? (
         <ActivityIndicator size="small" color={Colors.mainColour1} />
       ) : (
-        <Ionicons name="information-circle-outline" size={14} color="#3D3D3D" />
+        <Ionicons name="information-circle-outline" size={14} color={Colors.gray700} />
       )}
       <AppText style={styles.noticeText}>{loading ? "Checking for your session…" : notice}</AppText>
     </View>
@@ -32,7 +32,7 @@ const styles = StyleSheet.create({
   noticeText: {
     flex: 1,
     fontSize: 11,
-    color: "#3D3D3D",
+    color: Colors.gray700,
     marginLeft: 4,
   },
 });

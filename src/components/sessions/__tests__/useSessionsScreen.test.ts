@@ -4,9 +4,11 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { fetchTrainingFacets, fetchTrainingsPage } from "@/api/training";
 import { useSessionsScreen } from "../useSessionsScreen";
 
+let mockParams: Record<string, string> = {};
+
 jest.mock("expo-router", () => ({
   useRouter: () => ({ back: jest.fn(), push: jest.fn(), replace: jest.fn() }),
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => mockParams,
   useFocusEffect: (callback: () => void | (() => void)) => require("react").useEffect(callback, [callback]),
 }));
 jest.mock("@/hooks/useAuth", () => ({ useAuth: () => ({ adminToken: "trainer-token" }) }));
@@ -18,6 +20,7 @@ const pageOf = (page: number) =>
   ({ items: [{ conferenceUid: `C${page}` }], total: 60, page, pageSize: 20, totalPages: 3, nextCursor: null }) as never;
 
 beforeEach(() => {
+  mockParams = {};
   mockPage.mockReset();
   mockFacets.mockReset();
   mockFacets.mockResolvedValue({ trainingHubs: [], trainingTypes: [] });
@@ -46,4 +49,35 @@ test("the Today tab asks for today's date in India", async () => {
 
   await act(() => result.current.setActiveTab("today"));
   await waitFor(() => expect(mockPage.mock.calls.at(-1)?.[1]).toMatchObject({ onDate: "2026-09-30" })); // 00:30 IST
+});
+
+test("the Ongoing card lists every running training, whatever the date", async () => {
+  mockParams = { tab: "all", status: "ongoing" };
+  mockPage.mockImplementation(async (_token, options) => pageOf(options.page ?? 1));
+  const { result } = await renderHook(() => useSessionsScreen());
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  expect(mockPage.mock.calls.at(-1)?.[1]).toMatchObject({ status: "ongoing", filters: { start: "", end: "" } });
+  expect(mockFacets).toHaveBeenLastCalledWith("trainer-token", { start: "", end: "" });
+  expect(result.current.dateRangeSubtitle).toBe("All dates · Ongoing");
+
+  // A From date picked in the filter panel still narrows it.
+  await act(() => result.current.handleFiltersChange({ fromDate: "2026-08-01" }));
+  await waitFor(() =>
+    expect(mockPage.mock.calls.at(-1)?.[1]).toMatchObject({ status: "ongoing", filters: { start: "2026-08-01", end: "" } }),
+  );
+  expect(result.current.dateRangeSubtitle).toBe("From 01 Aug · Ongoing");
+});
+
+test("the other cards keep the dashboard's date range", async () => {
+  mockParams = { tab: "all", status: "planned", start: "2026-10-01", end: "2026-10-05" };
+  mockPage.mockImplementation(async (_token, options) => pageOf(options.page ?? 1));
+  const { result } = await renderHook(() => useSessionsScreen());
+  await waitFor(() => expect(result.current.loading).toBe(false));
+
+  expect(mockPage.mock.calls.at(-1)?.[1]).toMatchObject({
+    status: "planned",
+    filters: { start: "2026-10-01", end: "2026-10-05" },
+  });
+  expect(result.current.dateRangeSubtitle).toBe("01 Oct - 05 Oct · Planned");
 });

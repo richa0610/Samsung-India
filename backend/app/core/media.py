@@ -13,41 +13,23 @@ MEDIA_ROOT = (
     else Path(__file__).resolve().parent.parent.parent / "media"
 )
 
-MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5MB
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5MB per file
+# Whole request body: the largest upload carries two files (check-out photo + attendance sheet)
+# plus a few form fields. Anything bigger is refused before it's read (see core/body_limit.py).
+MAX_REQUEST_BYTES = 2 * MAX_UPLOAD_BYTES + 1024 * 1024
 
-ALLOWED_IMAGE_CONTENT_TYPES = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-}
+JPEG = "image/jpeg"
+PDF = "application/pdf"
 
-# Trainer/trainee profile picture specifically - a deliberately different
-# (and narrower) list from ALLOWED_IMAGE_CONTENT_TYPES above, which stays
-# JPEG/PNG/WEBP for camera-captured photos (check-in, attendance) since
-# that's what the camera hardware actually produces. Profile pictures are
-# picked from the user's gallery instead, where a GIF is a real
-# possibility worth allowing - WEBP isn't part of this spec.
-ALLOWED_PROFILE_PHOTO_CONTENT_TYPES = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/gif": "gif",
-}
+# Only JPEG and PDF are accepted (user, 2026-10-08): photos - profile pictures, check-in and
+# training start/end photos - are JPEG; documents - the Aadhaar card, the signed attendance
+# sheet - are JPEG or PDF. Files stored before this rule (PNG, WEBP, Word...) are still served.
+ALLOWED_PHOTO_CONTENT_TYPES = {JPEG: "jpg"}
+ALLOWED_DOCUMENT_CONTENT_TYPES = {JPEG: "jpg", PDF: "pdf"}
 
-# Attendance-sheet upload at session check-out: a scan/photo of the signed
-# sheet, or a PDF. No spreadsheets - just what a printed sheet comes back as.
-ALLOWED_DOCUMENT_CONTENT_TYPES = {
-    **ALLOWED_IMAGE_CONTENT_TYPES,
-    "application/pdf": "pdf",
-}
-
-# Aadhaar upload: an image scan, a PDF, or a Word doc of the card.
-ALLOWED_AADHAR_CONTENT_TYPES = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "application/pdf": "pdf",
-    "application/msword": "doc",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-}
+# The bytes each accepted type's content really starts with, so a file is checked by what it is,
+# not only by the type the client declares for it.
+FILE_SIGNATURES = {JPEG: b"\xff\xd8\xff", PDF: b"%PDF-"}
 
 
 # A tenant's files live in their own folder, MEDIA_ROOT/<tenant_uid>/<kind>/..., so two tenants'

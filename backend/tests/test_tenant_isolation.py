@@ -35,7 +35,7 @@ from sqlalchemy.pool import NullPool
 from app.core import rate_limit
 from app.core.config import settings
 from app.core.security import create_access_token
-from app.database.tenant import tenant_manager
+from app.database.tenant import TenantConnectionManager, tenant_manager
 from app.models.admin_access import AdminAccess
 from app.models.common.tenant_registry import Tenant
 from app.models.conference import Conference
@@ -121,8 +121,9 @@ class ExistingControlsStillHold(WorldTestCase):
         self.assertIn(body["admin"]["role"], ("admin", "trainer"))  # the mobile app routes on exactly these two values
         self.assertEqual(body["admin"]["tenant_id"], ALPHA)
         claims = jwt.decode(body["access_token"], settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        # The token contract; `ver` (Phase 2.2, approved) lets an account's tokens be revoked.
-        self.assertEqual(sorted(claims), ["exp", "role", "sub", "tenant_id", "ver"])
+        # The token contract; `ver` (Phase 2.2, approved) lets an account's tokens be revoked; `iat`
+        # (2026-10-08, the standard issued-at claim) is the activity log's loginTime for the session.
+        self.assertEqual(sorted(claims), ["exp", "iat", "role", "sub", "tenant_id", "ver"])
         self.assertEqual(claims["tenant_id"], ALPHA)
 
     def test_public_endpoints_still_resolve_the_tenant_from_the_header(self):
@@ -160,7 +161,7 @@ class ExistingControlsStillHold(WorldTestCase):
         """"Admin also can start training like trainers": an admin-table account can now run
         start/end/modules/attendance/live-quiz on a conference the same way its assigned trainer
         does, as long as their admin_access grant covers that conference's company/zone/region.
-        /schedule-check is a read-only GET through the exact same gate (_get_owned_conference /
+        /schedule-check is a read-only GET through the exact same gate (training.common.owned_conference /
         _owned_live_conference) with none of start/end's side effects (photo, geofence, approval,
         date), so it isolates the scope check itself."""
         check = lambda who, key: self.get(who, f"/admin/trainings/{uid(key)}/schedule-check")
@@ -264,7 +265,7 @@ class TrainingListAccessControl(WorldTestCase):
 class RelatedEndpointAccessControl(WorldTestCase):
     """Phase 2: the same admin_access scope now gates the endpoints around the Training List that
     share its conferenceUid - detail, edit, report, session-dashboard, performers - not just the
-    list query itself. All read through the same _get_owned_conference the write-path (start/end/
+    list query itself. All read through the same owned_conference the write-path (start/end/
     modules) already used, so there is one authorization rule per training, not a different one
     per endpoint."""
 
@@ -301,7 +302,7 @@ class RelatedEndpointAccessControl(WorldTestCase):
 
     def test_an_ungranted_admin_reaches_none_of_them(self):
         # get_current_admin (Phase B) denies an account with no grant at all before any of these
-        # requests reach _get_owned_conference's per-training 404 - see
+        # requests reach owned_conference's per-training 404 - see
         # TrainingListAccessControl.test_no_grant_returns_nothing.
         base = f"/admin/trainings/{uid('S_N1')}"
         for suffix in ("", "/detail", "/performers"):
@@ -339,7 +340,8 @@ class AccessScopeEndpoint(WorldTestCase):
 
     def test_coordinator_is_restricted_to_their_zone_only(self):
         body = self.scope("coord")
-        self.assertEqual((body["role"], body["zones"], body["regions"]), ("coordinator", ["north zone"], None))
+        # Both spellings of the granted zone: older app builds look for "north zone" (utils/zones.py).
+        self.assertEqual((body["role"], body["zones"], body["regions"]), ("coordinator", ["north", "north zone"], None))
 
     def test_sub_coordinator_is_restricted_to_their_region_only(self):
         body = self.scope("subcoord")
@@ -922,6 +924,20 @@ class OneTenantCannotHurtTheOthers(unittest.TestCase):
             return max(gaps)
 
         self.assertLess(asyncio.run(scenario()), 0.5)
+
+    def test_a_tenant_added_mid_ping_does_not_stop_the_keep_alive(self):
+        """The keep-alive pings on a worker thread while requests add tenants (get_engine). A
+        tenant registered while ping_all is iterating must not raise out of it - that would end
+        the keep-alive loop for good."""
+        manager = TenantConnectionManager()
+
+        def connect_while_a_request_adds_a_tenant():
+            manager.register_engine("LATE", create_engine("sqlite://"))
+            return sqlite3.connect(":memory:")
+
+        manager.register_engine("FIRST", create_engine("sqlite://", creator=connect_while_a_request_adds_a_tenant, poolclass=NullPool))
+        manager.ping_all()
+        self.assertIn("LATE", manager._engines)
 
 
 if __name__ == "__main__":

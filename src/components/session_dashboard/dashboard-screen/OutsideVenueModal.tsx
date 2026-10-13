@@ -111,7 +111,7 @@ export default function OutsideVenueModal({ prompt, onCancel, onSave }: OutsideV
 }
 
 const styles = StyleSheet.create({
-  sheet: { backgroundColor: "#1F2530", borderRadius: 12, padding: 18, width: "88%" },
+  sheet: { backgroundColor: Colors.black, borderRadius: 12, padding: 18, width: "88%" },
   header: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 },
   title: { flex: 1, fontSize: 15, fontWeight: "800", color: Colors.gray100 },
   body: { fontSize: 12, color: Colors.gray300, lineHeight: 18, marginBottom: 16 },

@@ -1,145 +1,183 @@
+/** Single unified design tokens across the application */
+export const BRAND_BLUE = "#0A61FF";
+export const SUCCESS_GREEN = "#16A34A";
+export const SUCCESS_BG = "#ECFDF5";
+export const DANGER_RED = "#DC2626";
+export const DANGER_BG = "#FEE2E2";
+export const WARNING_YELLOW = "#F59E0B";
+export const ACCENT_PURPLE = "#6734FF";
+export const TEXT_BLACK = "#111827";
+export const TEXT_MUTED = "#4B5563";
+export const BORDER_COLOR = "#EAECF0";
+export const BG_TINT_BLUE = "#EEF4FF";
+export const GRAY_MUTED = "#D1D5DB";
+export const SURFACE_MUTED = "#F3F4F6";
+export const SURFACE_BLUE_SOFT = "#DDEEFF";
+// Colours from the login landing's design that the palette above doesn't have.
+export const HERO_BLUE_DEEP = "#0041C6";
+export const HERO_SKY = "#36A8FE";
+export const ACCENT_BLUE = "#054AF9";
+export const TEXT_SECONDARY = "#6F7586";
+
 export const Colors = {
-  primary: "#1565F9",
-  primaryDark: "#0B4EDB",
-  background: "#EEF4FF",
+  // Brand & Primary
+  blue: BRAND_BLUE,
+  primary: BRAND_BLUE,
+  primaryDark: BRAND_BLUE,
+  brandBlue: BRAND_BLUE,
+  blueAccent: BRAND_BLUE,
+  blue400: BRAND_BLUE,
+  toggleBlue: BRAND_BLUE,
+  mainColour1: BRAND_BLUE,
+  copyIconColour: BRAND_BLUE,
+  headerBlue: BRAND_BLUE,
+  brandWordmark: ACCENT_BLUE,
+  loginAccent: ACCENT_BLUE,
+
+  // Backgrounds & Surfaces
+  background: BG_TINT_BLUE,
+  blue50: BG_TINT_BLUE,
+  brandTintSoft: BG_TINT_BLUE,
+  authPageTop: BG_TINT_BLUE,
+  authSecureBg: BG_TINT_BLUE,
+  roleTrainerBg: BG_TINT_BLUE,
   white: "#FFFFFF",
-  black: "#111827",
   gray50: "#F9FAFB",
-  successBackground: "#F2FFF9",
-  gray100: "#F3F4F6",
-  gray200: "#E5E7EB",
-  gray400: "#9CA3AF",
-  gray600: "#4B5563",
-  slate200: "#E2E8F0",
-  success: "#16A34A",
-  danger: "#DC2626",
-  toggleBlue: "#2F44C5",
-  gray500: "#6B7280",
-  gray700: "#374151",
-  gray800: "#1F2937",
-  gray300: "#D1D5DB",
-  brandBlue: "#0066FF",
-  blueAccent: "#2563EB",
-  red: "#EF4444",
-  warning: "#F59E0B",
-  blue50: "#EFF6FF",
-  borderLight: "#EAECF0",
-  dangerBg: "#FEE2E2",
-  slate100: "#F1F5F9",
-  dangerBgSoft: "#FEF2F2",
-  successBgSoft: "#ECFDF5",
-  blue400: "#60A5FA",
-  successTeal: "#1CB07D",
-  inputColour: "#4D4D4D",
-  inputColour2: "#4D4D4D33",
-  inputColour3: "rgba(77, 77, 77, 0.6)",
-  borderColour: "rgba(170, 170, 170, 0.38)",
-  mainColour1: "#006aff",
-  pendingColour: "#FE9406",
-  copyIconColour: "#006AFF",
-  csvIconColour: "#6734FF",
-  excelIconColour: "#207245",
-  pdfIconColour: "#FF2116",
-
-  // Specialized session tokens matching Figma design
-  headerBlue: "#006AFF",
-  recordedGreen: "#00A859",
-  recordedGreenBg: "#D1F4E0",
-  waitingBlueBg: "#DDEEFF",
-  notificationBg: "#DDEEFF",
+  gray100: SURFACE_MUTED,
+  slate100: SURFACE_MUTED,
+  waitingBlueBg: SURFACE_BLUE_SOFT,
+  notificationBg: SURFACE_BLUE_SOFT,
   notificationIconBg: "#CBE5FF",
-  timelineRail: "#D1D5DB",
-  homeGlow: "rgba(0, 106, 255, 0.35)",
-  bottomNavInactive: "#4B5563",
-  statusYellow: "#FACC15",
-  statusGreen: "#10B981",
 
-  // Brand + login landing
-  /** The hero banner's blues, sampled from the login design: deep royal on the left, brighter
-   *  azure to the right, a lighter top-left, and a sky-blue glow low on the right. */
-  heroBlueDeep: "#013ABF",
-  heroBlueMid: "#0457E3",
-  heroBlueBright: "#0369F4",
-  heroBlueTopLeft: "#0A5BE0",
-  heroSkyGlow: "#1E94FE",
-  /** The sky-blue swoosh where the banner fades into the white page (top to bottom). */
-  heroWaveSky: "#8FBCFF",
-  heroWaveMist: "#C9DFFE",
-  /** White / light-blue text and shapes on the blue hero. */
-  onHero: "#FFFFFF",
-  onHeroMuted: "rgba(255, 255, 255, 0.85)",
-  onHeroFaint: "rgba(255, 255, 255, 0.45)",
-  /** A very light brand tint (the footer wave, pressed buttons). */
-  brandTintSoft: "#F3F7FF",
-  /** The TOPS wordmark on light backgrounds. */
-  brandWordmark: "#1546C9",
-  /** Page headings and their supporting text. */
-  textHeading: "#0F1A3A",
-  textSupporting: "#6B7280",
-  /** Light card / divider lines on white. */
-  surfaceBorder: "#E3E8F2",
-  /** Bottom sheets (sampled from the "Login as" design). */
-  sheetHandle: "#B8B9C5",
-  sheetTitle: "#0B0C1A",
-  sheetSubtitle: "#636373",
-  sheetClose: "#565665",
-  /** A neutral full-width button, e.g. a sheet's Cancel. */
-  neutralButtonBg: "#ECECF0",
+  // Text & Headings
+  black: TEXT_BLACK,
+  textHeading: TEXT_BLACK,
+  sheetTitle: TEXT_BLACK,
+  roleCardTitle: TEXT_BLACK,
+  authHeadline: TEXT_BLACK,
+  authLabel: TEXT_BLACK,
+  authSecureTitle: TEXT_BLACK,
+
+  // Muted & Supporting Text
+  gray800: TEXT_BLACK,
+  gray700: "#374151",
+  gray600: TEXT_MUTED,
+  gray500: TEXT_MUTED,
+  textSupporting: TEXT_MUTED,
+  bottomNavInactive: TEXT_MUTED,
+  sheetSubtitle: TEXT_MUTED,
+  sheetClose: TEXT_MUTED,
   neutralButtonText: "#4F5061",
-  /** "Login as" role cards: Trainer (blue) and Admin (violet). */
-  roleCardTitle: "#020214",
-  roleTrainerBg: "#EFF7FF",
-  roleTrainerBorder: "#E3ECF8",
-  roleTrainerTile: "#E2EDFD",
-  roleTrainerIcon: "#0536E9",
-  roleTrainerChevron: "#1647DA",
-  roleTrainerText: "#5D646F",
+  roleTrainerText: TEXT_MUTED,
+  roleAdminText: TEXT_MUTED,
+  authBodyText: TEXT_MUTED,
+  authCardSubtitle: TEXT_MUTED,
+  authSecureText: TEXT_MUTED,
+  authPlaceholder: "#9CA3AF",
+  gray400: "#9CA3AF",
+  loginSubtext: TEXT_SECONDARY,
+
+  // Borders & Dividers
+  borderLight: BORDER_COLOR,
+  gray200: BORDER_COLOR,
+  slate200: BORDER_COLOR,
+  surfaceBorder: BORDER_COLOR,
+  authCardBorder: BORDER_COLOR,
+  authInputBorder: BORDER_COLOR,
+  roleTrainerBorder: BORDER_COLOR,
+  neutralButtonBg: BORDER_COLOR,
+  borderColour: BORDER_COLOR,
+
+  // Rails, Handles & Subtle Indicators
+  gray300: GRAY_MUTED,
+  timelineRail: GRAY_MUTED,
+  sheetHandle: GRAY_MUTED,
+
+  // Feedback: Success
+  success: SUCCESS_GREEN,
+  statusGreen: SUCCESS_GREEN,
+  recordedGreen: SUCCESS_GREEN,
+  successTeal: SUCCESS_GREEN,
+  excelIconColour: SUCCESS_GREEN,
+  successBackground: SUCCESS_BG,
+  successBgSoft: SUCCESS_BG,
+  recordedGreenBg: SUCCESS_BG,
+
+  // Feedback: Danger / Error
+  danger: DANGER_RED,
+  red: DANGER_RED,
+  pdfIconColour: DANGER_RED,
+  dangerBg: DANGER_BG,
+  dangerBgSoft: DANGER_BG,
+
+  // Feedback: Warning & Attention
+  warning: WARNING_YELLOW,
+  statusYellow: WARNING_YELLOW,
+  pendingColour: WARNING_YELLOW,
+
+  // Accents & Roles
+  csvIconColour: ACCENT_PURPLE,
+  roleAdminIcon: ACCENT_PURPLE,
+  roleTrainerIcon: BRAND_BLUE,
+  roleTrainerChevron: BRAND_BLUE,
+  roleAdminChevron: BRAND_BLUE,
   roleAdminBg: "#F5F1FF",
   roleAdminBorder: "#ECE8F8",
   roleAdminTile: "#E6DFFC",
-  roleAdminIcon: "#4423D1",
-  roleAdminChevron: "#153DCC",
-  roleAdminText: "#625D6E",
+  roleTrainerTile: "#E2EDFD",
 
-  /** Trainer / admin sign-in screen (sampled from its design). */
-  /** Shown behind the sign-in background image while it loads. */
-  authPageTop: "#EBF3FE",
-  authBrandDeep: "#0634A3",
-  authTagUnderline: "#0D4FC0",
-  authHeadline: "#0B0C1A",
-  authHeadlineAccent: "#0349B9",
-  authBodyText: "#575D6B",
-  authCardSubtitle: "#696C7B",
-  authCardBorder: "#EEF2FB",
-  authLabel: "#0B0C1A",
-  authPlaceholder: "#8F8F99",
-  authInputBorder: "#E8E8EA",
+  // Audience tags (Session Dashboard participant list: ASN / UASN / FRESH)
+  audienceAssignedText: "#D97706",
+  audienceAssignedBg: "#FFFBEB",
+  audienceAssignedBorder: "#FDE68A",
+  audienceUnassignedText: ACCENT_PURPLE,
+  audienceUnassignedBg: "#F5F1FF",
+  audienceUnassignedBorder: "#C4B5FD",
+  audienceFreshText: BRAND_BLUE,
+  audienceFreshBg: BG_TINT_BLUE,
+  audienceFreshBorder: BRAND_BLUE,
+
+  // Form Inputs
+  inputColour: "#4D4D4D",
+  inputColour2: "#4D4D4D33",
+  inputColour3: "rgba(77, 77, 77, 0.6)",
   authInputIcon: "#3F4250",
-  authLink: "#0045B0",
-  authBackArrow: "#0D56D7",
-  authIconTile: "#EAF4FE",
-  authIcon: "#0B4FCF",
-  authButtonStart: "#004DD2",
-  authButtonEnd: "#096DFF",
-  authSecureBg: "#EFF6FE",
-  authSecureTile: "#DCEDFF",
-  authSecureIcon: "#0E54D6",
-  authSecureTitle: "#0B0C1A",
-  authSecureText: "#58606B",
 
-  /** Login illustration palette. */
-  illustrationNavy: "#1E3A8A",
-  illustrationShadow: "#0A2A99",
-  illustrationPhoneLight: "#4F7BFF",
-  illustrationPhoneDeep: "#1438C9",
+  // Auth Specific
+  authBrandDeep: BRAND_BLUE,
+  authTagUnderline: BRAND_BLUE,
+  authHeadlineAccent: BRAND_BLUE,
+  authLink: BRAND_BLUE,
+  authBackArrow: BRAND_BLUE,
+  authIconTile: "#EAF4FE",
+  authIcon: BRAND_BLUE,
+  authButtonStart: BRAND_BLUE,
+  authButtonEnd: BRAND_BLUE,
+  authSecureTile: "#DCEDFF",
+  authSecureIcon: BRAND_BLUE,
+
+  // Hero & Visual Effects
+  heroBlueDeep: HERO_BLUE_DEEP,
+  heroSkyGlow: HERO_SKY,
+  heroWaveSky: "#8FBCFF",
+  heroWaveMist: "#C9DFFE",
+  onHero: "#FFFFFF",
+  onHeroMuted: "#C3DFFF",
+  onHeroFaint: "rgba(255, 255, 255, 0.45)",
+  homeGlow: "rgba(6, 52, 163, 0.35)",
+
+  // Illustrations
+  illustrationNavy: HERO_BLUE_DEEP,
+  illustrationShadow: "rgba(0, 65, 198, 0.4)",
+  illustrationPhoneLight: BRAND_BLUE,
+  illustrationPhoneDeep: ACCENT_BLUE,
   illustrationScreenTint: "#E1EAFF",
-  illustrationSky: "#2563EB",
-  illustrationSkyLight: "#60A5FA",
+  illustrationSky: BRAND_BLUE,
+  illustrationSkyLight: HERO_SKY,
   illustrationLine: "#93B4FF",
   illustrationLineSoft: "#C7D7FF",
-  illustrationPurple: "#6D4AE8",
+  illustrationPurple: ACCENT_PURPLE,
   illustrationPurpleLight: "#A78BFA",
   illustrationPurpleTint: "#DDD6FE",
-  illustrationGlow: "#FDE68A",
-  illustrationGold: "#FBBF24",
+  illustrationGlow: "#E6F1FF",
 };

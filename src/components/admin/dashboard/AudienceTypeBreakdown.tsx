@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   categoryTitle: {
-    color: "#64748B",
+    color: Colors.gray500,
     fontSize: 13.5,
   },
   typeTitle: {

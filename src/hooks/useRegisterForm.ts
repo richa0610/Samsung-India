@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
-import { ApiError, loginTrainee, registerTrainee } from "@/api/auth";
+import { ApiError, registerTrainee } from "@/api/auth";
 import { joinSession } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -30,10 +30,9 @@ const defaultValues: RegisterFormValues = {
 };
 
 type UseRegisterFormOptions = {
-  // When set (QR-join flow), a successful registration also signs the new
-  // trainee in and binds them to this session before `onSuccess` fires.
-  // Plain registration (no code) keeps the old behaviour: register only,
-  // then the user logs in themselves.
+  // Registration always signs the new trainee in (they have no password to
+  // log in with later). When set (QR-join flow), it also binds them to this
+  // session before `onSuccess` fires.
   joinCode?: string;
   onSuccess?: () => void;
 };
@@ -55,10 +54,9 @@ export function useRegisterForm({ joinCode, onSuccess }: UseRegisterFormOptions 
     setLoading(true);
     setError(null);
     try {
-      const phone = values.phone.trim();
-      await registerTrainee({
+      const session = await registerTrainee({
         name: values.name.trim(),
-        phone,
+        phone: values.phone.trim(),
         email: values.email.trim(),
         gender: values.gender || undefined,
         designation: values.designation || undefined,
@@ -68,9 +66,8 @@ export function useRegisterForm({ joinCode, onSuccess }: UseRegisterFormOptions 
         district: values.district || undefined,
       });
 
+      setSession(session);
       if (joinCode) {
-        const session = await loginTrainee(phone);
-        setSession(session);
         try {
           await joinSession(joinCode, session.access_token, true);
         } catch {

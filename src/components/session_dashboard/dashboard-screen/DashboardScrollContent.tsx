@@ -105,9 +105,9 @@ export default function DashboardScrollContent({
       }
     >
       <SessionDetailsCard
-        topic={data?.trainingType || "Webinar"}
-        date={data?.conferenceDate || "20 Jul 2026"}
-        trainerName={data?.trainerName || "Demo Trainer"}
+        topic={data?.trainingType || "--"}
+        date={data?.conferenceDate || "--"}
+        trainerName={data?.trainerName || "--"}
         runtime={formatRuntimeLabel(runtimeSeconds)}
         conferenceStatus={data?.conferenceStatus || "Scheduled"}
       />

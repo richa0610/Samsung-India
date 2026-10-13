@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { StyleSheet, View } from "react-native";
 
 import AppText from "@/components/ui/AppText";
+import { Colors } from "@/theme/colors";
 import { FontWeight } from "@/theme/fontWeight";
 
 type FilterFieldProps = {
@@ -27,7 +28,7 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     fontSize: 12,
-    color: "#1E293B",
+    color: Colors.black,
     letterSpacing: 0.3,
     marginBottom: 2,
   },

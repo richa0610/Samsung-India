@@ -21,8 +21,8 @@ import LoginHeroIllustration, { ILLUSTRATION_HEIGHT, ILLUSTRATION_WIDTH } from "
 /** How long each slide stays before the carousel moves on by itself. */
 export const SLIDE_INTERVAL_MS = 5000;
 const SIDE_PADDING = 24;
-/** Space under the dots before the banner fades into the page (the sky-blue swoosh sits here). */
-const BOTTOM_SPACE = 64;
+/** Space under the dots before the banner fades into the page (its curved edge sits here). */
+const BOTTOM_SPACE = 52;
 /** Layout of the banner, as fractions of the screen width (from the design): text on the left,
  *  the illustration on the right, never overlapping. */
 const TEXT_END = 0.53;
@@ -31,41 +31,44 @@ const ILLUSTRATION_END = 0.96;
 
 const slides = LOGIN_TEXT.slides;
 
-/** The banner's background: the design's blues (deep royal left, azure right, a lighter top-left,
- *  a sky glow low on the right), faint rings, and the sky-blue swoosh into the white page. */
+/** The banner's background, as in the design: deep royal blue at the bottom-left into the primary
+ *  blue at the top-right, a sky glow low on the right, faint rings, and a curved bottom edge
+ *  (lowest in the middle) with a sky-blue wave on the right and a light-blue fade into the page. */
 function HeroBackground({ width: W, height: H }: { width: number; height: number }) {
-  const swoosh =
-    `M0 ${H - 58} C ${W * 0.16} ${H - 32}, ${W * 0.32} ${H - 20}, ${W * 0.5} ${H - 18} ` +
-    `C ${W * 0.7} ${H - 16}, ${W * 0.84} ${H - 30}, ${W} ${H - 36} L ${W} ${H} L 0 ${H} Z`;
+  // The edge's left half, shared by the sky wave and the fade so they meet the blue in one line.
+  const edgeLeft = `M0 ${H - 42} C ${W * 0.2} ${H - 20}, ${W * 0.36} ${H - 10}, ${W * 0.55} ${H - 11}`;
+  const close = `L ${W} ${H} L 0 ${H} Z`;
+  // The sky wave rises to the right edge; the fade's top runs lower there, leaving a sky band.
+  const skyWave = `${edgeLeft} C ${W * 0.72} ${H - 12}, ${W * 0.86} ${H - 34}, ${W} ${H - 54} ${close}`;
+  const fade = `${edgeLeft} C ${W * 0.72} ${H - 11}, ${W * 0.86} ${H - 20}, ${W} ${H - 30} ${close}`;
   return (
     <Svg width={W} height={H} style={StyleSheet.absoluteFill}>
       <Defs>
-        <LinearGradient id="heroBase" x1="0" y1="0" x2="1" y2="0.25">
+        <LinearGradient id="heroBase" x1="0" y1="1" x2="1" y2="0">
           <Stop offset="0" stopColor={Colors.heroBlueDeep} />
-          <Stop offset="0.55" stopColor={Colors.heroBlueMid} />
-          <Stop offset="1" stopColor={Colors.heroBlueBright} />
+          <Stop offset="1" stopColor={Colors.primary} />
         </LinearGradient>
-        <RadialGradient id="heroTopLeft" cx="0" cy="0" rx={W * 0.75} ry={H * 0.55} gradientUnits="userSpaceOnUse">
-          <Stop offset="0" stopColor={Colors.heroBlueTopLeft} stopOpacity={0.9} />
-          <Stop offset="1" stopColor={Colors.heroBlueTopLeft} stopOpacity={0} />
-        </RadialGradient>
         <RadialGradient id="heroSky" cx={W * 0.96} cy={H * 0.8} rx={W * 0.5} ry={H * 0.42} gradientUnits="userSpaceOnUse">
           <Stop offset="0" stopColor={Colors.heroSkyGlow} stopOpacity={1} />
           <Stop offset="0.55" stopColor={Colors.heroSkyGlow} stopOpacity={0.45} />
           <Stop offset="1" stopColor={Colors.heroSkyGlow} stopOpacity={0} />
         </RadialGradient>
-        <LinearGradient id="heroSwoosh" x1="0" y1="0" x2="0" y2="1">
+        <LinearGradient id="heroSkyWave" x1="0.45" y1="0" x2="1" y2="0">
+          <Stop offset="0" stopColor={Colors.heroSkyGlow} stopOpacity={0} />
+          <Stop offset="1" stopColor={Colors.heroSkyGlow} stopOpacity={1} />
+        </LinearGradient>
+        <LinearGradient id="heroFade" x1="0" y1="0" x2="0.6" y2="1">
           <Stop offset="0" stopColor={Colors.heroWaveSky} />
-          <Stop offset="0.5" stopColor={Colors.heroWaveMist} />
-          <Stop offset="1" stopColor={Colors.white} />
+          <Stop offset="0.4" stopColor={Colors.heroWaveMist} />
+          <Stop offset="0.8" stopColor={Colors.white} />
         </LinearGradient>
       </Defs>
       <Rect width={W} height={H} fill="url(#heroBase)" />
-      <Rect width={W} height={H} fill="url(#heroTopLeft)" />
       <Rect width={W} height={H} fill="url(#heroSky)" />
       <Circle cx={W * 0.86} cy={H * 0.42} r={W * 0.36} fill="none" stroke={Colors.onHero} strokeWidth={1} opacity={0.12} />
       <Circle cx={W * 0.86} cy={H * 0.42} r={W * 0.5} fill="none" stroke={Colors.onHero} strokeWidth={1} opacity={0.07} />
-      <Path d={swoosh} fill="url(#heroSwoosh)" />
+      <Path d={skyWave} fill="url(#heroSkyWave)" />
+      <Path d={fade} fill="url(#heroFade)" />
     </Svg>
   );
 }
@@ -168,7 +171,7 @@ const styles = StyleSheet.create({
   slides: { marginTop: 40, marginLeft: SIDE_PADDING, flexGrow: 0 },
   slideBody: { marginTop: 10 },
   illustration: { position: "absolute" },
-  dots: { flexDirection: "row", justifyContent: "center", gap: 10, marginTop: 26 },
+  dots: { flexDirection: "row", justifyContent: "center", gap: 8, marginTop: 26 },
   dot: { width: 9, height: 9, borderRadius: 5, backgroundColor: Colors.onHeroFaint },
   dotActive: { backgroundColor: Colors.onHero },
 });

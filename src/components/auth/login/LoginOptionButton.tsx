@@ -21,7 +21,7 @@ export default function LoginOptionButton({ icon, label, onPress }: Props) {
       accessibilityRole="button"
       accessibilityLabel={label}
     >
-      <Ionicons name={icon} size={24} color={Colors.mainColour1} />
+      <Ionicons name={icon} size={26} color={Colors.loginAccent} />
       <View style={styles.separator} />
       <AppText
         variant="label"
@@ -44,8 +44,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
     height: 58,
-    paddingHorizontal: 16,
-    borderRadius: Radius.xxxl,
+    paddingHorizontal: 20,
+    borderRadius: Radius.xxl,
     borderWidth: 1,
     borderColor: Colors.surfaceBorder,
     backgroundColor: Colors.white,

@@ -12,6 +12,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.constants import DEFAULT_SESSION_TITLE
 from app.models.trainee import Trainee
 from app.repositories import (
     assessment_repository,
@@ -29,7 +30,7 @@ from app.schemas.session import (
     TrainingHistoryPage,
 )
 from app.services import session_service
-from app.services.module_flow import live_quiz_suite_uid
+from app.services.module_flow import live_quiz_suite_uid, scored_suite_uids
 from app.utils.date_utils import ist_now, utc_now
 from app.utils.status import title_status
 
@@ -61,32 +62,21 @@ def _avg_percent(rows: list) -> float | None:
     return (total / maximum) * 100 if maximum > 0 else None
 
 
-def _test_and_quiz_suites(conference) -> set[str]:
-    """The suites whose results count as marks: the conference's Standard Test
-    (postAssessmentUid) and its Live Quiz. Survey / pre-test never count."""
-    suites: set[str] = set()
-    if conference.postAssessmentUid:
-        suites.add(conference.postAssessmentUid)
-    quiz = live_quiz_suite_uid(conference)
-    if quiz:
-        suites.add(quiz)
-    return suites
-
-
 def _trainee_status_for(conference, attendance) -> str:
     """This trainee's own outcome for one conference - the status on each
     Training Details row, and what Training History's status filter matches,
     so the two can never disagree. (The Dashboard's metric cards group
     trainings differently - see _metric_card_for.)"""
     over = session_service._session_is_over(conference)
-    conf_live = title_status(conference.conferenceStatus) in ("Ongoing", "Live")
-    if attendance and attendance.status == "Present":
-        return "Completed" if over else ("Ongoing" if conf_live else "Scheduled")
-    if attendance and attendance.status == "Absent":
+    marked = attendance.status if attendance else None
+    if marked == "Present" and over:
+        return "Completed"
+    if marked == "Absent":
         return "Absent"
     if over:
         return "Missed"
-    if conf_live:
+    # Not over yet: Present or unmarked, the row follows the session's own state.
+    if title_status(conference.conferenceStatus) in ("Ongoing", "Live"):
         return "Ongoing"
     return "Scheduled"
 
@@ -149,7 +139,6 @@ class _OwnTrainings:
         self.results_by_conf: dict[str, list] = {}
         for row in self.result_rows:
             self.results_by_conf.setdefault(row.conferenceUid, []).append(row)
-        self.conf_uids = all_uids - dropped
         self.conferences_by_uid = {uid: c for uid, c in conferences.items() if uid not in dropped}
 
     def newest_first(self) -> list:
@@ -199,7 +188,7 @@ def build_trainee_dashboard(
     own = _OwnTrainings(db, trainee, start, end)
     attendance_rows, result_rows = own.attendance_rows, own.result_rows
     attendance_by_conf, results_by_conf = own.attendance_by_conf, own.results_by_conf
-    conf_uids, conferences_by_uid = own.conf_uids, own.conferences_by_uid
+    conferences_by_uid = own.conferences_by_uid
 
     # --- metrics: one card per training (see _metric_card_for) -------------
     cards = Counter(
@@ -212,7 +201,7 @@ def build_trainee_dashboard(
     #     trainee was actually marked Present at (a result without a Present
     #     attendance row doesn't count) ---
     my_suites = {
-        uid: _test_and_quiz_suites(conferences_by_uid[uid]) for uid in results_by_conf if uid in conferences_by_uid
+        uid: scored_suite_uids(conferences_by_uid[uid]) for uid in results_by_conf if uid in conferences_by_uid
     }
     present_conf_uids = {row.conferenceUid for row in attendance_rows if row.status == "Present"}
 
@@ -285,38 +274,48 @@ def _training_rows(db, trainee, ordered, attendance_by_conf, results_by_conf) ->
     session_rank = dashboard_repository.session_ranks(
         db, trainee.traineeUid, {conf.conferenceUid: conf.postAssessmentUid for conf in ordered if conf.postAssessmentUid}
     )
-
-    rows: list[DashboardTrainingRow] = []
-    for conf in ordered:
-        conf_results = results_by_conf.get(conf.conferenceUid, [])
-        by_suite = {r.assessmentSuiteUid: r for r in conf_results}
-
-        post = by_suite.get(conf.postAssessmentUid) if conf.postAssessmentUid else None
-        quiz_suite = live_quiz_suite_uid(conf)
-        quiz = by_suite.get(quiz_suite) if quiz_suite else None
-
-        # The trainee's own outcome for this training, not the raw conference
-        # lifecycle: a session that ran and ended while the trainee only
-        # "Joined" (never checked in) is "Missed" for them, not "Completed".
-        status = _trainee_status_for(conf, attendance_by_conf.get(conf.conferenceUid))
-
-        position = session_rank.get(conf.conferenceUid) if post else None
-        rank_label = str(position) if position is not None else None
-
-        started_at = _parse_date(conf.conferenceDate)
-        rows.append(
-            DashboardTrainingRow(
-                conferenceUid=conf.conferenceUid,
-                title=conf.suiteTitle or conf.trainingType or "Training Session",
-                date=started_at.strftime("%d %b %Y") if started_at else conf.conferenceDate,
-                rawDate=conf.conferenceDate,
-                day=started_at.strftime("(%a)") if started_at else None,
-                status=status,
-                postTestScore=_fmt_score(post.totalScore, post.maxScore) if post else None,
-                quizScore=_fmt_score(quiz.totalScore, quiz.maxScore) if quiz else None,
-                rank=rank_label,
-                rankScope="Session" if rank_label else None,
-            )
+    return [
+        _training_row(
+            conf, attendance_by_conf.get(conf.conferenceUid), results_by_conf.get(conf.conferenceUid, []), session_rank
         )
+        for conf in ordered
+    ]
 
-    return rows
+
+def _training_row(conf, attendance, conf_results, session_rank) -> DashboardTrainingRow:
+    """One training's row: the trainee's outcome, their Standard Test and Live Quiz scores, and their
+    rank in that Standard Test."""
+    by_suite = {r.assessmentSuiteUid: r for r in conf_results}
+    post = _result_for(by_suite, conf.postAssessmentUid)
+    quiz = _result_for(by_suite, live_quiz_suite_uid(conf))
+
+    # The trainee's own outcome for this training, not the raw conference
+    # lifecycle: a session that ran and ended while the trainee only
+    # "Joined" (never checked in) is "Missed" for them, not "Completed".
+    status = _trainee_status_for(conf, attendance)
+
+    position = session_rank.get(conf.conferenceUid) if post else None
+    rank_label = str(position) if position is not None else None
+
+    started_at = _parse_date(conf.conferenceDate)
+    return DashboardTrainingRow(
+        conferenceUid=conf.conferenceUid,
+        title=conf.suiteTitle or conf.trainingType or DEFAULT_SESSION_TITLE,
+        date=started_at.strftime("%d %b %Y") if started_at else conf.conferenceDate,
+        rawDate=conf.conferenceDate,
+        day=started_at.strftime("(%a)") if started_at else None,
+        status=status,
+        postTestScore=_score_label(post),
+        quizScore=_score_label(quiz),
+        rank=rank_label,
+        rankScope="Session" if rank_label else None,
+    )
+
+
+def _result_for(by_suite: dict, suite_uid: Optional[str]):
+    """This training's result for one module's question set, if the module has one."""
+    return by_suite.get(suite_uid) if suite_uid else None
+
+
+def _score_label(result) -> Optional[str]:
+    return _fmt_score(result.totalScore, result.maxScore) if result else None

@@ -5,7 +5,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { AdminAccessScope, fetchAdminAccessScope } from "@/api/admin";
 import { AdminFilters, monthToDateAdminFilters } from "@/api/adminFilters";
 import { fetchSessionTypes, fetchTrainers, fetchTrainingTypes } from "@/api/training";
-import { REGIONS_BY_ZONE, ZONES } from "@/components/training/add-training/constants";
+import { ZONES, regionsForZone } from "@/components/training/add-training/constants";
+import { zoneKey } from "@/utils/zones";
 import { MonthCard, useMonthYear } from "@/components/calendar/date-range";
 import { MONTH_NAMES } from "@/components/calendar/calendarUtils";
 import { formatDate, displayDate } from "@/components/training/add-training/formatting";
@@ -87,13 +88,13 @@ export default function AdminFilterBar({
   // "not restricted" - keep every zone/region option. A list narrows to just those.
   const zoneOptions = useMemo(() => {
     if (!accessScope?.zones) return ZONES;
-    const allowed = new Set(accessScope.zones);
-    return ZONES.filter((zone) => allowed.has(zone.trim().toLowerCase()));
+    const allowed = new Set(accessScope.zones.map(zoneKey));
+    return ZONES.filter((zone) => allowed.has(zoneKey(zone)));
   }, [accessScope]);
 
   const regionOptions = useMemo(() => {
     const zones = draft.zones.length ? draft.zones : zoneOptions;
-    let regions = Array.from(new Set(zones.flatMap((zone) => REGIONS_BY_ZONE[zone] ?? [])));
+    let regions = Array.from(new Set(zones.flatMap(regionsForZone)));
     if (accessScope?.regions) {
       const allowed = new Set(accessScope.regions);
       regions = regions.filter((region) => allowed.has(region.trim().toLowerCase()));

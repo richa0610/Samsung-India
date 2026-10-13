@@ -9,12 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.repositories import assessment_repository, attendance_repository, conference_repository
 from app.schemas.session import DashboardTrainingRow
-from app.services.module_flow import live_quiz_suite_uid
+from app.services.module_flow import live_quiz_suite_uid, scored_suite_uids as _test_and_quiz_suites
 from app.services.trainee_dashboard_service import (
     _fmt_score,
     _num,
     _parse_date,
-    _test_and_quiz_suites,
     _trainee_status_for,
 )
 from app.utils.status import title_status

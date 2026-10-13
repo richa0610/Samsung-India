@@ -20,6 +20,9 @@ import {
 export type SecurityCheckInViewProps = {
   onProceed: (photoSource: ImageSourcePropType) => void;
   onBack?: () => void;
+  /** The tenant's setting (a Super Admin's choice): run the face check before the photo, or just
+   *  capture it. On unless told otherwise. */
+  faceDetection?: boolean;
 };
 
 // How long to let the camera session settle after the live face-detector
@@ -28,7 +31,7 @@ export type SecurityCheckInViewProps = {
 // from capturePhotoToFile if the shutter fires mid-reconfiguration.
 const DETACH_SETTLE_MS = 350;
 
-export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewProps) {
+export default function SecurityCheckInView({ onProceed, faceDetection = true }: SecurityCheckInViewProps) {
   const insets = useSafeAreaInsets();
   const {
     hasPermission,
@@ -45,8 +48,10 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
     handleRetake,
   } = useSecurityCheckIn();
 
-  // Runs only while there's no photo yet - stops (and re-arms on retake) otherwise.
-  const liveness = useFaceLivenessGate({ active: hasPermission && !hasPhoto });
+  // Runs only while the face check is on and there's no photo yet - stops (and re-arms on retake)
+  // otherwise. With the face check off, the detector is never attached and Capture is open at once.
+  const liveness = useFaceLivenessGate({ active: faceDetection && hasPermission && !hasPhoto });
+  const watchingFace = faceDetection && !hasPhoto;
 
   // True only for the brief window between tapping Capture and the shutter
   // actually firing - see DETACH_SETTLE_MS above for why the detector output
@@ -66,6 +71,10 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
   };
 
   const handleSecureCapture = async () => {
+    if (!faceDetection) {
+      await handleCapture();
+      return;
+    }
     if (!liveness.verified) return;
     setDetachingForCapture(true);
     await new Promise((resolve) => setTimeout(resolve, DETACH_SETTLE_MS));
@@ -79,6 +88,7 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
   // doesn't show exactly one face (e.g. the camera was nudged during the
   // DETACH_SETTLE_MS settle window).
   useEffect(() => {
+    if (!faceDetection) return;
     if (!hasPhoto || !photoSource || typeof photoSource !== "object" || !("uri" in photoSource)) return;
     const uri = (photoSource as { uri: string }).uri;
     if (checkedPhotoUriRef.current === uri) return;
@@ -100,7 +110,7 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleRetakeAndReset/liveness identity isn't the trigger, the captured uri is
-  }, [hasPhoto, photoSource]);
+  }, [faceDetection, hasPhoto, photoSource]);
 
   return (
     <SafeAreaView style={styles.container} edges={["top", "bottom"]}>
@@ -129,9 +139,9 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
             // only detached for the brief DETACH_SETTLE_MS window around the
             // actual shutter call (see handleSecureCapture and the device
             // stream-limit note there).
-            extraOutputs={!hasPhoto && !detachingForCapture ? [liveness.faceDetectorOutput] : undefined}
+            extraOutputs={watchingFace && !detachingForCapture ? [liveness.faceDetectorOutput] : undefined}
             overlay={
-              !hasPhoto && (
+              watchingFace && (
                 <LivenessInstructionOverlay
                   step={liveness.step}
                   instruction={liveness.instruction}
@@ -146,7 +156,7 @@ export default function SecurityCheckInView({ onProceed }: SecurityCheckInViewPr
             <NoPhotoControls
               capturing={capturing || detachingForCapture}
               onCapture={handleSecureCapture}
-              disabled={!liveness.verified}
+              disabled={faceDetection && !liveness.verified}
             />
           ) : (
             <PhotoCapturedControls onRetake={handleRetakeAndReset} onProceed={handleProceedPress} />

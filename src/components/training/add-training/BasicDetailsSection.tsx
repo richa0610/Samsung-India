@@ -4,7 +4,6 @@ import AppCard from "@/components/ui/AppCard";
 import AppInput from "@/components/ui/AppInput";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { SectionTitle } from "./SectionTitle";
-import { REGIONS_BY_ZONE, ZONES } from "./constants";
 import { AddTrainingForm } from "./useAddTrainingForm";
 
 export function BasicDetailsSection({ form }: { form: AddTrainingForm }) {
@@ -18,7 +17,7 @@ export function BasicDetailsSection({ form }: { form: AddTrainingForm }) {
         placeholder="Select Zone"
         icon="location-outline"
         value={form.zone}
-        options={ZONES.map((z) => ({ label: z, value: z }))}
+        options={form.zoneOptions}
         onSelect={(option) => {
           form.setZone(option.value);
           form.setRegion("");
@@ -31,7 +30,7 @@ export function BasicDetailsSection({ form }: { form: AddTrainingForm }) {
         placeholder={form.zone ? "Select Region" : "Select Zone First"}
         icon="globe-outline"
         value={form.region}
-        options={(REGIONS_BY_ZONE[form.zone] ?? []).map((r) => ({ label: r, value: r }))}
+        options={form.regionOptions}
         onSelect={(option) => form.setRegion(option.value)}
         disabled={!form.zone}
       />

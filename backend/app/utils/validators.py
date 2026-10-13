@@ -1,69 +1,51 @@
+from fastapi import UploadFile
+
 from app.core.exceptions import bad_request
 from app.core.media import (
-    ALLOWED_AADHAR_CONTENT_TYPES,
     ALLOWED_DOCUMENT_CONTENT_TYPES,
-    ALLOWED_IMAGE_CONTENT_TYPES,
-    ALLOWED_PROFILE_PHOTO_CONTENT_TYPES,
+    ALLOWED_PHOTO_CONTENT_TYPES,
+    FILE_SIGNATURES,
     MAX_UPLOAD_BYTES,
 )
 
 
-def _validate_upload(
-    content_type: str | None,
-    contents: bytes,
+async def _read_upload(
+    file: UploadFile,
     allowed: dict[str, str],
     *,
     type_error: str,
     size_error_detail: str,
-) -> str:
-    extension = allowed.get(content_type or "")
+) -> tuple[bytes, str]:
+    """Reads an upload and returns (contents, file extension) once it is one of `allowed`'s types -
+    by the type the client declares AND by the file's own first bytes - and at most 5MB. Never
+    reads more than one byte past the limit, so an oversized upload can't fill the server's memory."""
+    content_type = file.content_type or ""
+    extension = allowed.get(content_type)
     if not extension:
         raise bad_request(type_error)
 
+    contents = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(contents) > MAX_UPLOAD_BYTES:
         raise bad_request(size_error_detail)
+    if not contents.startswith(FILE_SIGNATURES[content_type]):
+        raise bad_request(type_error)
 
-    return extension
+    return contents, extension
 
 
-def validate_image_upload(content_type: str | None, contents: bytes, *, size_error_detail: str) -> str:
-    """Shared JPEG/PNG/WEBP content-type + 5MB size check used by every
-    camera-captured photo-upload endpoint (secure check-in, attendance).
-    Returns the file extension to save with. `size_error_detail` lets each
-    call site keep its own wording (e.g. "Photo" vs "Image")."""
-    return _validate_upload(
-        content_type, contents, ALLOWED_IMAGE_CONTENT_TYPES,
-        type_error="Only JPEG, PNG or WEBP images are allowed",
+async def read_photo_upload(file: UploadFile, *, size_error_detail: str) -> tuple[bytes, str]:
+    """A photo: profile picture, check-in or training start/end photo - JPEG only."""
+    return await _read_upload(
+        file, ALLOWED_PHOTO_CONTENT_TYPES,
+        type_error="Only JPG photos are allowed",
         size_error_detail=size_error_detail,
     )
 
 
-def validate_profile_photo_upload(content_type: str | None, contents: bytes, *, size_error_detail: str) -> str:
-    """JPEG/PNG/GIF content-type + 5MB check for trainer/trainee profile
-    picture uploads - a deliberately different (and narrower) list from
-    validate_image_upload's, which stays WEBP-inclusive for camera
-    captures rather than gallery picks."""
-    return _validate_upload(
-        content_type, contents, ALLOWED_PROFILE_PHOTO_CONTENT_TYPES,
-        type_error="Only JPEG, PNG or GIF images are allowed",
-        size_error_detail=size_error_detail,
-    )
-
-
-def validate_document_upload(content_type: str | None, contents: bytes, *, size_error_detail: str) -> str:
-    """PDF or image (JPEG/PNG/WEBP) + 5MB check for the attendance-sheet upload
-    at session check-out. Returns the extension to save with."""
-    return _validate_upload(
-        content_type, contents, ALLOWED_DOCUMENT_CONTENT_TYPES,
-        type_error="Attendance sheet must be a PDF or an image (JPEG/PNG/WEBP)",
-        size_error_detail=size_error_detail,
-    )
-
-
-def validate_aadhar_upload(content_type: str | None, contents: bytes, *, size_error_detail: str) -> str:
-    """JPEG/PNG/PDF/DOC/DOCX + 5MB check for the trainer's Aadhaar upload."""
-    return _validate_upload(
-        content_type, contents, ALLOWED_AADHAR_CONTENT_TYPES,
-        type_error="Aadhaar file must be a JPEG, PNG, PDF or Word document",
+async def read_document_upload(file: UploadFile, *, size_error_detail: str) -> tuple[bytes, str]:
+    """A document: the Aadhaar card or the signed attendance sheet - JPEG or PDF."""
+    return await _read_upload(
+        file, ALLOWED_DOCUMENT_CONTENT_TYPES,
+        type_error="Only JPG or PDF files are allowed",
         size_error_detail=size_error_detail,
     )

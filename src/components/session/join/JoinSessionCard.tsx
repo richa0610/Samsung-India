@@ -59,8 +59,8 @@ const styles = StyleSheet.create({
   },
   details: { flexDirection: "row", flexWrap: "wrap", rowGap: 20 },
   detail: { width: "50%" },
-  label: { fontSize: 13, color: "#505050", marginBottom: 6 },
-  value: { fontSize: 15, color: "#303030", fontWeight: "bold" },
+  label: { fontSize: 13, color: Colors.gray600, marginBottom: 6 },
+  value: { fontSize: 15, color: Colors.black, fontWeight: "bold" },
   joinButton: {
     backgroundColor: Colors.mainColour1,
     height: 48,
@@ -74,6 +74,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     textDecorationLine: "underline",
     fontSize: 13,
-    color: "#4D4D4D",
+    color: Colors.gray600,
   },
 });

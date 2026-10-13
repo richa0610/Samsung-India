@@ -30,7 +30,16 @@ class TraineeRegister(BaseModel):
 
 
 class TraineeLogin(BaseModel):
-    phone: int
+    # What the trainee typed into "Company ID / Phone No": their Trainee UID, username or phone number.
+    identifier: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("identifier")
+    @classmethod
+    def identifier_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Enter your Company ID or Phone No")
+        return value.strip()
 
 
 class TraineeUpdate(BaseModel):

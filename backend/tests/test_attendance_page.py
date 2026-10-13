@@ -1,4 +1,4 @@
-"""Admin attendance list, server-side paging (training_service.list_attendance_page).
+"""Admin attendance list, server-side paging (training.listing.list_attendance_page).
 
 The oracle is `tests/_legacy_attendance.py` - a verbatim copy of the original
 `list_attendance`, which loads everything and builds every row in Python. The new
@@ -19,12 +19,13 @@ from sqlalchemy.pool import StaticPool
 
 from app.database.connection import TenantBase
 from app.dependencies.filters import ConferenceFilters
+from app.dependencies.paging import PageRequest
 from app.models import *  # noqa: F401,F403 - registers every table
 from app.models.attendance import Attendance
 from app.models.conference import Conference
 from app.models.quiz import AssessmentResult
 from app.models.trainee import Trainee
-from app.services import training_service
+from app.services.training import listing
 from tests._legacy_attendance import legacy_list_attendance
 
 EPOCH = datetime(1970, 1, 1)
@@ -41,7 +42,7 @@ class AttendancePageTestCase(unittest.TestCase):
         # The models fill a missing UID with a MySQL-only statement; leave it empty
         # instead, so some fixture attendance rows really have no attendanceUid
         # (the list then shows the row id).
-        stub = patch("app.models.uid_events.next_uid", lambda connection, prefix: None)
+        stub = patch("app.models.uid_events.next_uid", return_value=None)
         stub.start()
         self.addCleanup(stub.stop)
         self.engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
@@ -146,7 +147,9 @@ class AttendancePageTestCase(unittest.TestCase):
         # admin=None: this file tests query equivalence, not authorization (no admin_access
         # fixture here) - it deliberately skips scope resolution, the same way
         # test_org_training_list.py's direct call to list_trainings_page does.
-        return training_service.list_attendance_page(self.db, None, filters, mode, search, sort, descending, cursor, limit, page)
+        return listing.list_attendance_page(
+            self.db, None, filters, mode, search, sort, descending, PageRequest(cursor, limit, page)
+        )
 
     def walk(self, filters, mode="all", search=None, sort="markedAt", descending=True, limit=10, by="page"):
         items, cursor, page, total = [], None, 1, None
@@ -263,14 +266,15 @@ class OrderingAndPagingTests(AttendancePageTestCase):
         self.assertEqual((response.total, response.page, response.totalPages), (len(expected), last, last))
 
     def test_invalid_cursors_return_400(self):
-        good = self.page_call(ConferenceFilters(), limit=5).nextCursor
+        no_filters = ConferenceFilters()
+        good = self.page_call(no_filters, limit=5).nextCursor
         for bad in ("not-a-cursor", "e30=", good[:-4], "!!!"):
             with self.subTest(cursor=bad):
                 with self.assertRaises(HTTPException) as caught:
-                    self.page_call(ConferenceFilters(), cursor=bad)
+                    self.page_call(no_filters, cursor=bad)
                 self.assertEqual(caught.exception.status_code, 400)
         with self.assertRaises(HTTPException) as caught:  # a cursor from another sort order
-            self.page_call(ConferenceFilters(), sort="region", cursor=good)
+            self.page_call(no_filters, sort="region", cursor=good)
         self.assertEqual(caught.exception.status_code, 400)
 
 

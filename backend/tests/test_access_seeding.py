@@ -38,7 +38,7 @@ def mem():
 class SeedingWorld(unittest.TestCase):
     def setUp(self):
         # the models fill a missing UID with a MySQL-only statement; leave it empty in SQLite tests
-        stub = patch("app.models.uid_events.next_uid", lambda connection, prefix: None)
+        stub = patch("app.models.uid_events.next_uid", return_value=None)
         stub.start()
         self.addCleanup(stub.stop)
         self.common_engine, self.tenant_engine = self.make_engines()
@@ -222,15 +222,15 @@ class ReadOnlyTests(SeedingWorld):
         self.common_engine.dispose()
         session = sessionmaker(bind=self.common_engine)()
         session.add(Admin(adminUid="x", username="x", password="x", role="admin"))
-        with self.assertRaises(Exception) as caught:
+        # The guard's own refusal, not just any error: SQLite's query_only would also reject these,
+        # so a bare Exception would still pass with the guard removed.
+        with self.assertRaisesRegex(RuntimeError, "non-read statement"):
             session.commit()
-        self.assertIn("non-read statement", str(caught.exception))
         session.rollback()
         with self.common_engine.connect() as conn:
-            with self.assertRaises(Exception):
-                conn.execute(text("UPDATE admin SET company = 'x'"))
-            with self.assertRaises(Exception):
-                conn.execute(text("DELETE FROM admin"))
+            for statement in (text("UPDATE admin SET company = 'x'"), text("DELETE FROM admin")):
+                with self.subTest(str(statement)), self.assertRaisesRegex(RuntimeError, "non-read statement"):
+                    conn.execute(statement)
 
 
 class ReadOnlyGuardTests(unittest.TestCase):

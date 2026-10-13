@@ -8,11 +8,11 @@ from app.database.connection import SAFE_ENGINE_OPTIONS, build_connect_args
 
 COMMON_DATABASE_URL = URL.create(
     drivername="mysql+pymysql",
-    username=settings.common_db_user,
-    password=settings.common_db_password,
-    host=settings.common_db_host,
-    port=settings.common_db_port,
-    database=settings.common_db_name,
+    username=settings.resolved_common_db_user,
+    password=settings.resolved_common_db_password,
+    host=settings.resolved_common_db_host,
+    port=settings.resolved_common_db_port,
+    database=settings.resolved_common_db_name,
 )
 
 common_engine = create_engine(

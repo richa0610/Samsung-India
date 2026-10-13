@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictBool
 
 
 class AdminLoginRequest(BaseModel):
@@ -124,3 +124,15 @@ class AdminDashboardStatsOut(BaseModel):
     audience: AudienceStatsOut
     trainers: TrainerStatsOut
     assessment: AssessmentStatsOut
+
+
+class CheckInSettingsOut(BaseModel):
+    """The tenant's trainee security check-in settings. `faceDetectionEnabled`: the face check
+    runs before the photo (true) or the photo is just captured (false)."""
+
+    faceDetectionEnabled: bool
+
+
+class CheckInSettingsUpdate(BaseModel):
+    # A real JSON true/false only - "yes" / 1 / "on" are refused rather than guessed at.
+    faceDetectionEnabled: StrictBool

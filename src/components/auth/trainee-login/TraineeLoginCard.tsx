@@ -1,6 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-native";
-import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 
 import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
@@ -10,13 +9,12 @@ import { Radius } from "@/theme/radius";
 import { createShadow } from "@/theme/shadows";
 import { Spacing } from "@/theme/spacing";
 import { FontWeight } from "@/theme/typography";
-import { digitsOnly } from "@/utils/validation";
 
 const cardShadow = createShadow({
   x: 0,
   y: 6,
   blur: 18,
-  color: Colors.authButtonStart,
+  color: Colors.authBrandDeep,
   opacity: 0.08,
   elevation: 4,
 });
@@ -68,11 +66,13 @@ export default function TraineeLoginCard({
           icon="business-outline"
           value={phone}
           onChangeText={(value) => {
-            setPhone(digitsOnly(value).slice(0, 10));
+            // A Company ID (Trainee UID, e.g. TRN2610001) has letters, so not digits-only.
+            setPhone(value.replace(/\s/g, ""));
             if (error) setError(null);
           }}
-          keyboardType="number-pad"
-          maxLength={10}
+          autoCapitalize="none"
+          autoCorrect={false}
+          maxLength={100}
           placeholderTextColor={Colors.authPlaceholder}
           labelColor={Colors.authLabel}
           containerStyle={styles.field}
@@ -104,7 +104,7 @@ export default function TraineeLoginCard({
         accessibilityRole="button"
         accessibilityLabel={STAFF_LOGIN_TEXT.forgot}
       >
-        <AppText color={Colors.primary} weight={FontWeight.medium} style={styles.forgotText}>
+        <AppText color={Colors.authBrandDeep} weight={FontWeight.medium} style={styles.forgotText}>
           {STAFF_LOGIN_TEXT.forgot}
         </AppText>
       </Pressable>
@@ -116,7 +116,7 @@ export default function TraineeLoginCard({
         </AppText>
       )}
 
-      {/* Submit Button with Gradient */}
+      {/* Submit Button */}
       <Pressable
         onPress={onSubmit}
         disabled={loading}
@@ -125,15 +125,6 @@ export default function TraineeLoginCard({
         accessibilityLabel="Login as Trainee"
         accessibilityState={{ busy: loading, disabled: loading }}
       >
-        <Svg style={StyleSheet.absoluteFill} pointerEvents="none">
-          <Defs>
-            <LinearGradient id="traineeSubmit" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0" stopColor={Colors.authButtonStart} />
-              <Stop offset="1" stopColor={Colors.authButtonEnd} />
-            </LinearGradient>
-          </Defs>
-          <Rect width="100%" height="100%" rx={Radius.xxl} fill="url(#traineeSubmit)" />
-        </Svg>
         {loading ? (
           <ActivityIndicator color={Colors.white} />
         ) : (
@@ -158,7 +149,7 @@ export default function TraineeLoginCard({
         >
           <AppText color={Colors.gray600} style={styles.registerPrompt}>
             New User ?{" "}
-            <AppText color={Colors.primary} weight={FontWeight.semiBold} style={styles.registerLink}>
+            <AppText color={Colors.authBrandDeep} weight={FontWeight.semiBold} style={styles.registerLink}>
               Register
             </AppText>
           </AppText>
@@ -214,6 +205,7 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     height: 50,
+    backgroundColor: Colors.authBrandDeep,
     borderRadius: Radius.xxl,
     overflow: "hidden",
     justifyContent: "center",

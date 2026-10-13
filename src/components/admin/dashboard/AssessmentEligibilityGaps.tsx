@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   sectionTitle: {
-    color: "#64748B",
+    color: Colors.gray500,
     fontSize: 13.5,
   },
   itemRow: {

@@ -28,6 +28,8 @@ export default function UnlockExamModal({ participant, onCancel, onConfirm }: Un
     onConfirm(trimmed);
   };
 
+  const lock = participant?.proctoring;
+
   return (
     <AppModal
       visible={!!participant}
@@ -39,6 +41,14 @@ export default function UnlockExamModal({ participant, onCancel, onConfirm }: Un
         <Ionicons name="warning" size={16} color={Colors.warning} />
         <AppText style={styles.title}>UNLOCK EXAM FOR : {participant?.name}</AppText>
       </View>
+
+      {lock && (
+        <AppText style={styles.limitNote}>
+          Only {lock.maxUnlocks} unlocks are allowed per trainee in a training. This is unlock{" "}
+          {lock.unlocksUsed + 1} of {lock.maxUnlocks}
+          {lock.unlocksUsed + 1 >= lock.maxUnlocks ? " - after this, they can't be unlocked again." : "."}
+        </AppText>
+      )}
 
       <AppText style={styles.label}>Please enter reason:</AppText>
       <TextInput
@@ -64,16 +74,17 @@ export default function UnlockExamModal({ participant, onCancel, onConfirm }: Un
 
 const styles = StyleSheet.create({
   sheet: {
-    backgroundColor: "#1F2530",
+    backgroundColor: Colors.black,
     borderRadius: 12,
     padding: 18,
     width: "88%",
   },
   header: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
   title: { flex: 1, fontSize: 14, fontWeight: "800", color: Colors.gray100, lineHeight: 19 },
+  limitNote: { fontSize: 12, lineHeight: 17, color: Colors.warning, marginTop: 12 },
   label: { fontSize: 12, color: Colors.gray300, marginTop: 18, marginBottom: 8 },
   input: {
-    backgroundColor: "#343B47",
+    backgroundColor: Colors.gray700,
     borderRadius: 8,
     minHeight: 44,
     paddingHorizontal: 12,

@@ -37,9 +37,10 @@ beforeEach(() => {
 test("renders the brand, hero text, trainee login card, and security badge", async () => {
   await render(<TraineeLoginScreen />);
 
-  expect(screen.getByText("TOPS")).toBeTruthy();
+  expect(screen.getByLabelText("TOPS")).toBeTruthy();
   expect(screen.queryByText("INDIA")).toBeNull();
   expect(screen.getByText("Skip")).toBeTruthy();
+
 
   expect(screen.getByText("Learn.")).toBeTruthy();
   expect(screen.getByText("Assess.")).toBeTruthy();
@@ -88,9 +89,32 @@ test("successfully signs in a trainee with company id / phone", async () => {
   await fireEvent.press(submitButton);
 
   await waitFor(() => {
-    expect(mockLogin).toHaveBeenCalledWith("9876543210");
+    expect(mockLogin).toHaveBeenCalledWith("9876543210", "password123");
   });
   expect(mockSetSession).toHaveBeenCalled();
   expect(mockRouter.replace).toHaveBeenCalledWith("/session_detail");
+});
+
+test("a Company ID with letters is kept as typed and sent with the password", async () => {
+  mockLogin.mockRejectedValueOnce(new Error("offline"));
+  await render(<TraineeLoginScreen />);
+
+  await fireEvent.changeText(screen.getByPlaceholderText("Enter Company ID or Phone No"), " TRN2610001 ");
+  await fireEvent.changeText(screen.getByPlaceholderText("Enter password"), "secret");
+  await fireEvent.press(screen.getByLabelText("Login as Trainee"));
+
+  await waitFor(() => {
+    expect(mockLogin).toHaveBeenCalledWith("TRN2610001", "secret");
+  });
+});
+
+test("the password is required", async () => {
+  await render(<TraineeLoginScreen />);
+
+  await fireEvent.changeText(screen.getByPlaceholderText("Enter Company ID or Phone No"), "9876543210");
+  await fireEvent.press(screen.getByLabelText("Login as Trainee"));
+
+  expect(await screen.findByText("Enter your password")).toBeTruthy();
+  expect(mockLogin).not.toHaveBeenCalled();
 });
 

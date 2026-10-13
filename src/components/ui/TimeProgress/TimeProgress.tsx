@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   time: {
     fontSize: 17.5,
     lineHeight: 21,
-    color: "#000000",
+    color: Colors.black,
     letterSpacing: 0.2,
   },
   label: {

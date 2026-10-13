@@ -12,14 +12,14 @@ Rules (see the approved Phase C plan):
 
 WIRING STATUS: two approved uses so far, both scoped to one conference at a time or one query at
 a time - never a blanket switch.
-  - `training_service._get_owned_conference` (and `live_quiz_service._owned_live_conference`)
+  - `training.common.owned_conference` (and `live_quiz_service._owned_live_conference`)
     call `resolve_scope` so an admin-table account can start/operate a conference - and its
     modules, attendance, live quiz, edits, approvals, detail, report, dashboard, performers -
     inside their granted scope, the same as the assigned trainer (the approved "admin can start
     training like trainers" change, later widened to the read/edit endpoints around the same
     conference in the Training List RBAC task's Phase 2).
   - `dashboard_repository.access_scope_conditions` turns an `AccessScope` into SQL conditions, so
-    the admin Training List (`training_service.list_trainings_page`) and the admin Attendance
+    the admin Training List (`training.listing.list_trainings_page`) and the admin Attendance
     List (`list_attendance_page`, and the non-paged `list_attendance(org=True)` via
     `AccessScope.allows_row` in Python) are scoped at the query level - count, search, sort,
     paging, export all included (the Training List RBAC task's Phases 1 and 4).
@@ -51,6 +51,7 @@ from app.core.exceptions import forbidden
 from app.models.admin import Admin
 from app.models.admin_access import AdminAccess
 from app.models.agency_team import AgencyTeam
+from app.utils.zones import zone_key, zone_spellings
 
 
 class AccessRole(str, enum.Enum):
@@ -87,7 +88,8 @@ def company_admin_key(tenant_uid: str, company: str) -> str:
 @dataclass(frozen=True)
 class ScopeRule:
     """One slice of data: a company, optionally narrowed to a zone and/or a region.
-    `None` means "any". A row with a blank zone never matches a rule that names a zone."""
+    `None` means "any". A row with a blank zone never matches a rule that names a zone. Zones
+    compare by `zone_key`, so a "North Zone" grant covers a training saved as "North"."""
 
     company: str
     zone: Optional[str] = None
@@ -96,7 +98,7 @@ class ScopeRule:
     def matches(self, company: Optional[str], zone: Optional[str], region: Optional[str]) -> bool:
         return (
             norm(company) == self.company
-            and (self.zone is None or norm(zone) == self.zone)
+            and (self.zone is None or zone_key(zone) == zone_key(self.zone))
             and (self.region is None or norm(region) == self.region)
         )
 
@@ -205,46 +207,58 @@ def _resolve_admin(common_db: Session, admin: Admin, tenant: str) -> AccessScope
         .all()
     )
     account_role = norm(admin.role)  # "admin" (admin panel) or "trainer"
+    grants = [grant for grant in (_row_grant(row, account_role, tenant) for row in rows) if grant is not None]
 
-    roles: list[AccessRole] = []
-    rules: list[ScopeRule] = []
-    is_super = False
-    for row in rows:
-        try:
-            role = AccessRole(row.role)
-        except ValueError:
-            continue  # unknown role text: ignore the grant
-        # Defence in depth against a mistaken grant: an admin-panel grant only counts on an
-        # account whose role is "admin", and a trainer grant only on a "trainer" account.
-        if (role in _ADMIN_PANEL_ROLES) != (account_role == "admin"):
-            continue
-        if role == AccessRole.SUPER_ADMIN:
-            if row.tenant_uid is not None:
-                continue  # a super admin grant is global by definition; a tenant-tagged one is malformed
-            is_super = True
-        elif row.tenant_uid != tenant:
-            continue  # a tenant-less row is only valid for a super admin
-        elif role == AccessRole.COMPANY_ADMIN and norm(row.company):
-            rules.append(ScopeRule(norm(row.company)))
-        elif role == AccessRole.COORDINATOR and norm(row.company) and norm(row.zone):
-            rules.append(ScopeRule(norm(row.company), zone=norm(row.zone)))
-        elif role == AccessRole.SUB_COORDINATOR and norm(row.company) and norm(row.region):
-            rules.append(ScopeRule(norm(row.company), region=norm(row.region)))
-        elif role != AccessRole.TRAINER:
-            continue  # required fields missing: ignore the grant
-        roles.append(role)
-
-    if not roles:
+    if not grants:
         return AccessScope.denied(tenant, "no grant for this tenant")
+    roles = [role for role, _ in grants]
+    rules = [rule for _, rule in grants if rule is not None]
     top = max(roles, key=lambda r: _RANK[r])
     return AccessScope(
         True,
         tenant,
         top,
-        is_super=is_super,
+        is_super=AccessRole.SUPER_ADMIN in roles,
         rules=tuple(dict.fromkeys(rules)),  # de-duplicated, order kept
         trainer_username=admin.username if top == AccessRole.TRAINER else None,
     )
+
+
+def _row_grant(row: AdminAccess, account_role: str, tenant: str) -> Optional[tuple[AccessRole, Optional[ScopeRule]]]:
+    """What one admin_access row grants in `tenant`: its role, and the data slice it adds (None for
+    a Super Admin or a trainer, who aren't company-scoped) - or None when the row doesn't count."""
+    try:
+        role = AccessRole(row.role)
+    except ValueError:
+        return None  # unknown role text: ignore the grant
+    # Defence in depth against a mistaken grant: an admin-panel grant only counts on an
+    # account whose role is "admin", and a trainer grant only on a "trainer" account.
+    if (role in _ADMIN_PANEL_ROLES) != (account_role == "admin"):
+        return None
+    if role == AccessRole.SUPER_ADMIN:
+        # A super admin grant is global by definition; a tenant-tagged one is malformed.
+        return (role, None) if row.tenant_uid is None else None
+    if row.tenant_uid != tenant:
+        return None  # a tenant-less row is only valid for a super admin
+    if role == AccessRole.TRAINER:
+        return role, None
+    rule = _scope_rule(role, row)
+    return (role, rule) if rule is not None else None  # required fields missing: ignore the grant
+
+
+def _scope_rule(role: AccessRole, row: AdminAccess) -> Optional[ScopeRule]:
+    """The company / zone / region slice an admin-panel grant covers, or None when a field it
+    needs is blank."""
+    company = norm(row.company)
+    if not company:
+        return None
+    if role == AccessRole.COMPANY_ADMIN:
+        return ScopeRule(company)
+    if role == AccessRole.COORDINATOR and zone_key(row.zone):
+        return ScopeRule(company, zone=zone_key(row.zone))
+    if role == AccessRole.SUB_COORDINATOR and norm(row.region):
+        return ScopeRule(company, region=norm(row.region))
+    return None
 
 
 def scope_summary(scope: AccessScope) -> dict:
@@ -255,15 +269,20 @@ def scope_summary(scope: AccessScope) -> dict:
 
     `None` for zones/regions means "not restricted on that axis" (a Company Admin sees every
     zone and region in their company; a Coordinator's zone rule carries no region, so they see
-    every region within it). A list means "only these". Values are already the lower-cased,
-    trimmed form `ConferenceFilters` sends on the wire, so a caller can compare them directly
-    against a query param without re-normalizing."""
+    every region within it). A list means "only these". Values are the lower-cased, trimmed form
+    `ConferenceFilters` sends on the wire; a zone is listed in both its spellings ("north",
+    "north zone"), so an app build comparing either one - older builds look for "north zone" -
+    finds it (src/utils/zones.ts)."""
     if not scope.allowed:
         return {"allowed": False, "isSuper": False, "role": None, "zones": [], "regions": []}
     role = scope.role.value if scope.role else None
     if scope.is_super:
         return {"allowed": True, "isSuper": True, "role": role, "zones": None, "regions": None}
-    zones = None if any(rule.zone is None for rule in scope.rules) else sorted({rule.zone for rule in scope.rules if rule.zone})
+    zones = (
+        None
+        if any(rule.zone is None for rule in scope.rules)
+        else sorted({spelling for rule in scope.rules if rule.zone for spelling in zone_spellings(rule.zone)})
+    )
     regions = (
         None if any(rule.region is None for rule in scope.rules) else sorted({rule.region for rule in scope.rules if rule.region})
     )

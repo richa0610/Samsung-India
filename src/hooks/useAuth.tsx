@@ -5,8 +5,6 @@ import * as SecureStore from "expo-secure-store";
 import { AdminAccount, AdminAuthSession, logoutAdmin } from "@/api/admin";
 import { AuthSession, Trainee, logoutTrainee } from "@/api/auth";
 import { getWsBaseUrl } from "@/constants/api";
-import { USE_MOCK_DATA } from "@/config/dataSource";
-import { DEMO_AUTH_SESSION } from "@/data/mockData";
 import { emit } from "@/services/liveEvents";
 
 // Cold-start persistence for both sessions - without this, a still-valid JWT
@@ -43,12 +41,6 @@ function writeStored(key: string, value: unknown | null) {
 // scale (no exponential backoff needed).
 const WS_RECONNECT_DELAY_MS = 3000;
 
-// On mock data, start already "logged in" as the demo trainee so screens
-// like /session show real values without requiring a register/login round-trip.
-const INITIAL_SESSION: AuthSession | null = USE_MOCK_DATA
-  ? (DEMO_AUTH_SESSION as AuthSession)
-  : null;
-
 type AuthContextValue = {
   trainee: Trainee | null;
   token: string | null;
@@ -73,15 +65,14 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSessionState] = useState<AuthSession | null>(INITIAL_SESSION);
+  const [session, setSessionState] = useState<AuthSession | null>(null);
   const [adminSession, setAdminSessionState] = useState<AdminAuthSession | null>(null);
-  const [restoring, setRestoring] = useState(!USE_MOCK_DATA && CAN_PERSIST);
+  const [restoring, setRestoring] = useState(CAN_PERSIST);
   const adminToken = adminSession?.access_token ?? null;
 
-  // One-shot rehydration on mount. Mock data already starts "logged in" via
-  // INITIAL_SESSION, and there's nothing to read back on web.
+  // One-shot rehydration on mount - there's nothing to read back on web.
   useEffect(() => {
-    if (USE_MOCK_DATA || !CAN_PERSIST) return;
+    if (!CAN_PERSIST) return;
     let active = true;
     Promise.all([readStored<AuthSession>(AUTH_SESSION_KEY), readStored<AdminAuthSession>(ADMIN_SESSION_KEY)]).then(
       ([storedSession, storedAdminSession]) => {
@@ -134,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // it survives screen navigation instead of reconnecting per-screen, and
   // its lifecycle just follows adminToken (open on login, close on logout).
   useEffect(() => {
-    if (USE_MOCK_DATA || !adminToken) return;
+    if (!adminToken) return;
 
     let socket: WebSocket | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;

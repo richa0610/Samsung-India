@@ -7,11 +7,11 @@ import { Colors } from "@/theme/colors";
 import { Shadows } from "@/theme/shadows";
 
 type SessionDetailsCardProps = {
-  topic?: string;
-  date?: string;
-  trainerName?: string;
-  runtime?: string;
-  conferenceStatus?: string;
+  topic: string;
+  date: string;
+  trainerName: string;
+  runtime: string;
+  conferenceStatus: string;
 };
 
 function getStatusPresentation(status: string): { label: string; bg: string; color: string } {
@@ -22,11 +22,11 @@ function getStatusPresentation(status: string): { label: string; bg: string; col
 }
 
 export default function SessionDetailsCard({
-  topic = "Webinar",
-  date = "20 Jul 2026",
-  trainerName = "Demo Trainer",
-  runtime = "Runtime : 0h 00m 00s",
-  conferenceStatus = "Ongoing",
+  topic,
+  date,
+  trainerName,
+  runtime,
+  conferenceStatus,
 }: SessionDetailsCardProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const statusPresentation = getStatusPresentation(conferenceStatus);

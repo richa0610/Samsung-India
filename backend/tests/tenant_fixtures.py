@@ -51,6 +51,8 @@ from app.models.trainee import Trainee
 
 ALPHA, BETA = "ALPHA", "BETA"
 PASSWORD = "Correct-Horse-9"
+# Every synthetic trainee signs in with PASSWORD too - hashed once, as bcrypt is slow on purpose.
+TRAINEE_PASSWORD_HASH = hash_password(PASSWORD)
 
 # (key, tenant, company, zone, region, trainer)
 CONFERENCES = [
@@ -75,8 +77,8 @@ class TenantWorld:
         mem = lambda: create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
         self.common_engine, self.alpha_engine, self.beta_engine = mem(), mem(), mem()
         self._patches = [
-            patch("app.models.uid_events.next_uid", lambda connection, prefix: None),
-            # A WebSocket handshake (app/routers/ws.py) and a couple of training_service lookups
+            patch("app.models.uid_events.next_uid", return_value=None),
+            # A WebSocket handshake (app/routers/ws.py) and a couple of training-service lookups
             # aren't part of the FastAPI Depends graph, so app.dependency_overrides[get_common_db]
             # below can't reach them - they do their own local `from app.database.common import
             # CommonSessionLocal` instead, which this patches to the same synthetic common DB
@@ -164,8 +166,8 @@ class TenantWorld:
                 n += 1
                 tuid = f"TR-{key}-{i}"
                 db.add(Trainee(traineeUid=tuid, name=f"Person {key} {i}", email=f"{tuid.lower()}@example.test", phone=9_000_000_000 + n,
-                               username=f"user{n}", employee_id=f"HO-{key}-{i}", company=(company or "").strip(), zone=(zone or "").strip() or None,
-                               region=region, trainerEmployeeId=trainer))
+                               username=f"user{n}", password=TRAINEE_PASSWORD_HASH, employee_id=f"HO-{key}-{i}",
+                               company=(company or "").strip(), zone=(zone or "").strip() or None, region=region, trainerEmployeeId=trainer))
                 db.add(Attendance(attendanceUid=f"ATT-{key}-{i}", conferenceUid=uid(key), traineeUid=tuid, status="Present" if i == 0 else "Pending",
                                   timestamp=stamp))
                 if i == 0:
@@ -177,12 +179,12 @@ class TenantWorld:
         #   assigned by column only, no attendance   -> visible to trainer1
         #   assigned to trainer2 but ON trainer1's training -> visible to trainer1 (roster)
         #   assigned to trainer2 only                -> NOT visible to trainer1
-        alpha.add(Trainee(traineeUid="TR-ASSIGNED-ONLY", name="Assigned Only", email="ao@example.test", phone=9_100_000_001, username="ao",
+        alpha.add(Trainee(traineeUid="TR-ASSIGNED-ONLY", name="Assigned Only", email="ao@example.test", phone=9_100_000_001, username="ao", password=TRAINEE_PASSWORD_HASH,
                           employee_id="HO-AO", company="Samsung India", zone="North Zone", region="North 1", trainerEmployeeId="trainer1"))
-        alpha.add(Trainee(traineeUid="TR-ROSTER-ONLY", name="Roster Only", email="ro@example.test", phone=9_100_000_002, username="ro",
+        alpha.add(Trainee(traineeUid="TR-ROSTER-ONLY", name="Roster Only", email="ro@example.test", phone=9_100_000_002, username="ro", password=TRAINEE_PASSWORD_HASH,
                           employee_id="HO-RO", company="Samsung India", zone="North Zone", region="North 1", trainerEmployeeId="trainer2"))
         alpha.add(Attendance(attendanceUid="ATT-RO", conferenceUid=uid("S_N1"), traineeUid="TR-ROSTER-ONLY", status="Pending", timestamp=stamp))
-        alpha.add(Trainee(traineeUid="TR-OTHER-TRAINER", name="Other Trainer", email="ot@example.test", phone=9_100_000_003, username="ot",
+        alpha.add(Trainee(traineeUid="TR-OTHER-TRAINER", name="Other Trainer", email="ot@example.test", phone=9_100_000_003, username="ot", password=TRAINEE_PASSWORD_HASH,
                           employee_id="HO-OT", company="Samsung India", zone="North Zone", region="North 1", trainerEmployeeId="trainer2"))
         for db in self.tenant_db.values():
             db.commit()

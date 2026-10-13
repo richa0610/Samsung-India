@@ -1,7 +1,5 @@
-import { USE_MOCK_DATA } from "@/config/dataSource";
 import { AdminFilters, adminFilterParams } from "./adminFilters";
 import { apiRequest } from "./client";
-import * as mock from "./mockService";
 
 export type AdminAccount = {
   username: string;
@@ -20,7 +18,6 @@ export type AdminAuthSession = {
 };
 
 export function loginAdmin(username: string, password: string) {
-  if (USE_MOCK_DATA) return mock.loginAdmin(username, password);
   return apiRequest<AdminAuthSession>("/admin/login", {
     method: "POST",
     body: JSON.stringify({ username, password }),
@@ -130,11 +127,30 @@ export function fetchAdminAccessScope(token: string) {
   });
 }
 
+/** The tenant's trainee security check-in settings. Super Admin only - anyone else gets a 403. */
+export type CheckInSettings = {
+  /** Trainees pass a face check before the photo (true), or just capture it (false). */
+  faceDetectionEnabled: boolean;
+};
+
+export function fetchCheckInSettings(token: string) {
+  return apiRequest<CheckInSettings>("/admin/settings/check-in", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export function updateCheckInSettings(token: string, settings: CheckInSettings) {
+  return apiRequest<CheckInSettings>("/admin/settings/check-in", {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(settings),
+  });
+}
+
 export { ApiError } from "./client";
 
 /** Signs the admin / trainer out on the server: every token issued for them stops working (all devices). */
 export function logoutAdmin(token: string) {
-  if (USE_MOCK_DATA) return Promise.resolve(null);
   return apiRequest<null>("/admin/logout", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },

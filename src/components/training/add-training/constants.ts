@@ -2,40 +2,32 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { Colors } from "@/theme/colors";
 import { SelectOption } from "@/components/ui/SearchableSelect";
+import { findZone } from "@/utils/zones";
 
 export const ICON_BADGE_BG = "#E3ECFF";
 
+// Built-in zones and regions for the admin filter bar and the New Trainee form only - the Add
+// Training form reads them from the master list (/admin/zones). Keyed by the master's zone names;
+// look a zone up with regionsForZone, not by indexing: "North Zone" is the same zone as "North".
 export const REGIONS_BY_ZONE: Record<string, string[]> = {
-  "North Zone": ["North 1", "North 2", "North 3", "North 4"],
-  "South Zone": ["South 1", "South 2", "South 3", "South 4", "South 1 [KR]", "South 1 [TN]"],
-  "East Zone": ["East 1", "East 2", "East 3", "East 4"],
-  "West Zone": ["West 1", "West 2", "West 3", "West 4"],
+  North: ["North 1", "North 2", "North 3", "North 4"],
+  South: ["South 1", "South 2", "South 3", "South 4", "South 1 [KR]", "South 1 [TN]"],
+  East: ["East 1", "East 2", "East 3", "East 4"],
+  West: ["West 1", "West 2", "West 3", "West 4"],
 };
 export const ZONES = Object.keys(REGIONS_BY_ZONE);
+
+/** The regions of a zone, whichever way it is spelled ("North" or "North Zone"). */
+export function regionsForZone(zone: string | null | undefined): string[] {
+  const name = findZone(ZONES, zone);
+  return name ? REGIONS_BY_ZONE[name] : [];
+}
 
 export const COMPANY_OPTIONS: SelectOption[] = [{ label: "Samsung India", value: "Samsung India" }];
 
 export const REQUESTED_BY_OPTIONS: SelectOption[] = [
   { label: "Quess Corp Ltd", value: "Quess Corp Ltd" },
   { label: "Other", value: "Other" },
-];
-
-export const TRAINER_OPTIONS: SelectOption[] = [
-  { label: "2002641904 - Bejoyendra Kolay", value: "2002641904" },
-  { label: "2002035871 - Bharat Kumar Vaswani", value: "2002035871" },
-  { label: "GS20356576 - Bharath Jain", value: "GS20356576" },
-  { label: "2003932855 - CHAGI VARAPRASAD", value: "2003932855" },
-  { label: "9646499023 - CHANDAN SHARMA", value: "9646499023" },
-  { label: "2003907196 - CHETHAN KUMAR R", value: "2003907196" },
-  { label: "GS20402359 - CHINMAYA K", value: "GS20402359" },
-  { label: "AGTM2620011 - Demo Trainer", value: "demotrainer" },
-  { label: "2003250416 - Devendra Kumar", value: "2003250416" },
-  { label: "2003628340 - Dharmeshkumar Patel", value: "2003628340" },
-  { label: "2003385218 - Dinesh Singh Rathore", value: "2003385218" },
-  { label: "2002035876 - Eric Keki Patel", value: "2002035876" },
-  { label: "9562267076 - FIRDOUS FAYAS", value: "9562267076" },
-  { label: "7259635514 - Gajendra", value: "7259635514" },
-  { label: "9585478000 - GANESH", value: "9585478000" },
 ];
 
 // Training Hub / Audience / Session Type / Training Type pickers have no

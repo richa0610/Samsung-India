@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 12,
     fontWeight: "500",
-    color: "#000000",
+    color: Colors.black,
   },
   contentRow: {
     flexDirection: "row",

@@ -18,9 +18,10 @@ from app.utils.helpers import client_ip
 router = APIRouter(prefix="/trainees", tags=["trainees"])
 
 
+# Signs the new trainee in too (a self-registered trainee has no password to log in with later).
 @router.post(
     "/register",
-    response_model=TraineeOut,
+    response_model=TokenResponse,
     status_code=status.HTTP_201_CREATED,
     dependencies=[Depends(rate_limit(max_attempts=5, window_seconds=300))],
 )
@@ -32,11 +33,9 @@ def register_trainee(
     )
 
 
-@router.post(
-    "/login",
-    response_model=TokenResponse,
-    dependencies=[Depends(rate_limit(max_attempts=5, window_seconds=300))],
-)
+# Company ID / phone + password. Limited by failed logins only (per caller IP and per account) inside
+# trainee_service.login - not by every request, which would lock out a classroom on one venue Wi-Fi.
+@router.post("/login", response_model=TokenResponse)
 def login_trainee(payload: TraineeLogin, request: Request, db: Session = Depends(get_db)):
     tenant_id = get_tenant_id_from_request(request)
     return trainee_service.login(db, payload, tenant_id, ip_address=client_ip(request))

@@ -246,7 +246,7 @@ class TrainerStateChangesAreAtomic(Phase4TestCase):
 
     def test_a_losing_end_writes_nothing(self):
         self.open_module(None)
-        files = {"photo": ("p.jpg", b"img", "image/jpeg"), "attendanceSheet": ("s.pdf", b"%PDF", "application/pdf")}
+        files = {"photo": ("p.jpg", b"\xff\xd8\xff\xe0 photo", "image/jpeg"), "attendanceSheet": ("s.pdf", b"%PDF-1.4", "application/pdf")}
         with patch.object(conference_repository, "claim_end", return_value=False):
             response = self.w.client.post(f"/admin/trainings/{S_N1}/end", data={"totalPax": "2"}, files=files,
                                           headers=self.w.headers("trainer1"))
@@ -293,7 +293,7 @@ class StatusRules(Phase4TestCase):
         self.alpha.commit()
 
     def end(self):
-        files = {"photo": ("p.jpg", b"img", "image/jpeg"), "attendanceSheet": ("s.pdf", b"%PDF", "application/pdf")}
+        files = {"photo": ("p.jpg", b"\xff\xd8\xff\xe0 photo", "image/jpeg"), "attendanceSheet": ("s.pdf", b"%PDF-1.4", "application/pdf")}
         return self.w.client.post(f"/admin/trainings/{S_N1}/end", data={"totalPax": "2"}, files=files,
                                   headers=self.w.headers("trainer1"))
 

@@ -44,11 +44,15 @@ export default function TraineeLoginScreen() {
       setError("Enter your Company ID or Phone No");
       return;
     }
+    if (!password) {
+      setError("Enter your password");
+      return;
+    }
 
     setLoading(true);
     setError(null);
     try {
-      const session = await loginTrainee(trimmed);
+      const session = await loginTrainee(trimmed, password);
       setSession(session);
       if (join) {
         try {
@@ -111,7 +115,7 @@ export default function TraineeLoginScreen() {
           {/* Security Badge Footer */}
           <View style={styles.securityFooter} accessible accessibilityRole="text">
             <View style={styles.shieldTile}>
-              <Ionicons name="shield-checkmark" size={18} color={Colors.primary} />
+              <Ionicons name="shield-checkmark" size={18} color={Colors.authBrandDeep} />
             </View>
             <AppText color={Colors.textSupporting} weight={FontWeight.medium} style={styles.securityText}>
               Your information is secure

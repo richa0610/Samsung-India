@@ -108,7 +108,7 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _refuse_remote_database_when_testing(self):
         if self.TESTING:
-            for host in (self.DB_HOST, self.common_db_host):
+            for host in (self.DB_HOST, self.resolved_common_db_host):
                 if host not in ("127.0.0.1", "localhost", "::1"):
                     raise ValueError(
                         "TESTING is set but the database host is not local - refusing to start "
@@ -120,24 +120,26 @@ class Settings(BaseSettings):
     def allowed_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()]
 
+    # The Common DB's connection values: its own COMMON_DB_* setting when set, otherwise the
+    # default tenant's DB_* one (named apart from those fields, which they'd otherwise shadow).
     @property
-    def common_db_host(self) -> str:
+    def resolved_common_db_host(self) -> str:
         return self.COMMON_DB_HOST or self.DB_HOST
 
     @property
-    def common_db_port(self) -> int:
+    def resolved_common_db_port(self) -> int:
         return self.COMMON_DB_PORT or self.DB_PORT
 
     @property
-    def common_db_user(self) -> str:
+    def resolved_common_db_user(self) -> str:
         return self.COMMON_DB_USER or self.DB_USER
 
     @property
-    def common_db_password(self) -> str:
+    def resolved_common_db_password(self) -> str:
         return self.COMMON_DB_PASSWORD or self.DB_PASSWORD
 
     @property
-    def common_db_name(self) -> str:
+    def resolved_common_db_name(self) -> str:
         return self.COMMON_DB_NAME or self.DB_NAME
 
 

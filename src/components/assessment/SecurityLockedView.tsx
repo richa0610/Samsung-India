@@ -84,7 +84,7 @@ const styles = StyleSheet.create({
   card: {
     width: "100%",
     maxWidth: 380,
-    backgroundColor: "#1C1C1E",
+    backgroundColor: Colors.black,
     borderRadius: 16,
     padding: 22,
     ...createShadow({ x: 0, y: 8, blur: 16, opacity: 0.55, elevation: 12 }),

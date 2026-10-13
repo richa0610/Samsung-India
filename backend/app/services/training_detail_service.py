@@ -9,28 +9,17 @@ import json
 
 from sqlalchemy.orm import Session
 
-from app.core.constants import MODULE_LABELS
+from app.core.constants import DEFAULT_SESSION_TITLE, MODULE_LABELS
 from app.core.exceptions import not_found
-from app.models.conference import Conference
 from app.models.quiz import Question
 from app.models.trainee import Trainee
 from app.repositories import assessment_repository, attendance_repository, conference_repository
 from app.schemas.assessment import QuestionOption
 from app.schemas.session import TrainingDetailOut, TrainingModuleDetail, TrainingQuestionAttempt
 from app.services import session_service
-from app.services.module_flow import configured_modules, live_quiz_suite_uid
+from app.services.module_flow import configured_modules, module_suite_uid
 from app.services.trainee_dashboard_service import _fmt_score, _trainee_status_for
 from app.services import trainee_access
-
-
-def _suite_for_module(conference: Conference, module_key: str) -> str | None:
-    if module_key == "STANDARD_TEST":
-        return conference.postAssessmentUid
-    if module_key == "LIVE_QUIZ":
-        return live_quiz_suite_uid(conference)
-    if module_key == "SURVEY":
-        return conference.surveyUid
-    return None
 
 
 def _question_options(question: Question) -> list[QuestionOption]:
@@ -117,7 +106,8 @@ def _assessment_module(
         key=module_key,
         name=MODULE_LABELS[module_key],
         status=status,
-        score=_fmt_score(result.totalScore, result.maxScore) if result else None,
+        # A Survey is only submitted, never scored (module_flow.scored_suite_uids).
+        score=_fmt_score(result.totalScore, result.maxScore) if result and module_key != "SURVEY" else None,
         completedAt=result.submittedAt.strftime("%Y-%m-%d %H:%M:%S") if result and result.submittedAt else None,
         questions=attempts,
     )
@@ -139,7 +129,7 @@ def get_training_detail(db: Session, trainee: Trainee, conference_uid: str) -> T
         if module_key == "ATTENDANCE":
             modules.append(_attendance_module(attendance, overall_status))
         else:
-            suite_uid = _suite_for_module(conference, module_key)
+            suite_uid = module_suite_uid(conference, module_key)
             modules.append(
                 _assessment_module(db, conference_uid, trainee.traineeUid, module_key, suite_uid, session_over)
             )
@@ -148,7 +138,7 @@ def get_training_detail(db: Session, trainee: Trainee, conference_uid: str) -> T
 
     return TrainingDetailOut(
         conferenceUid=conference.conferenceUid,
-        title=conference.suiteTitle or conference.trainingType or "Training Session",
+        title=conference.suiteTitle or conference.trainingType or DEFAULT_SESSION_TITLE,
         date=conference.conferenceDate,
         location=location,
         trainerName=conference.trainerName,

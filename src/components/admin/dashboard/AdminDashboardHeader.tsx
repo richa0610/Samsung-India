@@ -87,7 +87,7 @@ export default function AdminDashboardHeader({
               color={Colors.white}
               weight={FontWeight.bold}
             >
-              {companyId ?? "OFF26005"}
+              {companyId || "--"}
             </AppText>
           </View>
         </View>

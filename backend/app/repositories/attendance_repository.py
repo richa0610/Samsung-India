@@ -6,6 +6,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import FunctionElement
 
+from app.core.constants import UNKNOWN_TRAINEE_NAME
 from app.models.attendance import Attendance
 from app.models.attendance_log import AttendanceLog
 from app.models.conference import Conference
@@ -95,6 +96,20 @@ def upsert_attendance_log(
         )
 
 
+def replace_attendance_log(
+    db: Session, conference_uid: str, trainee_uid: str, module_id: str, **fields: object
+) -> None:
+    """Swaps this module's snapshot for a brand-new row. A check-in records where and from which
+    device it was made, so nothing from an earlier one may linger - unlike upsert_attendance_log,
+    which only moves the status. `fields`: status, markedAt, ipAddress, deviceInfo, locationData."""
+    db.query(AttendanceLog).filter(
+        AttendanceLog.conferenceUid == conference_uid,
+        AttendanceLog.traineeUid == trainee_uid,
+        AttendanceLog.moduleId == module_id,
+    ).delete()
+    db.add(AttendanceLog(conferenceUid=conference_uid, traineeUid=trainee_uid, moduleId=module_id, **fields))
+
+
 # ---------------------------------------------------------------------------
 # Paged admin attendance list
 # ---------------------------------------------------------------------------
@@ -152,7 +167,7 @@ SORT_COLUMNS = {
     "trainerName": (_text(Conference.trainerName), "text"),
     "trainerHoId": (_text(Conference.trainerEmployeeId), "text"),
     "participantHoId": (_text(Trainee.employee_id), "text"),
-    "participantName": (func.coalesce(Trainee.name, "Unknown Trainee"), "text"),
+    "participantName": (func.coalesce(Trainee.name, UNKNOWN_TRAINEE_NAME), "text"),
     "phone": (func.coalesce(_PHONE, ""), "text"),
     "state": (_text(Conference.state), "text"),
     "district": (_text(Conference.district), "text"),

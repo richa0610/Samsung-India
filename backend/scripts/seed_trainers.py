@@ -8,7 +8,7 @@ have no assigned trainer yet. Run from backend/ with:
 `agencyteam.trainerEmployeeId`-style linking on other tables actually
 stores the trainer's `username` (see `trainee.trainerEmployeeId` /
 `conference.trainerEmployeeId`, resolved via AgencyTeam.username in
-app/services/training_service.py's `_resolve_performer_names`), not a
+app/services/training/timeline.py's `_resolve_performer_names`), not a
 separate employee-id column - so `username` doubles as that identifier here.
 
 Uses raw SQL for the insert/update because the `AgencyTeam` ORM model

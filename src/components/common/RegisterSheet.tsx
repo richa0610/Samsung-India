@@ -24,14 +24,14 @@ export default function RegisterSheet({
     joinCode,
 }: RegisterSheetProps) {
     const router = useRouter();
-    // Plain registration doesn't sign the trainee in - closing this sheet
-    // returns to the login form. In the QR-join flow the hook signs them in
-    // and binds the session, so we send them straight to it.
+    // Registering signs the trainee in (no password to log in with later), so
+    // they go straight on - to the scanned session (QR join) or the trainee
+    // home - the same places the login form sends them.
     const { control, errors, setValue, onSubmit, loading, error } = useRegisterForm({
         joinCode,
         onSuccess: () => {
             onClose();
-            if (joinCode) router.replace("/session");
+            router.replace(joinCode ? "/session" : ("/session_detail" as any));
         },
     });
 

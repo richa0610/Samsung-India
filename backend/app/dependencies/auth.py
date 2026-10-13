@@ -1,13 +1,14 @@
 from typing import NamedTuple
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.exceptions import forbidden, invalid_session
 from app.core.security import is_token_current
-from app.dependencies.database import get_common_db, get_db
+from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.models.trainee import Trainee
@@ -17,23 +18,21 @@ from app.services.access_service import resolve_scope
 bearer_scheme = HTTPBearer()
 
 
+def _decode_token(credentials: HTTPAuthorizationCredentials) -> dict:
+    """The verified claims of a bearer token - signature and expiry checked - or the one generic
+    invalid-session 401, whatever the reason it didn't verify."""
+    try:
+        return jwt.decode(credentials.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        raise invalid_session()
+
+
 def get_current_trainee(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> Trainee:
-    unauthorized = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired session",
-    )
-
-    try:
-        payload = jwt.decode(
-            credentials.credentials,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
-        )
-    except JWTError:
-        raise unauthorized
+    unauthorized = invalid_session()
+    payload = _decode_token(credentials)
 
     try:
         phone = int(payload.get("sub"))
@@ -47,6 +46,10 @@ def get_current_trainee(
     return trainee
 
 
+ADMIN_SUBJECT_PREFIX = "admin:"
+AGENCY_TEAM_SUBJECT_PREFIX = "agencyteam:"
+
+
 def get_current_admin(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
@@ -55,55 +58,44 @@ def get_current_admin(
     """`Admin` (superadmin/internal accounts) lives in the shared Common
     Database; `AgencyTeam` (partner-agency trainers) lives in the caller's
     own tenant database - see the DB-per-tenant split in app/database/."""
-    unauthorized = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid or expired session",
-    )
-    not_authorized_for_tenant = HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Not authorized for this tenant",
-    )
-
-    try:
-        payload = jwt.decode(
-            credentials.credentials,
-            settings.SECRET_KEY,
-            algorithms=[settings.ALGORITHM],
-        )
-    except JWTError:
-        raise unauthorized
-
+    payload = _decode_token(credentials)
     subject = payload.get("sub") or ""
 
-    if subject.startswith("admin:"):
-        admin = admin_repository.get_admin_by_username(common_db, subject.removeprefix("admin:"))
-        if not admin or not is_token_current(payload, admin):
-            raise unauthorized
-        # The token's own tenant claim, not anything a header on this request could carry - see
-        # get_tenant_id_from_request, which already prefers this same verified claim once a
-        # token decodes. Re-checked on every request (not just at login) via the same
-        # admin_access grant everything else in the admin panel already goes through, so a
-        # grant revoked after the token was issued stops working immediately, and a token
-        # minted for one tenant can never be reused against another.
-        token_tenant = payload.get("tenant_id")
-        if not isinstance(token_tenant, str) or not token_tenant.strip():
-            raise unauthorized
-        if not resolve_scope(common_db, admin, token_tenant).allowed:
-            raise not_authorized_for_tenant
-        return admin
+    if subject.startswith(ADMIN_SUBJECT_PREFIX):
+        return _authenticate_admin(payload, subject.removeprefix(ADMIN_SUBJECT_PREFIX), common_db)
+    if subject.startswith(AGENCY_TEAM_SUBJECT_PREFIX):
+        return _authenticate_trainer(payload, subject.removeprefix(AGENCY_TEAM_SUBJECT_PREFIX), db, common_db)
+    raise invalid_session()
 
-    if subject.startswith("agencyteam:"):
-        agent = admin_repository.get_agency_by_username(db, subject.removeprefix("agencyteam:"))
-        if not agent or not is_token_current(payload, agent):
-            raise unauthorized
-        # Only an agency account with the trainer role is a trainer (the approved rule - a NULL or
-        # any other role is refused, and login no longer issues such tokens either). Re-checked on
-        # every request, so a role changed after the token was issued stops working at once.
-        if not resolve_scope(common_db, agent, payload.get("tenant_id")).is_trainer:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This action requires an active trainer account")
-        return agent
 
-    raise unauthorized
+def _authenticate_admin(payload: dict, username: str, common_db: Session) -> Admin:
+    admin = admin_repository.get_admin_by_username(common_db, username)
+    if not admin or not is_token_current(payload, admin):
+        raise invalid_session()
+    # The token's own tenant claim, not anything a header on this request could carry - see
+    # get_tenant_id_from_request, which already prefers this same verified claim once a
+    # token decodes. Re-checked on every request (not just at login) via the same
+    # admin_access grant everything else in the admin panel already goes through, so a
+    # grant revoked after the token was issued stops working immediately, and a token
+    # minted for one tenant can never be reused against another.
+    token_tenant = payload.get("tenant_id")
+    if not isinstance(token_tenant, str) or not token_tenant.strip():
+        raise invalid_session()
+    if not resolve_scope(common_db, admin, token_tenant).allowed:
+        raise forbidden("Not authorized for this tenant")
+    return admin
+
+
+def _authenticate_trainer(payload: dict, username: str, tenant_db: Session, common_db: Session) -> AgencyTeam:
+    agent = admin_repository.get_agency_by_username(tenant_db, username)
+    if not agent or not is_token_current(payload, agent):
+        raise invalid_session()
+    # Only an agency account with the trainer role is a trainer (the approved rule - a NULL or
+    # any other role is refused, and login no longer issues such tokens either). Re-checked on
+    # every request, so a role changed after the token was issued stops working at once.
+    if not resolve_scope(common_db, agent, payload.get("tenant_id")).is_trainer:
+        raise forbidden("This action requires an active trainer account")
+    return agent
 
 
 class AuthenticatedAccount(NamedTuple):
@@ -126,11 +118,11 @@ def resolve_principal(
 def _find_principal(
     subject: str, tenant_id: str, common_db: Session, tenant_db: Session
 ) -> Admin | AgencyTeam | Trainee | None:
-    if subject.startswith("admin:"):
-        admin = admin_repository.get_admin_by_username(common_db, subject.removeprefix("admin:"))
+    if subject.startswith(ADMIN_SUBJECT_PREFIX):
+        admin = admin_repository.get_admin_by_username(common_db, subject.removeprefix(ADMIN_SUBJECT_PREFIX))
         return admin if admin and resolve_scope(common_db, admin, tenant_id).allowed else None
-    if subject.startswith("agencyteam:"):
-        agent = admin_repository.get_agency_by_username(tenant_db, subject.removeprefix("agencyteam:"))
+    if subject.startswith(AGENCY_TEAM_SUBJECT_PREFIX):
+        agent = admin_repository.get_agency_by_username(tenant_db, subject.removeprefix(AGENCY_TEAM_SUBJECT_PREFIX))
         return agent if agent and resolve_scope(common_db, agent, tenant_id).is_trainer else None
     try:
         phone = int(subject)
@@ -147,11 +139,8 @@ def get_current_account(
     """Any verified account - admin, trainer or trainee - with the tenant its token was issued
     for. For endpoints (like serving an uploaded file) that authorize per resource rather than
     per role; the resource check itself decides what this account may reach."""
-    unauthorized = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired session")
-    try:
-        payload = jwt.decode(credentials.credentials, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError:
-        raise unauthorized
+    unauthorized = invalid_session()
+    payload = _decode_token(credentials)
     tenant_id = payload.get("tenant_id")
     if not isinstance(tenant_id, str) or not tenant_id.strip():
         raise unauthorized
@@ -170,4 +159,17 @@ def require_admin_role(admin: Admin | AgencyTeam = Depends(get_current_admin)) -
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This action requires an admin account",
         )
+    return admin
+
+
+def require_super_admin(
+    request: Request,
+    admin: Admin = Depends(require_admin_role),
+    common_db: Session = Depends(get_common_db),
+) -> Admin:
+    """require_admin_role, narrowed to an active Super Admin grant - re-resolved from admin_access on
+    every request in the token's own tenant, never taken from a claim. For tenant-wide settings
+    and maintenance reports that no other admin role may reach."""
+    if not resolve_scope(common_db, admin, get_tenant_id_from_request(request)).is_super:
+        raise forbidden("This action requires a Super Admin account")
     return admin

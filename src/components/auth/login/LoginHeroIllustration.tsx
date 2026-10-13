@@ -71,10 +71,12 @@ export default function LoginHeroIllustration({ width = ILLUSTRATION_WIDTH }: { 
 
           {/* Graduation cap */}
           <Path d="M86 67 L86 77 Q100 85 114 77 L114 67 L100 73 Z" fill={Colors.illustrationPhoneDeep} />
-          <Path d="M100 48 L127 60 L100 72 L73 60 Z" fill={Colors.illustrationNavy} />
-          <Path d="M100 48 L127 60 L100 64 L73 60 Z" fill={Colors.illustrationPhoneDeep} opacity={0.55} />
-          <Line x1={122} y1={62} x2={122} y2={75} stroke={Colors.illustrationGold} strokeWidth={2} strokeLinecap="round" />
-          <Circle cx={122} cy={76.5} r={2.6} fill={Colors.illustrationGold} />
+          <Path d="M100 48 L127 60 L100 72 L73 60 Z" fill={Colors.illustrationSky} />
+          <Path d="M100 48 L127 60 L100 64 L73 60 Z" fill={Colors.white} opacity={0.12} />
+          {/* The cord across the top, then the tassel hanging from the corner */}
+          <Line x1={100} y1={60} x2={122} y2={62} stroke={Colors.illustrationScreenTint} strokeWidth={1.6} strokeLinecap="round" />
+          <Line x1={122} y1={62} x2={122} y2={75} stroke={Colors.illustrationPhoneDeep} strokeWidth={2} strokeLinecap="round" />
+          <Circle cx={122} cy={76.5} r={2.6} fill={Colors.illustrationPhoneDeep} />
 
           <ChecklistRow y={96} long />
           <ChecklistRow y={118} />
@@ -87,8 +89,8 @@ export default function LoginHeroIllustration({ width = ILLUSTRATION_WIDTH }: { 
           <Rect x={8} y={35} width={48} height={48} rx={12} fill={Colors.illustrationShadow} opacity={0.22} />
           <Rect x={4} y={30} width={48} height={48} rx={12} fill="url(#illWhiteTile)" />
           <Rect x={14} y={56} width={6} height={10} rx={2} fill={Colors.illustrationSkyLight} />
-          <Rect x={23} y={48} width={6} height={18} rx={2} fill={Colors.illustrationSky} />
-          <Rect x={32} y={40} width={6} height={26} rx={2} fill={Colors.illustrationPhoneDeep} />
+          <Rect x={23} y={48} width={6} height={18} rx={2} fill={Colors.illustrationSkyLight} />
+          <Rect x={32} y={40} width={6} height={26} rx={2} fill={Colors.illustrationSkyLight} />
           <Rect x={12} y={67} width={28} height={2} rx={1} fill={Colors.illustrationLineSoft} />
         </G>
 
@@ -111,7 +113,7 @@ export default function LoginHeroIllustration({ width = ILLUSTRATION_WIDTH }: { 
           <Circle cx={155} cy={131} r={7.5} fill={Colors.illustrationGlow} />
           <Rect x={151.5} y={137} width={7} height={3} rx={1} fill={Colors.white} />
           <Rect x={152.5} y={140.5} width={5} height={2.5} rx={1} fill={Colors.illustrationScreenTint} />
-          <G stroke={Colors.illustrationGlow} strokeWidth={1.6} strokeLinecap="round">
+          <G stroke={Colors.white} strokeWidth={1.6} strokeLinecap="round">
             <Line x1={155} y1={117.5} x2={155} y2={120.5} />
             <Line x1={141.5} y1={131} x2={144.5} y2={131} />
             <Line x1={165.5} y1={131} x2={168.5} y2={131} />

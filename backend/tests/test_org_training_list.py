@@ -170,13 +170,16 @@ class PagedListTests(unittest.TestCase):
     def test_bad_cursor_is_rejected_cleanly(self):
         from fastapi import HTTPException
 
-        from app.services import training_service
+        from app.dependencies.paging import PageRequest
+        from app.services.training import listing
 
         with self.assertRaises(HTTPException) as caught:
             # admin=None, common_db=None (defaults): resolves to a deny-everything scope
             # (access_scope_conditions), not "no restriction" - irrelevant to this test since
             # the bad cursor is rejected before the query ever runs.
-            training_service.list_trainings_page(self.db, None, None, None, None, "timestamp", True, "not-a-cursor", 50)
+            listing.list_trainings_page(
+                self.db, None, None, None, None, "timestamp", True, PageRequest("not-a-cursor", 50, None)
+            )
         self.assertEqual(caught.exception.status_code, 400)
 
 

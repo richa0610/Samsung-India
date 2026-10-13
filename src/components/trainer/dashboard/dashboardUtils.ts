@@ -26,7 +26,7 @@ export function formatSessionTime(dateStr: string | null, timeStr: string | null
       dateFormatted = `${String(parsed.getDate()).padStart(2, "0")} ${parsed.toLocaleDateString("en-GB", { month: "short" })} ${parsed.getFullYear()}`;
     }
   }
-  const timeFormatted = timeStr || "10:00 AM";
+  const timeFormatted = timeStr || "--";
   return `${dateFormatted} • ${timeFormatted}`;
 }
 

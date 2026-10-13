@@ -68,11 +68,11 @@ const styles = StyleSheet.create({
   },
   alertTitle: {
     fontSize: 11.5,
-    color: "#1E293B",
+    color: Colors.black,
   },
   alertSubtitle: {
     fontSize: 10.5,
-    color: "#64748B",
+    color: Colors.gray500,
   },
   encryptionFooter: {
     width: "100%",

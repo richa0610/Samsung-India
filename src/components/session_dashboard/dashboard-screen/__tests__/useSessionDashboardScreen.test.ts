@@ -4,7 +4,8 @@ import { act, renderHook } from "@testing-library/react-native";
 import { Alert } from "react-native";
 
 import { ApiError } from "@/api/client";
-import { fetchSessionDashboard, stopLiveTimer } from "@/api/training";
+import { endTraining, fetchSessionDashboard, startModule, stopLiveTimer } from "@/api/training";
+import { checkLocationPermission, getCurrentCoordinates } from "@/services/locationService";
 import { useSessionDashboardScreen } from "../useSessionDashboardScreen";
 
 const mockReplace = jest.fn();
@@ -213,5 +214,40 @@ test("a Stop Timer the server refuses is reported and the dashboard reloaded", a
   expect(mockFetch).toHaveBeenCalledTimes(requestsSoFar + 1);
   expect(result.current.liveQuizControls.stoppingTimer).toBe(false);
   alert.mockRestore();
+  await unmount();
+});
+
+test("with location allowed, module and session-end actions send where the trainer is", async () => {
+  jest.mocked(checkLocationPermission).mockResolvedValue("granted");
+  jest.mocked(getCurrentCoordinates).mockResolvedValue({ latitude: 28.61, longitude: 77.21, accuracy: 5 });
+  mockFetch.mockImplementation(async () => dashboard("Ongoing"));
+  const { result, unmount } = await renderHook(() => useSessionDashboardScreen());
+
+  await act(async () => {
+    await result.current.handleStartModule("ATTENDANCE");
+  });
+  expect(startModule).toHaveBeenCalledWith("trainer-token", "CONF-1", "ATTENDANCE", { latitude: 28.61, longitude: 77.21 });
+
+  const photo = { uri: "file://photo.jpg", name: "photo.jpg", type: "image/jpeg" };
+  const sheet = { uri: "file://sheet.pdf", name: "sheet.pdf", type: "application/pdf" };
+  await act(async () => {
+    await result.current.handleConfirmEndSession(photo, sheet, 25);
+  });
+  expect(endTraining).toHaveBeenCalledWith("trainer-token", "CONF-1", photo, sheet, 25, { latitude: 28.61, longitude: 77.21 });
+  await unmount();
+});
+
+test("without location the action still goes ahead, just with no position", async () => {
+  jest.mocked(startModule).mockClear();
+  jest.mocked(getCurrentCoordinates).mockClear();
+  jest.mocked(checkLocationPermission).mockResolvedValue("denied");
+  mockFetch.mockImplementation(async () => dashboard("Ongoing"));
+  const { result, unmount } = await renderHook(() => useSessionDashboardScreen());
+
+  await act(async () => {
+    await result.current.handleStartModule("ATTENDANCE");
+  });
+  expect(startModule).toHaveBeenCalledWith("trainer-token", "CONF-1", "ATTENDANCE", null);
+  expect(getCurrentCoordinates).not.toHaveBeenCalledWith(1000);   // never asks for a fix it may not take
   await unmount();
 });

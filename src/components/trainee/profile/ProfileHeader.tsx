@@ -43,10 +43,10 @@ export default function ProfileHeader({ trainee, uploading, sessionPillLabel, on
 
           <View style={styles.userTextColumn}>
             <AppText style={styles.userName} color={Colors.white} weight={FontWeight.bold}>
-              {trainee?.name || "Tushar Prajapati"}
+              {trainee?.name || "Trainee"}
             </AppText>
             <AppText style={styles.userRole} color={Colors.white}>
-              {trainee?.designation || "SEC"}
+              {trainee?.designation || "--"}
             </AppText>
           </View>
         </View>

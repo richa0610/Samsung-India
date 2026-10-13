@@ -4,6 +4,8 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import * as XLSX from "xlsx";
 
+import { Colors } from "@/theme/colors";
+
 import { escapeHtml, sanitizeForSpreadsheet } from "./exportSanitize";
 
 export type ExportColumn = {
@@ -57,8 +59,8 @@ function toHtmlTable(title: string, columns: ExportColumn[], rows: Record<string
           body { font-family: -apple-system, Roboto, Arial, sans-serif; padding: 16px; }
           h1 { font-size: 18px; margin-bottom: 12px; }
           table { width: 100%; border-collapse: collapse; }
-          th, td { border: 1px solid #E5E7EB; padding: 6px 10px; font-size: 12px; text-align: left; }
-          th { background: #F3F4F6; }
+          th, td { border: 1px solid ${Colors.gray200}; padding: 6px 10px; font-size: 12px; text-align: left; }
+          th { background: ${Colors.gray100}; }
         </style>
       </head>
       <body>

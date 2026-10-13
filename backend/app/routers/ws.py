@@ -50,11 +50,15 @@ class ConnectionManager:
         if not sockets:
             self._connections.pop(key, None)
 
+    # The senders below loop over a .copy() on purpose: a failed send disconnects that socket
+    # (removing it from the very set/dict being looped over), and every `await` lets other
+    # connections join or leave meanwhile - looping over the live collection would raise
+    # "RuntimeError: Set changed size during iteration".
     async def send_to(self, tenant_id: str | None, username: str | None, event: dict) -> None:
         if not tenant_id or not username:
             return
         key = (tenant_id, username)
-        for websocket in list(self._connections.get(key, ())):
+        for websocket in self._connections.get(key, set()).copy():
             try:
                 await websocket.send_json(event)
             except Exception:
@@ -66,10 +70,10 @@ class ConnectionManager:
         separate, explicitly-named method, not a widened version of this one."""
         if not tenant_id:
             return
-        for (t, username), sockets in list(self._connections.items()):
+        for (t, username), sockets in self._connections.copy().items():
             if t != tenant_id:
                 continue
-            for websocket in list(sockets):
+            for websocket in sockets.copy():
                 try:
                     await websocket.send_json(event)
                 except Exception:
@@ -93,7 +97,7 @@ class ConnectionManager:
         if not tenant_id or not room:
             return
         key = (tenant_id, room)
-        for websocket in list(self._rooms.get(key, ())):
+        for websocket in self._rooms.get(key, set()).copy():
             try:
                 await websocket.send_json(event)
             except Exception:
@@ -129,8 +133,8 @@ def _resolve_identity(token: str):
         return None
     tenant_id = tenant_id.strip()
 
-    # Local import (matching training_service.py's own _resolve_performer_names /
-    # _updated_by_names_for) - a WebSocket handshake isn't part of the FastAPI Depends graph, so
+    # Local import (matching training.timeline._resolve_performer_names /
+    # training.listing._updated_by_names_for) - a WebSocket handshake isn't part of the FastAPI Depends graph, so
     # there's no get_common_db dependency to receive here; this is what test fixtures patch to
     # substitute a synthetic common DB the same way app.dependency_overrides does for requests.
     from app.database.common import CommonSessionLocal
@@ -192,7 +196,7 @@ def _close_sessions(identity) -> None:
 
 def _authorize_room(principal, common_db, tenant_db, tenant_id: str, conference_uid: str) -> bool:
     """Same rule as the REST endpoints, not a separate one: an admin-table account or a trainer
-    via `conference_access.find_authorized_conference` (the exact gate `_get_owned_conference`
+    via `conference_access.find_authorized_conference` (the exact gate `training.common.owned_conference`
     applies to start/operate a session - admin grant by scope, active trainer by assignment); a
     trainee via the same `attendance_repository.get_for_conference_and_trainee` row every
     admin write endpoint already uses to confirm a trainee belongs to a session. The conference
@@ -241,7 +245,7 @@ async def live_quiz_events(websocket: WebSocket, conference_uid: str):
     )
     if identity is None:
         return
-    principal, tenant_id, common_db, tenant_db = identity
+    _, tenant_id, common_db, tenant_db = identity
     try:
         await manager.join_room(websocket, tenant_id, conference_uid)
         try:

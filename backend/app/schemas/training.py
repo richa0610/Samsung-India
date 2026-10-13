@@ -217,6 +217,13 @@ class TrainingDetailOut(BaseModel):
     scheduleEditable: bool = True
 
 
+class TrainerLocation(BaseModel):
+    """Where the trainer is when they start / stop / restart a module - recorded on the session's
+    activity log. Optional: an action is never refused for a missing location."""
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
 class AttendanceMarkRequest(BaseModel):
     status: Literal["Present", "Absent", "Joined", "Pending"]
     # The trainer must give a reason for a manual Present/Absent mark - it's
@@ -378,19 +385,30 @@ class SessionHeroStat(BaseModel):
     topName: Optional[str] = None
 
 
+class ParticipantModuleProgress(BaseModel):
+    """One activity of the training on the Session Dashboard's Stage column."""
+
+    key: str  # "STANDARD_TEST" | "LIVE_QUIZ" | "SURVEY"
+    label: str  # "Test" | "Quiz" | "Survey"
+    done: bool  # this participant has a Submitted result for it
+
+
 class TraineeRow(BaseModel):
     traineeUid: str
     name: str
     employeeId: Optional[str] = None
     phone: Optional[int] = None
-    # "ASSIGNED" if on this trainer's roster, else "NOT ALLOCATED" (walked
-    # in / joined by QR).
-    audienceType: str = "NOT ALLOCATED"
+    # How they reached the session (training.session_dashboard.audience_class, the same split as the
+    # Audience Breakdown): "ASSIGNED" (on the trainer's roster) | "UNASSIGNED" (an existing trainee
+    # who joined by QR / link) | "FRESH" (registered through the QR flow).
+    audienceType: Literal["ASSIGNED", "UNASSIGNED", "FRESH"] = "UNASSIGNED"
     # "Present" | "Pending" (joined, not checked in) | "Absent" | "Attempted"
     status: str
     markedOn: Optional[str] = None
     checkOutTime: Optional[str] = None
     score: Optional[str] = None
+    # The score is at or above the pass mark (PASS_THRESHOLD_PERCENT); None while there's no score.
+    scorePassed: Optional[bool] = None
     profilePhoto: Optional[str] = None
     # On-device proctoring lockout (post-test). `isLocked` drives the red
     # "LOCKED" pill + the trainer's unlock control; `proctoringLogs` are the
@@ -399,6 +417,15 @@ class TraineeRow(BaseModel):
     proctoringStrikes: int = 0
     proctoringMaxStrikes: int = 3
     proctoringLogs: list[str] = []
+    # How many times a trainer lifted this trainee's lockout in this training, of the most allowed
+    # (MAX_PROCTORING_UNLOCKS) - once they're equal, a further unlock is refused.
+    proctoringUnlocks: int = 0
+    proctoringMaxUnlocks: int = 2
+    # Stage column (services/participant_stage.py): "Attendance" once Present through their own
+    # check-in, else "Not Started" (also when only the trainer marked them Present); and done /
+    # not done for each activity after Attendance (Test, Quiz, Survey).
+    stage: str = "Not Started"
+    stageModules: list[ParticipantModuleProgress] = []
 
 
 class ExecutionFlowItem(BaseModel):
@@ -513,8 +540,8 @@ class SessionDashboardOut(BaseModel):
     executionFlow: list[ExecutionFlowItem] = []
     auditLog: list[AuditLogEntry] = []
     sessionHeroes: list[SessionHeroStat] = []
-    # Only present while LIVE_QUIZ is the active module - see _live_studio in
-    # services/training_service.py.
+    # Only present while LIVE_QUIZ is the active module - see build_live_studio in
+    # services/live_quiz_service.py.
     liveStudio: Optional[LiveStudioOut] = None
 
 

@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy import String, cast, exists, false, func, or_, select, union
@@ -8,10 +8,22 @@ from app.models.attendance import Attendance
 from app.models.conference import Conference
 from app.models.trainee import Trainee
 from app.repositories import conference_repository, keyset
+from app.utils.date_utils import ist_day_start_utc
 
 
 def get_by_phone(db: Session, phone: int) -> Trainee | None:
     return db.query(Trainee).filter(Trainee.phone == phone).first()
+
+
+def get_by_login_identifier(db: Session, identifier: str) -> Trainee | None:
+    """The trainee a login names by Trainee UID, username or (all digits) phone number - each a unique
+    column, so one indexed lookup. None if it names nobody, or two different trainees (one's UID
+    being another's username): a login never guesses which account was meant."""
+    conditions = [Trainee.traineeUid == identifier, Trainee.username == identifier]
+    if identifier.isascii() and identifier.isdigit() and len(identifier) <= 15:   # fits the BIGINT column
+        conditions.append(Trainee.phone == int(identifier))
+    matches = db.query(Trainee).filter(or_(*conditions)).limit(2).all()
+    return matches[0] if len(matches) == 1 else None
 
 
 def get_by_uid(db: Session, trainee_uid: str) -> Trainee | None:
@@ -96,13 +108,14 @@ PAGE_SEARCH_COLUMNS = (
 
 
 def registered_between(start: Optional[date], end: Optional[date]) -> list:
-    """WHERE conditions for trainees registered from `start` through `end` (whole days, as the
-    list shows each one's `timestamp`). A plain range on the column, so its index still applies."""
+    """WHERE conditions for trainees registered from `start` through `end`: whole IST days (the dates
+    the app sends, and the list shows each `timestamp` in), while `timestamp` itself is stored in UTC
+    by MySQL's `NOW()`. A plain range on the column, so its index still applies."""
     conditions = []
     if start:
-        conditions.append(Trainee.timestamp >= datetime.combine(start, time.min))
+        conditions.append(Trainee.timestamp >= ist_day_start_utc(start))
     if end:
-        conditions.append(Trainee.timestamp < datetime.combine(end + timedelta(days=1), time.min))
+        conditions.append(Trainee.timestamp < ist_day_start_utc(end + timedelta(days=1)))
     return conditions
 
 

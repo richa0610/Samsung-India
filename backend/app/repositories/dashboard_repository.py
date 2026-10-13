@@ -33,11 +33,18 @@ from app.models.quiz import AssessmentResult
 from app.models.trainee import Trainee
 from app.repositories import conference_repository, trainee_repository
 from app.services.access_service import AccessScope
+from app.utils.zones import zone_spellings
 
 
 def _norm(column):
     """SQL twin of the Python `(value or "").strip().lower()` used by filters."""
     return func.lower(func.trim(func.coalesce(column, "")))
+
+
+def _zone_in(column, zones: Collection[str]):
+    """SQL twin of comparing by `zone_key`: the column holds either spelling of one of `zones`
+    ("north" or "north zone")."""
+    return _norm(column).in_(sorted({spelling for zone in zones for spelling in zone_spellings(zone)}))
 
 
 def conference_conditions(filters: Optional[ConferenceFilters], include_cancelled: bool = False) -> list:
@@ -58,13 +65,14 @@ def conference_conditions(filters: Optional[ConferenceFilters], include_cancelle
         conditions.append(or_(Conference.conferenceDate.is_(None), Conference.conferenceDate <= filters.end))
     for column, values in (
         (Conference.trainerEmployeeId, filters.trainers),
-        (Conference.zone, filters.zones),
         (Conference.region, filters.regions),
         (Conference.sessionType, filters.session_types),
         (Conference.trainingType, filters.training_types),
     ):
         if values:
             conditions.append(_norm(column).in_(values))
+    if filters.zones:
+        conditions.append(_zone_in(Conference.zone, filters.zones))
     if filters.company:
         conditions.append(_norm(Conference.company) == filters.company.strip().lower())
     return conditions
@@ -102,7 +110,7 @@ def access_scope_conditions(
     def rule_condition(rule):
         condition = _norm(company_column) == rule.company
         if rule.zone is not None:
-            condition = and_(condition, _norm(zone_column) == rule.zone)
+            condition = and_(condition, _zone_in(zone_column, (rule.zone,)))
         if rule.region is not None:
             condition = and_(condition, _norm(region_column) == rule.region)
         return condition
@@ -148,7 +156,8 @@ def trainer_summary_counts(
       pending       approved, not yet started / finished, not past - across ALL the trainer's
                     trainings on the default view, else across the counted range
       missed        approved, never started, date already past - within the counted range
-      ongoing       running now (Ongoing / Live) - all trainings on the default view, else the range
+      ongoing       running now (Ongoing / Live) - all the trainer's trainings, whatever the range: the
+                    Ongoing card ignores the date filter and opens every running training
       totalTrainees distinct trainees marked Present or with a submitted test - every training on
                     the default view, else the listed ones"""
     owned = conference_repository.trainer_condition(trainer_username)
@@ -177,7 +186,7 @@ def trainer_summary_counts(
             how_many(and_(counted, status == "completed")),
             how_many(and_(scoped, not_started_approved, not_(past))),
             how_many(and_(counted, not_started_approved, past)),
-            how_many(and_(scoped, status.in_(("ongoing", "live")))),
+            how_many(status.in_(("ongoing", "live"))),
         ).where(owned)
     ).one()
 
@@ -260,6 +269,16 @@ def _live_quiz_suite_is_mysql(element, compiler, **kw):
     )
 
 
+def scored_suite_condition():
+    """A result for its training's Standard Test or Live Quiz - the results that count as marks
+    (module_flow.scored_suite_uids is the same rule in Python). A Survey result never does. For a
+    query that already joins Conference to AssessmentResult."""
+    return or_(
+        AssessmentResult.assessmentSuiteUid == Conference.postAssessmentUid,
+        live_quiz_suite_is(Conference.sessionConfig, AssessmentResult.assessmentSuiteUid),
+    )
+
+
 def _counted_marks(trainee_uid: Optional[str] = None):
     """Per trainee: the summed Standard Test + Live Quiz marks (total, max) of Submitted results, at
     trainings that weren't cancelled, where the trainee was marked Present."""
@@ -267,10 +286,6 @@ def _counted_marks(trainee_uid: Optional[str] = None):
         Attendance.conferenceUid == AssessmentResult.conferenceUid,
         Attendance.traineeUid == AssessmentResult.traineeUid,
         Attendance.status == "Present",
-    )
-    counted_suite = or_(
-        AssessmentResult.assessmentSuiteUid == Conference.postAssessmentUid,
-        live_quiz_suite_is(Conference.sessionConfig, AssessmentResult.assessmentSuiteUid),
     )
     query = (
         select(
@@ -283,7 +298,7 @@ def _counted_marks(trainee_uid: Optional[str] = None):
             AssessmentResult.status == "Submitted",
             func.lower(func.coalesce(Conference.conferenceStatus, "")) != "cancelled",
             present,
-            counted_suite,
+            scored_suite_condition(),
         )
         .group_by(AssessmentResult.traineeUid)
     )
@@ -455,6 +470,12 @@ def dashboard_snapshot(
     `conditions` = the in-scope trainings (see `conference_conditions`).
     `agency_companies` narrows the partner-agency trainer pool to those companies (normalized like
     every scope comparison); None = every company in this tenant, an empty set = none."""
+    rows = db.execute(_snapshot_query(conditions, agency_companies)).all()
+    return _snapshot_from_rows(rows)
+
+
+def _snapshot_query(conditions: list, agency_companies: Optional[Collection[str]]):
+    """The one UNION ALL behind dashboard_snapshot: a member per aggregate (see the note above)."""
     join_conf_att = Conference.conferenceUid == Attendance.conferenceUid
     join_conf_res = Conference.conferenceUid == AssessmentResult.conferenceUid
 
@@ -513,7 +534,8 @@ def dashboard_snapshot(
         )
         .select_from(AssessmentResult)
         .join(Conference, join_conf_res)
-        .where(AssessmentResult.status == "Submitted", *conditions)
+        # Marks only: a Survey has no right answers, so its 0% must not count as a failed attempt.
+        .where(AssessmentResult.status == "Submitted", scored_suite_condition(), *conditions)
     )
 
     # Present (training, trainee) pairs, and how many of them never submitted
@@ -549,31 +571,63 @@ def dashboard_snapshot(
         )
     )
 
-    rows = db.execute(union_all(status_q, pax_q, attendance_q, busy_q, agency_q, results_q, pairs_q)).all()
+    return union_all(status_q, pax_q, attendance_q, busy_q, agency_q, results_q, pairs_q)
 
+
+# Each UNION ALL member's rows, by `kind` (column k), into the snapshot. Columns a/b/c/n1/n2/n3 mean
+# what that member selected for them (see _snapshot_query).
+
+
+def _read_status(snapshot: DashboardSnapshot, row) -> None:
+    # Kept with its first training's id (MIN(id)) - _snapshot_from_rows orders the groups by it.
+    snapshot.status_groups.append((int(row.n2 or 0), row.a, row.b, row.c, int(row.n1)))
+
+
+def _read_pax(snapshot: DashboardSnapshot, row) -> None:
+    snapshot.pax_groups.append((row.a, row.b, int(row.n1)))
+
+
+def _read_attendance(snapshot: DashboardSnapshot, row) -> None:
+    snapshot.attendance_groups.append((row.a, row.b, row.c, int(row.n1)))
+
+
+def _read_busy_trainer(snapshot: DashboardSnapshot, row) -> None:
+    if row.a:
+        snapshot.busy_trainers.add(row.a)
+
+
+def _read_agency_trainer(snapshot: DashboardSnapshot, row) -> None:
+    if row.a:
+        snapshot.agency_trainers.add(row.a)
+
+
+def _read_results(snapshot: DashboardSnapshot, row) -> None:
+    snapshot.attempts = int(row.n1 or 0)
+    snapshot.passed = int(row.n2 or 0)
+    snapshot.percent_total = float(row.n3 or 0)
+
+
+def _read_pairs(snapshot: DashboardSnapshot, row) -> None:
+    snapshot.present_pairs = int(row.n1 or 0)
+    snapshot.missed_pairs = int(row.n2 or 0)
+    snapshot.submitted_pairs = int(row.n3 or 0)
+
+
+_ROW_READERS = {
+    "status": _read_status,
+    "pax": _read_pax,
+    "att": _read_attendance,
+    "busy": _read_busy_trainer,
+    "agency": _read_agency_trainer,
+    "res": _read_results,
+    "pairs": _read_pairs,
+}
+
+
+def _snapshot_from_rows(rows) -> DashboardSnapshot:
     snapshot = DashboardSnapshot()
-    ordered_status: list[tuple] = []
-    for kind, a, b, c, n1, n2, n3 in rows:
-        if kind == "status":
-            ordered_status.append((int(n2 or 0), a, b, c, int(n1)))
-        elif kind == "pax":
-            snapshot.pax_groups.append((a, b, int(n1)))
-        elif kind == "att":
-            snapshot.attendance_groups.append((a, b, c, int(n1)))
-        elif kind == "busy":
-            if a:
-                snapshot.busy_trainers.add(a)
-        elif kind == "agency":
-            if a:
-                snapshot.agency_trainers.add(a)
-        elif kind == "res":
-            snapshot.attempts = int(n1 or 0)
-            snapshot.passed = int(n2 or 0)
-            snapshot.percent_total = float(n3 or 0)
-        elif kind == "pairs":
-            snapshot.present_pairs = int(n1 or 0)
-            snapshot.missed_pairs = int(n2 or 0)
-            snapshot.submitted_pairs = int(n3 or 0)
-    ordered_status.sort(key=lambda row: row[0])
-    snapshot.status_groups = [row[1:] for row in ordered_status]
+    for row in rows:
+        _ROW_READERS[row.k](snapshot, row)
+    # Status groups in the order each one's first training was created, without that id.
+    snapshot.status_groups = [group[1:] for group in sorted(snapshot.status_groups, key=lambda group: group[0])]
     return snapshot

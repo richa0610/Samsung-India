@@ -164,7 +164,7 @@ export default function SessionDashboardHeader({
             </View>
           ) : !hasStarted && notYetDue ? (
             <View style={[styles.endSessionBtn, styles.sessionScheduledBtn]}>
-              <Ionicons name="lock-closed" size={12} color="#475569" />
+              <Ionicons name="lock-closed" size={12} color={Colors.gray600} />
               <AppText style={[styles.endSessionBtnText, styles.sessionScheduledBtnText]}>
                 {startsOnLabel ? `Starts ${startsOnLabel}` : "Not started"}
               </AppText>
@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.slate200,
   },
   sessionScheduledBtnText: {
-    color: "#475569",
+    color: Colors.gray600,
   },
   sessionLoadingBtn: {
     backgroundColor: Colors.gray200,

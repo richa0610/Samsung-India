@@ -49,13 +49,17 @@ ROUTES = {
     ("POST", "/admin/profile/aadhar"): STAFF,
     ("POST", "/admin/profile/photo"): STAFF,
     ("GET", "/admin/requested-by-options"): STAFF,
+    ("GET", "/admin/settings/check-in"): ADMIN,  # Super Admin only (tests/test_checkin_face_detection.py)
+    ("PUT", "/admin/settings/check-in"): ADMIN,
     ("GET", "/admin/session-types"): STAFF,
+    ("GET", "/admin/states"): STAFF,
     ("POST", "/admin/trainees"): STAFF,
     ("GET", "/admin/trainees/page"): STAFF,
     ("POST", "/admin/trainees/{trainee_uid}/photo"): STAFF,
     ("GET", "/admin/trainers"): STAFF,
     ("GET", "/admin/trainers/{username}"): STAFF,
     ("GET", "/admin/training-hubs"): STAFF,
+    ("GET", "/admin/zones"): STAFF,
     ("GET", "/admin/training-types"): STAFF,
     ("POST", "/admin/trainings"): STAFF,
     ("GET", "/admin/trainings/facets"): STAFF,
@@ -103,6 +107,7 @@ ROUTES = {
     ("GET", "/sessions/live-quiz/summary"): TRAINEE,
     ("POST", "/sessions/live-quiz/timeout"): TRAINEE,
     ("POST", "/sessions/proctoring-lock"): TRAINEE,
+    ("POST", "/sessions/proctoring-violation"): TRAINEE,
     ("GET", "/sessions/trainings"): TRAINEE,
     ("GET", "/sessions/{conference_uid}/detail"): TRAINEE,
     ("POST", "/trainees/logout"): TRAINEE,
@@ -171,10 +176,14 @@ def valid_request(method: str, path: str) -> dict:
         return {"json": {"reason": "audit"} if method == "DELETE" or path.endswith("/unlock") else {"status": "Present", "reason": "audit"}}
     if path.endswith("/broadcast"):
         return {"json": {"questionId": 1}}
+    if "/modules/" in path or path.endswith("/advance-module"):
+        return {"json": {"latitude": 28.6, "longitude": 77.2}}   # the trainer's position, as the app sends it
     if path.endswith("/approve") or path.endswith("/reject"):
         return {"json": {"reason": "audit"}}
     if method == "PATCH" and "{conference_uid}" in path:
         return {"json": {"trainingStatus": "Cancelled"}}
+    if path == "/admin/settings/check-in" and method == "PUT":
+        return {"json": {"faceDetectionEnabled": False}}
     if method in ("POST", "PATCH", "DELETE"):
         return {"json": {}}
     return {}

@@ -10,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 from app.core.config import settings
+from app.core.media import MAX_REQUEST_BYTES
 from app.core.tenant_limit import TenantConcurrencyLimit
 from tests.tenant_fixtures import ALPHA, TenantWorld
 
@@ -33,7 +34,19 @@ class CorsIsTheOutermostMiddleware(unittest.TestCase):
     def test_cors_wraps_every_other_middleware(self):
         names = [type(layer).__name__ for layer in middleware_layers(self.w.app)]
         # ServerErrorMiddleware is Starlette's own last-resort layer, always outside the app's middleware.
-        self.assertEqual(names[:3], ["ServerErrorMiddleware", "CORSMiddleware", "TenantConcurrencyLimit"])
+        # The body-size limit sits inside CORS (its 413 carries CORS headers) and outside the tenant
+        # limit (an oversized upload never takes a tenant slot).
+        self.assertEqual(
+            names[:4], ["ServerErrorMiddleware", "CORSMiddleware", "BodySizeLimit", "TenantConcurrencyLimit"]
+        )
+
+    def test_an_oversized_upload_is_refused_with_the_cors_headers(self):
+        response = self.w.client.post(
+            "/trainees/login", content=b"x" * (MAX_REQUEST_BYTES + 1),
+            headers={"Content-Type": "application/json", "Origin": self.origin},
+        )
+        self.assertEqual(response.status_code, 413, response.text)
+        self.assertEqual(response.headers.get("access-control-allow-origin"), self.origin)
 
     def test_a_preflight_is_answered_without_touching_the_tenant_limit(self):
         tenant_limit_reached = AssertionError("a preflight reached the tenant limit")

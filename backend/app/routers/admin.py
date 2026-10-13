@@ -1,15 +1,21 @@
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.exceptions import forbidden
 from app.core.rate_limit import rate_limit
-from app.dependencies.auth import get_current_admin, require_admin_role
+from app.dependencies.auth import get_current_admin, require_admin_role, require_super_admin
 from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.dependencies.filters import ConferenceFilters, get_conference_filters
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
-from app.schemas.admin import AdminAccessScopeOut, AdminAuthSession, AdminDashboardStatsOut, AdminLoginRequest
-from app.services import admin_service, media_migration, token_revocation
+from app.schemas.admin import (
+    AdminAccessScopeOut,
+    AdminAuthSession,
+    AdminDashboardStatsOut,
+    AdminLoginRequest,
+    CheckInSettingsOut,
+    CheckInSettingsUpdate,
+)
+from app.services import admin_service, media_migration, tenant_settings_service, token_revocation
 from app.services.access_service import resolve_scope, scope_summary
 from app.utils.helpers import client_ip
 
@@ -31,17 +37,39 @@ def login(
     return admin_service.login(common_db, db, payload, tenant_id, ip_address=client_ip(request))
 
 
-@router.get("/maintenance/media-plan")
-def get_media_migration_plan(
-    request: Request,
-    admin: Admin = Depends(require_admin_role),
-    common_db: Session = Depends(get_common_db),
-) -> dict:
+@router.get("/maintenance/media-plan", dependencies=[Depends(require_super_admin)])
+def get_media_migration_plan(common_db: Session = Depends(get_common_db)) -> dict:
     """READ-ONLY report of how pre-split uploads on this server would move into tenant folders
     (services/media_migration.py) - for a host without a shell. Super Admin only; moves nothing."""
-    if not resolve_scope(common_db, admin, get_tenant_id_from_request(request)).is_super:
-        raise forbidden("This report requires a Super Admin account")
     return media_migration.current_report(common_db)
+
+
+@router.get("/settings/check-in", response_model=CheckInSettingsOut, dependencies=[Depends(require_super_admin)])
+def get_check_in_settings(
+    common_db: Session = Depends(get_common_db),
+    tenant_id: str = Depends(get_tenant_id_from_request),
+):
+    """This tenant's trainee security check-in settings. Super Admin only."""
+    return CheckInSettingsOut(
+        faceDetectionEnabled=tenant_settings_service.checkin_face_detection_enabled(common_db, tenant_id)
+    )
+
+
+@router.put("/settings/check-in", response_model=CheckInSettingsOut)
+def update_check_in_settings(
+    payload: CheckInSettingsUpdate,
+    request: Request,
+    admin: Admin = Depends(require_super_admin),
+    common_db: Session = Depends(get_common_db),
+    db: Session = Depends(get_db),
+    tenant_id: str = Depends(get_tenant_id_from_request),
+):
+    """Turns the face check at the trainee security check-in on or off for this whole tenant
+    (off = the trainee just captures a photo). Super Admin only; logged."""
+    enabled = tenant_settings_service.set_checkin_face_detection(
+        common_db, db, tenant_id, payload.faceDetectionEnabled, username=admin.username, ip_address=client_ip(request)
+    )
+    return CheckInSettingsOut(faceDetectionEnabled=enabled)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

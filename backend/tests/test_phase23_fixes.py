@@ -87,20 +87,123 @@ class AccountFailureLimit(FixesTestCase):
         self.assertEqual(self.login("trainer1", forwarded="198.51.100.52").status_code, 200)
 
 
-class TraineeLoginFailureRevealsNothing(FixesTestCase):
-    def trainee_login(self, phone, forwarded):
-        return self.w.client.post("/trainees/login", json={"phone": phone},
+class TraineeLoginTestCase(FixesTestCase):
+    def trainee_login(self, identifier, forwarded="198.51.100.1", password=PASSWORD):
+        return self.w.client.post("/trainees/login", json={"identifier": str(identifier), "password": password},
                                   headers={"X-Tenant-ID": ALPHA, "X-Forwarded-For": forwarded})
 
-    def test_an_unknown_phone_gets_a_generic_401(self):
-        response = self.trainee_login(9_999_999_999, "198.51.100.1")
-        self.assertEqual(response.status_code, 401)
-        self.assertNotIn("No trainee", response.json()["detail"])
+    def trainee(self, trainee_uid="TR-S_N1-0"):
+        return self.alpha.query(Trainee).filter(Trainee.traineeUid == trainee_uid).one()
 
-    def test_a_phone_is_locked_after_repeated_failures_from_any_address(self):
+    def set_stored_password(self, trainee_uid, value):
+        self.trainee(trainee_uid).password = value
+        self.alpha.commit()
+
+
+class TraineeLoginWithCompanyIdOrPhoneAndPassword(TraineeLoginTestCase):
+    def test_the_trainee_uid_username_or_phone_with_the_password_signs_in(self):
+        t = self.trainee()
+        for identifier in (t.traineeUid, t.username, t.phone, f"  {t.traineeUid} "):
+            with self.subTest(identifier=identifier):
+                response = self.trainee_login(identifier)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["trainee"]["traineeUid"], "TR-S_N1-0")
+
+    def test_every_failure_gets_the_same_generic_401(self):
+        self.set_stored_password("TR-S_N1-1", None)       # e.g. self-registered: no password
+        self.set_stored_password("TR-S_DEL-0", "")
+        self.set_stored_password("TR-S_DEL-1", PASSWORD)  # not a bcrypt hash: never matches, even as typed
+        cases = {
+            "wrong password": ("TR-S_N1-0", "wrong"),
+            "unknown company id": ("TR-NOBODY", PASSWORD),
+            "unknown phone": (9_999_999_999, PASSWORD),
+            "no password set": ("TR-S_N1-1", PASSWORD),
+            "empty password stored": ("TR-S_DEL-0", PASSWORD),
+            "stored value is not a hash": ("TR-S_DEL-1", PASSWORD),
+            "over bcrypt's 72-byte limit": ("TR-S_N1-0", "x" * 100),
+        }
+        details = set()
+        for case, (identifier, password) in cases.items():
+            with self.subTest(case):
+                response = self.trainee_login(identifier, password=password)
+                self.assertEqual(response.status_code, 401)
+                details.add(response.json()["detail"])
+        self.assertEqual(len(details), 1)
+        self.assertNotIn("No trainee", details.pop())
+
+    def test_an_identifier_naming_two_trainees_signs_in_neither(self):
+        self.trainee("TR-S_N1-1").username = "TR-S_N1-0"   # one's username is another's Trainee UID
+        self.alpha.commit()
+        self.assertEqual(self.trainee_login("TR-S_N1-0").status_code, 401)
+        self.assertEqual(self.trainee_login(self.trainee().phone).status_code, 200)
+
+    def test_a_phone_only_request_from_an_old_app_build_is_refused(self):
+        response = self.w.client.post("/trainees/login", json={"phone": self.trainee().phone}, headers={"X-Tenant-ID": ALPHA})
+        self.assertEqual(response.status_code, 422)
+
+    def test_an_account_is_locked_after_repeated_failures_whichever_id_is_typed(self):
+        t = self.trainee()
+        identifiers = (t.traineeUid, t.username, t.phone)
+        for i in range(rate_limit.ACCOUNT_MAX_FAILURES):
+            self.trainee_login(identifiers[i % len(identifiers)], f"198.51.100.{i}", password="wrong")
+        self.assertEqual(self.trainee_login(t.phone, "198.51.100.200").status_code, 429)   # even the right password
+        self.assertEqual(self.trainee_login("TR-S_N1-1", "198.51.100.201").status_code, 200)   # others unaffected
+
+    def test_an_unknown_phone_is_locked_after_repeated_failures_from_any_address(self):
         for i in range(rate_limit.ACCOUNT_MAX_FAILURES):
             self.trainee_login(9_999_999_999, f"198.51.100.{i}")
         self.assertEqual(self.trainee_login(9_999_999_999, "198.51.100.200").status_code, 429)
+
+
+class TraineeLoginLimitsOnlyFailuresPerAddress(TraineeLoginTestCase):
+    VENUE_WIFI = "198.51.100.77"
+
+    def unknown_phone(self, i):
+        return 6_000_000_000 + i   # no fixture trainee has a 6... number; one try each, so no account lock
+
+    def test_a_classroom_on_one_address_is_never_blocked_by_its_own_successes(self):
+        phones = [phone for (phone,) in self.alpha.query(Trainee.phone)]
+        for i in range(rate_limit.CALLER_MAX_FAILURES + 5):
+            with self.subTest(login=i):
+                self.assertEqual(self.trainee_login(phones[i % len(phones)], self.VENUE_WIFI).status_code, 200)
+
+    def test_failures_from_one_address_are_limited_and_other_addresses_are_not(self):
+        for i in range(rate_limit.CALLER_MAX_FAILURES):
+            self.assertEqual(self.trainee_login(self.unknown_phone(i), self.VENUE_WIFI).status_code, 401)
+        known = self.trainee().phone
+        self.assertEqual(self.trainee_login(known, self.VENUE_WIFI).status_code, 429)   # even a real login
+        self.assertEqual(self.trainee_login(known, "198.51.100.78").status_code, 200)
+
+    def test_a_success_does_not_clear_the_address_failures(self):
+        known = self.trainee().phone
+        for i in range(rate_limit.CALLER_MAX_FAILURES - 1):
+            self.trainee_login(self.unknown_phone(i), self.VENUE_WIFI)
+        self.assertEqual(self.trainee_login(known, self.VENUE_WIFI).status_code, 200)
+        self.assertEqual(self.trainee_login(self.unknown_phone(99), self.VENUE_WIFI).status_code, 401)
+        self.assertEqual(self.trainee_login(known, self.VENUE_WIFI).status_code, 429)
+
+
+class SelfRegistrationSignsInWithoutAPassword(TraineeLoginTestCase):
+    NEW = {"name": "New Person", "phone": 9_876_543_210, "email": "new.person@example.com", "state": "Delhi"}
+
+    def register(self):
+        # The synthetic world switches UID generation off (tenant_fixtures); a self-registration needs one.
+        with patch("app.models.uid_events.next_uid", lambda connection, prefix: f"{prefix}-SELF-1"):
+            return self.w.client.post("/trainees/register", json=self.NEW, headers={"X-Tenant-ID": ALPHA, "X-Forwarded-For": "198.51.100.5"})
+
+    def test_registering_returns_a_working_session_for_that_trainee(self):
+        response = self.register()
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["trainee"]["phone"], self.NEW["phone"])
+        headers = {"Authorization": f"Bearer {body['access_token']}"}
+        self.assertNotEqual(self.w.client.get("/sessions/current", headers=headers).status_code, 401)
+        self.assertEqual(self.w.client.post("/trainees/logout", headers=headers).status_code, 204)
+
+    def test_a_self_registered_trainee_has_no_password_so_cannot_log_in_later(self):
+        self.assertEqual(self.register().status_code, 201)
+        self.assertIsNone(self.alpha.query(Trainee).filter(Trainee.phone == self.NEW["phone"]).one().password)
+        self.assertEqual(self.trainee_login(self.NEW["phone"]).status_code, 401)
 
 
 class WebSocketFirstMessageAuth(FixesTestCase):
@@ -162,7 +265,8 @@ class TokenRevocation(FixesTestCase):
 
     def test_a_trainee_can_log_out_and_the_token_dies_everywhere(self):
         phone = self.alpha.query(Trainee).filter(Trainee.traineeUid == "TR-S_N1-0").one().phone
-        token = self.w.client.post("/trainees/login", json={"phone": phone}, headers={"X-Tenant-ID": ALPHA}).json()["access_token"]
+        token = self.w.client.post("/trainees/login", json={"identifier": str(phone), "password": PASSWORD},
+                                   headers={"X-Tenant-ID": ALPHA}).json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
         self.assertEqual(self.w.client.post("/trainees/logout", headers=headers).status_code, 204)
         self.assertEqual(self.w.client.get("/sessions/current", headers=headers).status_code, 401)

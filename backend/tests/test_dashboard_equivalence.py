@@ -69,6 +69,10 @@ class DashboardEquivalenceTests(unittest.TestCase):
                     sessionType=rng.choice(["Online", "Offline", None]),
                     trainingType=rng.choice(TYPES),
                     confirmedPax=rng.choice(["0", "12", "25", "abc", None, " 7 "]),
+                    # Standard Test s1, Live Quiz s2, Survey s3 - only test and quiz results are marks.
+                    postAssessmentUid=rng.choice(["s1", None]),
+                    sessionConfig=rng.choice([None, json.dumps({"liveQuiz": {"assessmentSuiteUid": "s2"}}), "not json"]),
+                    surveyUid=rng.choice(["s3", None]),
                 )
             )
         self.db.commit()
@@ -93,7 +97,7 @@ class DashboardEquivalenceTests(unittest.TestCase):
                     resultUid=f"res{n}",
                     conferenceUid=rng.choice(uids + ["orphan"]),
                     traineeUid=f"tr{rng.randint(0, 400)}",
-                    assessmentSuiteUid=rng.choice(["s1", "s2"]),
+                    assessmentSuiteUid=rng.choice(["s1", "s2", "s3"]),
                     percentage=rng.choice([0, 20, 49.5, 50, 75.25, 100]),
                     status=rng.choice(["Submitted", "Submitted", "Started"]),
                 )

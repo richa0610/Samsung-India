@@ -183,15 +183,23 @@ class TraineeListAndPendingTraineeList(ListTestCase):
         )
         self.alpha.commit()
 
-    def test_the_registration_date_range_narrows_the_list_whole_days_inclusive(self):
+    def test_the_registration_date_range_narrows_the_list_whole_ist_days_inclusive(self):
+        # `timestamp` is stored in UTC (MySQL's NOW()); an IST day starts at 18:30 UTC the evening before.
         self.register_on("2026-01-15 10:00:00", *TRAINER1_TRAINEES)
-        self.register_on("2026-10-01 00:00:00", "TR-S_N1-0")      # first moment of the range
-        self.register_on("2026-10-31 23:59:59", "TR-S_N1-1")      # last moment of the range
-        self.register_on("2026-11-01 00:00:00", "TR-S_DEL-0")     # just after it
+        self.register_on("2026-09-30 18:29:59", "TR-S_DEL-1")     # 30 Sep 23:59:59 IST - just before the range
+        self.register_on("2026-09-30 18:30:00", "TR-S_N1-0")      # 1 Oct 00:00:00 IST - its first moment
+        self.register_on("2026-10-31 18:29:59", "TR-S_N1-1")      # 31 Oct 23:59:59 IST - its last moment
+        self.register_on("2026-10-31 18:30:00", "TR-S_DEL-0")     # 1 Nov 00:00:00 IST - just after it
         self.register_on("2026-10-10 12:00:00", "TR-OTHER-TRAINER")   # in range, but not trainer1's
         body = self.page("trainer1", self.PAGE + "&start=2026-10-01&end=2026-10-31")
         self.assertEqual(self.keys(body["items"]), {"TR-S_N1-0", "TR-S_N1-1"})
         self.assertEqual(body["total"], 2)
+        # Each row shows the IST time the range matched it by.
+        shown = {t["traineeUid"]: (t["timestamp"], t["registeredAt"]) for t in body["items"]}
+        self.assertEqual(shown, {
+            "TR-S_N1-0": ("2026-10-01 00:00:00", "2026-10-01 00:00:00"),
+            "TR-S_N1-1": ("2026-10-31 23:59:59", "2026-10-31 23:59:59"),
+        })
         pending = self.page("trainer1", self.PAGE + "&mode=pending&start=2026-10-01&end=2026-10-31")
         self.assertLessEqual(self.keys(pending["items"]), {"TR-S_N1-0", "TR-S_N1-1"})
         walked = self.walk("trainer1", "/admin/trainees/page?start=2026-10-01&end=2026-10-31&sort=name&dir=asc")

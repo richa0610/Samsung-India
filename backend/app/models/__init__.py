@@ -19,6 +19,8 @@ from app.models.venue import Venue
 
 # Registers before_insert UID hooks - must be last, after every model above.
 import app.models.uid_events  # noqa: E402,F401
+# Registers the attendance row's who / when / how stamp (updationOn, token, logPath).
+import app.models.attendance_events  # noqa: E402,F401
 
 __all__ = [
     # Existing models (updated for mmtbtwob_tops)

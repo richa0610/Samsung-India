@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   forgot: { alignSelf: "flex-end", marginTop: 8 },
   forgotText: { fontSize: 13, lineHeight: 17, fontWeight: "500" },
   notice: { marginTop: 12 },
-  submit: {
+  submit: {  
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

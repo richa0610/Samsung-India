@@ -5,6 +5,7 @@ import { Alert, Share } from "react-native";
 import { ApiError } from "@/api/client";
 import {
   SessionDashboard,
+  TrainerPosition,
   UploadFile,
   broadcastLiveQuestion,
   checkTrainingSchedule,
@@ -29,6 +30,18 @@ import { checkLocationPermission, getCurrentCoordinates } from "@/services/locat
 import { formatDisplayDate } from "@/utils/formatDisplayDate";
 import { formatGeneratedTimestamp } from "./formatting";
 import { TrainerCheckInPhoto } from "./TrainerCheckInModal";
+
+/** Where the trainer is, for the session's activity log. Only read when location is already
+ *  allowed (never prompts), and never holds up the action: null when it isn't available. */
+async function currentTrainerPosition(): Promise<TrainerPosition | null> {
+  try {
+    if ((await checkLocationPermission()) !== "granted") return null;
+    const { latitude, longitude } = await getCurrentCoordinates(1000);
+    return { latitude, longitude };
+  } catch {
+    return null;
+  }
+}
 
 export type OutsideVenuePrompt = {
   photo: TrainerCheckInPhoto;
@@ -58,13 +71,14 @@ export type ScheduleOverridePrompt = {
 export function useSessionDashboardScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ conferenceUid?: string; from?: string }>();
-  const conferenceUid = params.conferenceUid || "CONF25456581";
+  // Every screen opening this passes the training; without one there's nothing to load.
+  const conferenceUid = params.conferenceUid ?? "";
   const { admin, adminToken } = useAuth();
   const isAdmin = admin?.role === "admin" || params.from === "admin";
 
   const [data, setData] = useState<SessionDashboard | null>(null);
   const [generatedAt, setGeneratedAt] = useState<Date | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(conferenceUid));
   const [refreshing, setRefreshing] = useState(false);
   const [showQR, setShowQR] = useState(false);
   const [bottomTab, setBottomTab] = useState<DashboardTab>("plan");
@@ -141,7 +155,7 @@ export function useSessionDashboardScreen() {
 
   const loadData = useCallback(
     async (mode: "load" | "refresh" | "silent" | "action" = "load") => {
-      if (!adminToken) return;
+      if (!adminToken || !conferenceUid) return;
       if (mode === "silent" && inFlight.current) {
         refreshAgain.current = true;
         return;
@@ -486,7 +500,7 @@ export function useSessionDashboardScreen() {
     if (startingModuleKey != null || !adminToken) return;
     setStartingModuleKey(moduleKey);
     try {
-      await startModule(adminToken, conferenceUid, moduleKey);
+      await startModule(adminToken, conferenceUid, moduleKey, await currentTrainerPosition());
       // Optimistically flip the module to Running so the UI immediately
       // reflects the active module without flickering back to "Start".
       setData((prev) => {
@@ -531,7 +545,7 @@ export function useSessionDashboardScreen() {
     if (!adminToken) return;
     const activeKey = data?.activeModuleId;
     try {
-      await stopActiveModule(adminToken, conferenceUid);
+      await stopActiveModule(adminToken, conferenceUid, await currentTrainerPosition());
       if (activeKey) {
         setData((prev) => {
           if (!prev) return prev;
@@ -567,7 +581,7 @@ export function useSessionDashboardScreen() {
     if (restartingModuleKey != null || !adminToken) return;
     setRestartingModuleKey(moduleKey);
     try {
-      await restartModule(adminToken, conferenceUid, moduleKey);
+      await restartModule(adminToken, conferenceUid, moduleKey, await currentTrainerPosition());
       setData((prev) => {
         if (!prev) return prev;
         return {
@@ -623,7 +637,7 @@ export function useSessionDashboardScreen() {
     if (!adminToken) return;
     setEndingSession(true);
     try {
-      await endTraining(adminToken, conferenceUid, photo, attendanceSheet, totalPax);
+      await endTraining(adminToken, conferenceUid, photo, attendanceSheet, totalPax, await currentTrainerPosition());
       setShowCheckOutModal(false);
       if (isAdmin) {
         router.replace("/admin_training_list");

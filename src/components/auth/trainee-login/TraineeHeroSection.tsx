@@ -1,7 +1,9 @@
+
 import { useRouter } from "expo-router";
 import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import BrandWordmark from "@/components/auth/login/BrandWordmark";
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
 import { Spacing } from "@/theme/spacing";
@@ -25,8 +27,8 @@ export default function TraineeHeroSection({ onSkip }: TraineeHeroSectionProps) 
     <View style={[styles.container, { paddingTop: insets.top + Spacing.sm }]}>
       {/* Top Header: TOPS Brand & Skip */}
       <View style={styles.topRow}>
-        <View style={styles.brandBlock} accessible accessibilityRole="header" accessibilityLabel="TOPS">
-          <AppText style={styles.brandTitle}>TOPS</AppText>
+        <View style={styles.wordmark}>
+          <BrandWordmark color={Colors.authBrandDeep} />
         </View>
 
         <Pressable
@@ -41,6 +43,7 @@ export default function TraineeHeroSection({ onSkip }: TraineeHeroSectionProps) 
       </View>
 
 
+
       {/* Hero Headline & Subtitle */}
       <View style={[styles.heroContent, { width: width * HERO_TEXT_WIDTH }]}>
         <AppText variant="hero" color={Colors.authHeadline} weight={FontWeight.bold} style={styles.headline}>
@@ -49,7 +52,7 @@ export default function TraineeHeroSection({ onSkip }: TraineeHeroSectionProps) 
         <AppText variant="hero" color={Colors.authHeadline} weight={FontWeight.bold} style={styles.headline}>
           Assess.
         </AppText>
-        <AppText variant="hero" color={Colors.primary} weight={FontWeight.bold} style={styles.headlineAccent}>
+        <AppText variant="hero" color={Colors.authBrandDeep} weight={FontWeight.bold} style={styles.headlineAccent}>
           Grow together.
         </AppText>
 
@@ -75,19 +78,14 @@ const styles = StyleSheet.create({
   },
   topRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     justifyContent: "space-between",
     marginBottom: Spacing.lg,
   },
-  brandBlock: {
-    alignItems: "flex-start",
+  wordmark: {
+    marginTop: 4,
   },
-  brandTitle: {
-    color: Colors.primary,
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: 2,
-  },
+
 
   skipButton: {
     paddingVertical: Spacing.xs,
@@ -127,7 +125,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 6,
     borderRadius: 3,
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.authBrandDeep,
   },
   inactiveDot: {
     width: 6,

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from sqlalchemy.orm import Session
@@ -18,6 +18,8 @@ from app.schemas.session import (
     LiveTimeoutRequest,
     ProctoringLockOut,
     ProctoringLockRequest,
+    ProctoringStrikeOut,
+    ProctoringStrikeRequest,
     SessionHistoryItem,
     SessionJoinInfo,
     TraineeDashboardOut,
@@ -28,6 +30,10 @@ from app.schemas.session import (
 from app.services import live_quiz_service, session_service, trainee_dashboard_service, training_detail_service
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+# Query-string names stay camelCase - they are what the app already sends - while the Python
+# parameters follow snake_case.
+ConferenceUidQuery = Annotated[str, Query(alias="conferenceUid")]
 
 
 @router.get("/join/{code}", response_model=SessionJoinInfo)
@@ -40,12 +46,12 @@ def get_session_join_info(
 @router.post("/join/{code}", response_model=SessionJoinInfo)
 def join_session(
     code: str,
-    viaRegistration: bool = False,
+    via_registration: Annotated[bool, Query(alias="viaRegistration")] = False,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
     tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return session_service.join_session(db, trainee, code, tenant_id, via_registration=viaRegistration)
+    return session_service.join_session(db, trainee, code, tenant_id, via_registration=via_registration)
 
 
 @router.get("/current", response_model=CurrentSession)
@@ -71,13 +77,27 @@ def report_proctoring_lock(
     return session_service.report_proctoring_lock(db, trainee, payload, background_tasks, tenant_id)
 
 
-@router.get("/live-quiz", response_model=LiveQuizView)
-def get_live_quiz(
-    conferenceUid: str,
+@router.post("/proctoring-violation", response_model=ProctoringStrikeOut)
+def report_proctoring_strike(
+    payload: ProctoringStrikeRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return live_quiz_service.get_live_quiz_view(db, trainee, conferenceUid)
+    """One proctoring warning strike (reason + the app's strike number) during the test."""
+    return session_service.record_proctoring_strike(
+        db, trainee, payload, background_tasks, get_tenant_id_from_request(request)
+    )
+
+
+@router.get("/live-quiz", response_model=LiveQuizView)
+def get_live_quiz(
+    conference_uid: ConferenceUidQuery,
+    db: Session = Depends(get_db),
+    trainee: Trainee = Depends(get_current_trainee),
+):
+    return live_quiz_service.get_live_quiz_view(db, trainee, conference_uid)
 
 
 @router.post("/live-quiz/answer", response_model=LiveAnswerResult)
@@ -102,39 +122,39 @@ def report_live_quiz_timeout(
 
 @router.get("/live-quiz/summary", response_model=LiveQuizSummaryOut)
 def get_live_quiz_summary(
-    conferenceUid: str,
+    conference_uid: ConferenceUidQuery,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return live_quiz_service.get_live_quiz_summary(db, trainee, conferenceUid)
+    return live_quiz_service.get_live_quiz_summary(db, trainee, conference_uid)
 
 
 @router.get("/live-quiz/reveal", response_model=LiveRevealOut)
 def reveal_live_quiz_question(
-    conferenceUid: str,
-    questionId: int,
+    conference_uid: ConferenceUidQuery,
+    question_id: Annotated[int, Query(alias="questionId")],
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return live_quiz_service.reveal_live_question(db, trainee, conferenceUid, questionId)
+    return live_quiz_service.reveal_live_question(db, trainee, conference_uid, question_id)
 
 
 @router.post("/live-quiz/submit", response_model=LiveQuizSubmitOut)
 def submit_live_quiz(
-    conferenceUid: str,
+    conference_uid: ConferenceUidQuery,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return live_quiz_service.submit_live_quiz(db, trainee, conferenceUid)
+    return live_quiz_service.submit_live_quiz(db, trainee, conference_uid)
 
 
 @router.get("/live-quiz/results", response_model=LiveQuizResultsOut)
 def get_live_quiz_results(
-    conferenceUid: str,
+    conference_uid: ConferenceUidQuery,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return live_quiz_service.get_live_quiz_results(db, trainee, conferenceUid)
+    return live_quiz_service.get_live_quiz_results(db, trainee, conference_uid)
 
 
 @router.get("/history", response_model=list[SessionHistoryItem])

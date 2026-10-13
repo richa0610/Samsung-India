@@ -167,6 +167,8 @@ export function useSecureCheckIn(params: SecureCheckInParams) {
     setStep,
     error,
     locationResult,
+    // Set per tenant by a Super Admin; the face check stays on unless the server says otherwise.
+    faceDetectionRequired: locationResult?.faceDetectionRequired ?? true,
     verifiedAt,
     liveLocationLabel,
     permissionState,

@@ -24,7 +24,7 @@ export default function LeaderboardRow({ user, position }: LeaderboardRowProps) 
   return (
     <View style={[styles.row, isYou && styles.youRow]}>
       <View style={[styles.avatar, isYou && styles.youAvatar]}>
-        <AppText style={styles.positionText} color={isYou ? Colors.headerBlue : "#475569"} weight={FontWeight.bold}>
+        <AppText style={styles.positionText} color={isYou ? Colors.headerBlue : Colors.gray600} weight={FontWeight.bold}>
           {position}
         </AppText>
       </View>
@@ -77,11 +77,11 @@ const styles = StyleSheet.create({
   name: {
     flex: 1,
     fontSize: 13,
-    color: "#1E293B",
+    color: Colors.black,
     letterSpacing: 0.2,
   },
   youName: {
-    color: "#0F172A",
+    color: Colors.black,
     fontSize: 13.5,
   },
   scoreContainer: {
@@ -93,6 +93,6 @@ const styles = StyleSheet.create({
   },
   accuracyText: {
     fontSize: 12,
-    color: "#64748B",
+    color: Colors.gray500,
   },
 });

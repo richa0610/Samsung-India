@@ -1,6 +1,4 @@
-import { USE_MOCK_DATA } from "@/config/dataSource";
 import { apiRequest } from "./client";
-import * as mock from "./mockService";
 
 export type SessionModuleKey = "ATTENDANCE" | "STANDARD_TEST" | "LIVE_QUIZ" | "SURVEY";
 
@@ -75,7 +73,6 @@ export type CurrentSession = {
 };
 
 export function getCurrentSession(token: string, conferenceUid?: string) {
-  if (USE_MOCK_DATA) return mock.getCurrentSession(token);
   const query = conferenceUid ? `?conference_uid=${encodeURIComponent(conferenceUid)}` : "";
   return apiRequest<CurrentSession>(`/sessions/current${query}`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -168,18 +165,50 @@ export function submitLiveAnswer(
   });
 }
 
+/** A fresh ID for one proctoring strike, so the server counts it once
+ *  however many times it's sent (letters, digits and "-", 8-64 characters). */
+export function newStrikeId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 /** Persist a post-test proctoring lockout onto the trainee's attendance row
- *  so the trainer's Participant Master List shows it and can unlock them. */
+ *  so the trainer's Participant Master List shows it and can unlock them.
+ *  `strikeId` is the locking strike's ID (newStrikeId). */
 export function reportProctoringLock(
   token: string,
   conferenceUid: string,
   violationType: string,
   strikeNumber: number,
+  strikeId: string,
 ) {
   return apiRequest<{ locked: boolean }>("/sessions/proctoring-lock", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ conferenceUid, violationType, strikeNumber }),
+    body: JSON.stringify({ conferenceUid, violationType, strikeNumber, strikeId }),
+  });
+}
+
+export type ProctoringStrikeResult = {
+  /** false when the server already had this strike (a resend). */
+  counted: boolean;
+  attemptsLeft: number | null;
+  /** The server has locked the trainee out of the test. */
+  locked: boolean;
+};
+
+/** Record one proctoring warning strike on the trainee's attendance row: the
+ *  server counts it under its reason and locks the trainee out itself once
+ *  their strikes since the last unlock reach the company's warning limit. */
+export function reportProctoringViolation(
+  token: string,
+  conferenceUid: string,
+  violationType: string,
+  strikeId: string,
+) {
+  return apiRequest<ProctoringStrikeResult>("/sessions/proctoring-violation", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ conferenceUid, violationType, strikeId }),
   });
 }
 
@@ -397,7 +426,6 @@ export function getTrainingHistory(
 }
 
 export function getSessionHistory(token: string) {
-  if (USE_MOCK_DATA) return mock.getSessionHistory(token);
   return apiRequest<SessionHistoryItem[]>("/sessions/history", {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -445,22 +473,17 @@ export function getTrainingDetail(token: string, conferenceUid: string) {
   });
 }
 
-// Pure client-side navigation state (not backed by any endpoint, real or
-// mock) - always the same implementation regardless of USE_MOCK_DATA.
+// Pure client-side navigation state (not backed by any endpoint).
 export {
-  setSecurityCheckInCompleted,
-  getAttendanceState,
   setAttendanceState,
   getSessionFlowState,
   setSessionFlowState,
-  resetSessionFlowState,
-  isAttendanceRecorded,
   setPendingCheckIn,
   getPendingCheckIn,
   clearPendingCheckIn,
   markModuleLeft,
   isModuleLeft,
-} from "@/api/mockService";
-export type { PendingCheckIn } from "@/api/mockService";
+} from "@/services/sessionFlowState";
+export type { PendingCheckIn } from "@/services/sessionFlowState";
 export { ApiError } from "@/api/client";
 

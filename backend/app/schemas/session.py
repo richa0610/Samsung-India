@@ -1,8 +1,9 @@
-from typing import List, Literal, Optional
+from typing import Annotated, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-from app.schemas._common import PageMeta
+from app.core.constants import PROCTORING_VIOLATIONS
+from app.schemas._common import IdStr, PageMeta
 from app.schemas.assessment import QuestionOption
 
 
@@ -206,18 +207,40 @@ class TraineeDashboardOut(BaseModel):
     trainings: List[DashboardTrainingRow] = []
 
 
+# The ID the app gives each proctoring strike, so a resend is recognised (letters, digits, - and _).
+StrikeId = Annotated[str, Field(pattern=r"^[A-Za-z0-9_-]{8,64}$")]
+
+
 class ProctoringLockRequest(BaseModel):
     """Sent by the trainee's post-test screen when on-device proctoring
     strikes out (3rd violation). Persists the lock onto the trainee's
-    attendance row so the trainer's Participant Master List can show it."""
+    attendance row so the trainer's Participant Master List can show it.
+    Older app versions send no `strikeId` (and their own reason text) - still accepted."""
 
     conferenceUid: str
     violationType: str = Field(min_length=1, max_length=100)
     strikeNumber: int = Field(ge=1, le=10)
+    strikeId: Optional[StrikeId] = None
 
 
 class ProctoringLockOut(BaseModel):
     locked: bool
+
+
+class ProctoringStrikeRequest(BaseModel):
+    """Sent by the trainee's post-test screen for each proctoring strike, with an ID the app made
+    for it - the same strike sent twice counts once. The server counts the strikes itself and
+    locks the trainee out once they reach the company's warning limit."""
+
+    conferenceUid: IdStr
+    violationType: Literal[PROCTORING_VIOLATIONS]
+    strikeId: StrikeId
+
+
+class ProctoringStrikeOut(BaseModel):
+    counted: bool  # False when that strike was already counted (a resend)
+    attemptsLeft: Optional[int] = None
+    locked: bool  # the trainee is locked out of the test now
 
 
 class QuestionOption(BaseModel):

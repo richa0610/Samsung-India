@@ -7,7 +7,7 @@ app/utils/date_utils.py:to_utc_iso) - true of MySQL's own `NOW()` on the Aiven-h
 and true of the app process's `datetime.now()` only when the host it runs on happens to be set
 to UTC (true on Render, not true on a local dev machine in another timezone). Several services
 called the bare, host-clock-dependent `datetime.now()` for "now" values that get stored in, or
-compared against, those UTC columns - `_module_active_seconds` (module runtime), `conference
+compared against, those UTC columns - `timeline.module_active_seconds` (module runtime), `conference
 .actualStartedAt`/`actualEndedAt`, `AssessmentResult.submittedAt`, `Attendance(Log).markedAt`,
 and various remark timestamps. On a host whose local clock is IST, that silently added the
 IST-UTC offset (5h30m) to anything computed against a value MySQL or `utc_now()` had written.
@@ -29,7 +29,7 @@ from sqlalchemy.pool import StaticPool
 from app.database.connection import TenantBase
 from app.models.conference import Conference
 from app.models.conference_activity_log import ConferenceActivityLog
-from app.services import training_service
+from app.services.training import timeline
 from app.utils import date_utils
 
 
@@ -86,7 +86,7 @@ class ModuleRuntimeIgnoresTheHostsOwnClock(unittest.TestCase):
         )
         self.db.commit()
 
-        seconds = training_service._module_active_seconds(self.db, conference)
+        seconds = timeline.module_active_seconds(self.db, conference)
 
         self.assertIsNotNone(seconds)
         # ~180s of real elapsed time - the bug this pins showed ~19920s (5h32m) instead.

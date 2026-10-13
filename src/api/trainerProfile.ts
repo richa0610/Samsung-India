@@ -1,6 +1,4 @@
-import { USE_MOCK_DATA } from "@/config/dataSource";
 import { apiRequest, apiUpload } from "./client";
-import * as mock from "./mockService";
 
 export type TrainerProfile = {
   name: string;
@@ -55,14 +53,12 @@ export type TrainerProfile = {
 };
 
 export function fetchTrainerProfile(token: string) {
-  if (USE_MOCK_DATA) return mock.fetchTrainerProfile(token);
   return apiRequest<TrainerProfile>("/admin/profile", {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
 export function updateTrainerProfile(token: string, payload: Partial<TrainerProfile>) {
-  if (USE_MOCK_DATA) return mock.updateTrainerProfile(token, payload);
   return apiRequest<TrainerProfile>("/admin/profile", {
     method: "PATCH",
     headers: { Authorization: `Bearer ${token}` },
@@ -73,7 +69,6 @@ export function updateTrainerProfile(token: string, payload: Partial<TrainerProf
 export type PickedTrainerPhoto = { uri: string; name: string; type: string };
 
 export function uploadTrainerPhoto(token: string, image: PickedTrainerPhoto) {
-  if (USE_MOCK_DATA) return mock.uploadTrainerPhoto(token, image);
   const formData = new FormData();
   formData.append("file", {
     uri: image.uri,
@@ -87,7 +82,6 @@ export function uploadTrainerPhoto(token: string, image: PickedTrainerPhoto) {
 export type PickedTrainerDocument = { uri: string; name: string; type: string };
 
 export function uploadTrainerAadhar(token: string, file: PickedTrainerDocument) {
-  if (USE_MOCK_DATA) return mock.uploadTrainerAadhar(token, file);
   const formData = new FormData();
   formData.append("file", {
     uri: file.uri,

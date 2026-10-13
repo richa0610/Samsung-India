@@ -12,6 +12,7 @@ import {
   AdminStatCard,
   AssessmentEligibilityGaps,
   AudienceTypeBreakdown,
+  CheckInSettingsCard,
   TrainerStatusAnalysis,
   TrainingTypeBreakdown,
 } from "@/components/admin/dashboard";
@@ -67,7 +68,7 @@ export default function AdminDashboardScreen() {
         >
           <AdminDashboardHeader
             adminName={admin?.name}
-            companyId={admin?.offerId || admin?.username || "OFF26005"}
+            companyId={admin?.offerId || admin?.username}
             avatarUrl={admin?.profilePicture}
             onOpenProfile={pickAndUpload}
             uploadingPhoto={uploading}
@@ -211,6 +212,8 @@ export default function AdminDashboardScreen() {
               />
             </View>
           )}
+
+          <CheckInSettingsCard />
 
           {error && (
             <View style={styles.errorContainer}>

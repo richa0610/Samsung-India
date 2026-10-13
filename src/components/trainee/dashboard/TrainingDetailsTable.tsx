@@ -43,7 +43,7 @@ type RankLook = { icon?: keyof typeof Ionicons.glyphMap; iconColor?: string; tex
 // Gold / silver / bronze for the session's top three; everyone else a calm blue.
 const PODIUM: Record<string, RankLook> = {
   "1": { icon: "trophy", iconColor: "#D97706", text: "#92400E", bg: "#FEF3C7", border: "#FCD34D" },
-  "2": { icon: "medal", iconColor: "#64748B", text: "#334155", bg: "#F1F5F9", border: "#CBD5E1" },
+  "2": { icon: "medal", iconColor: Colors.gray500, text: Colors.gray700, bg: Colors.gray100, border: Colors.gray300 },
   "3": { icon: "medal", iconColor: "#C2410C", text: "#9A3412", bg: "#FFEDD5", border: "#FDBA74" },
 };
 const OTHER_RANK: RankLook = { text: Colors.blueAccent, bg: Colors.blue50, border: "#D6E6FF" };

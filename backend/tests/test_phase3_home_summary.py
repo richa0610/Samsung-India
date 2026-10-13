@@ -10,7 +10,7 @@ import random
 import unittest
 from datetime import date, timedelta
 
-from sqlalchemy import create_engine, event, select, text
+from sqlalchemy import create_engine, event, func, select, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -76,6 +76,19 @@ class HomeSummaryMatchesTheOldCounting(unittest.TestCase):
             for start, end in ranges:
                 with self.subTest(trainer=trainer, start=start, end=end):
                     self.assertEqual(self.sql(trainer, start, end), legacy.trainer_counts(self.db, trainer, start, end))
+
+    def test_ongoing_counts_every_running_training_whatever_the_range(self):
+        for trainer in TRAINERS:
+            running = self.db.scalar(
+                select(func.count()).where(
+                    Conference.trainerEmployeeId == trainer,
+                    func.lower(Conference.conferenceStatus).in_(("ongoing", "live")),
+                )
+            )
+            self.assertGreater(running, 0)
+            for start, end in [(None, None), ("2099-01-01", "2099-12-31"), (self.today.isoformat(), self.today.isoformat())]:
+                with self.subTest(trainer=trainer, start=start, end=end):
+                    self.assertEqual(self.sql(trainer, start, end)["ongoing"], running)
 
     def test_the_counts_take_two_statements_whatever_the_history(self):
         seen = []

@@ -11,7 +11,6 @@ import {
   AssessmentResult,
   getAssessmentQuestions,
   submitAssessment,
-  terminateAssessmentWithViolation,
 } from "@/api/assessment";
 import {
   getLastViolation,
@@ -23,7 +22,7 @@ import {
   SECURITY_VIOLATIONS,
   SecurityViolationType,
 } from "@/components/proctoring/violations";
-import { reportProctoringLock } from "@/api/session";
+import { newStrikeId, reportProctoringLock, reportProctoringViolation } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -169,34 +168,18 @@ export function usePostTest(
 
   // Security violation termination
   const handleViolationTermination = useCallback(
-    async (violationType: SecurityViolationType) => {
+    async (violationType: SecurityViolationType, strikeId: string) => {
       terminatingRef.current = true;
       setTestStatus("security-locked");
       setLockedViolationType(violationType);
       lockSession(sessionKey, violationType);
 
-      const answersPayload = questions.map((question, index) => ({
-        questionId: question.id,
-        selectedOption: answers[index] ?? null,
-      }));
-
-      try {
-        await terminateAssessmentWithViolation(
-          token ?? "",
-          suiteUid ?? "",
-          conferenceUid ?? "",
-          violationType,
-          answersPayload,
-        );
-      } catch {
-        // Even if API call fails, lock the test permanently for this session
-      }
-
       // Persist the lock onto the trainee's attendance row so the trainer's
-      // Participant Master List shows it and can unlock (with a reason).
+      // Participant Master List shows it and can unlock (with a reason). The
+      // strike's ID lets the server count it once even if it already has it.
       if (token && conferenceUid) {
         try {
-          await reportProctoringLock(token, conferenceUid, violationType, MAX_PROCTORING_WARNINGS);
+          await reportProctoringLock(token, conferenceUid, violationType, MAX_PROCTORING_WARNINGS, strikeId);
         } catch {
           // Non-fatal - the local lock still holds for this session.
         }
@@ -212,7 +195,7 @@ export function usePostTest(
         },
       });
     },
-    [token, suiteUid, conferenceUid, sessionKey, questions, answers, router],
+    [token, conferenceUid, sessionKey, router],
   );
 
   // Central Violation Trigger
@@ -237,15 +220,29 @@ export function usePostTest(
       const newCount = recordSessionViolation(sessionKey, violationType);
       setViolationCount(newCount);
       setCurrentViolation(violationType);
+      const strikeId = newStrikeId();
 
       if (newCount < MAX_PROCTORING_WARNINGS) {
         setViolationModalVisible(true);
+        // The server records every strike and counts them itself - it may lock the trainee
+        // before this device does (e.g. after an app restart reset the local count), and then
+        // the test ends here too. Background only: a failed report never blocks the test.
+        if (token && conferenceUid) {
+          reportProctoringViolation(token, conferenceUid, violationType, strikeId)
+            .then((result) => {
+              if (result.locked && !terminatingRef.current) {
+                setViolationModalVisible(false);
+                handleViolationTermination(violationType, strikeId);
+              }
+            })
+            .catch(() => {});
+        }
       } else {
         setViolationModalVisible(false);
-        handleViolationTermination(violationType);
+        handleViolationTermination(violationType, strikeId);
       }
     },
-    [testStatus, violationModalVisible, sessionKey, handleViolationTermination],
+    [testStatus, violationModalVisible, sessionKey, handleViolationTermination, token, conferenceUid],
   );
 
   const handleCloseViolationModal = () => {

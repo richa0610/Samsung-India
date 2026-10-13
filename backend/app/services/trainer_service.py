@@ -6,10 +6,10 @@ from app.core.security import hash_password
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.repositories import admin_repository
-from app.services.access_service import granted_companies, norm, resolve_scope
+from app.services.access_service import AccessScope, granted_companies, norm, resolve_scope
 from app.schemas.catalog import SelectOptionOut
 from app.schemas.trainer_profile import TrainerProfileOut, TrainerProfileUpdate
-from app.utils.validators import validate_aadhar_upload, validate_profile_photo_upload
+from app.utils.validators import read_document_upload, read_photo_upload
 
 
 def find_trainer(common_db: Session, db: Session, username: str, tenant_id: str | None) -> Admin | AgencyTeam | None:
@@ -45,29 +45,43 @@ def list_trainers(
     are always limited to this tenant."""
     scope = resolve_scope(common_db, principal, tenant_id)
     if scope.is_trainer:
-        own_company = norm(principal.company)
-        if not own_company:
-            trainers = [principal]
-        elif company and norm(company) != own_company:
-            trainers = []
-        else:
-            trainers = [
-                *admin_repository.list_admin_trainers_for_tenant(common_db, tenant_id, companies={own_company}),
-                *admin_repository.list_agency_trainers(db, company=own_company),
-            ]
-    elif not scope.is_admin_panel:
-        trainers = []
+        trainers = _trainers_for_trainer(common_db, db, principal, tenant_id, company)
+    elif scope.is_admin_panel:
+        trainers = _trainers_for_admin_panel(common_db, db, scope, tenant_id, company)
     else:
-        granted = granted_companies(scope)
-        if company:
-            allowed = granted is None or norm(company) in granted
-            trainers = admin_repository.list_agency_trainers(db, company=company) if allowed else []
-        else:
-            trainers = [
-                *admin_repository.list_admin_trainers_for_tenant(common_db, tenant_id, granted),
-                *admin_repository.list_agency_trainers(db, companies=granted),
-            ]
+        trainers = []
+    return _trainer_options(trainers)
 
+
+def _trainers_for_trainer(
+    common_db: Session, db: Session, principal: Admin | AgencyTeam, tenant_id: str | None, company: str | None
+) -> list[Admin | AgencyTeam]:
+    own_company = norm(principal.company)
+    if not own_company:
+        return [principal]
+    if company and norm(company) != own_company:
+        return []
+    return [
+        *admin_repository.list_admin_trainers_for_tenant(common_db, tenant_id, companies={own_company}),
+        *admin_repository.list_agency_trainers(db, company=own_company),
+    ]
+
+
+def _trainers_for_admin_panel(
+    common_db: Session, db: Session, scope: AccessScope, tenant_id: str | None, company: str | None
+) -> list[Admin | AgencyTeam]:
+    granted = granted_companies(scope)
+    if company:
+        allowed = granted is None or norm(company) in granted
+        return admin_repository.list_agency_trainers(db, company=company) if allowed else []
+    return [
+        *admin_repository.list_admin_trainers_for_tenant(common_db, tenant_id, granted),
+        *admin_repository.list_agency_trainers(db, companies=granted),
+    ]
+
+
+def _trainer_options(trainers: list[Admin | AgencyTeam]) -> list[SelectOptionOut]:
+    """One option per username (the same trainer can be seeded in both tables), sorted by name."""
     seen: set[str] = set()
     options: list[SelectOptionOut] = []
     for trainer in trainers:
@@ -105,113 +119,15 @@ def _may_see_trainer(scope, principal: Admin | AgencyTeam, trainer: Admin | Agen
     return False
 
 
-def _admin_to_profile(admin: Admin) -> TrainerProfileOut:
-    """Admin-backed login: almost every TrainerProfile field has a real
-    matching column on `admin` (see models/admin.py)."""
-    return TrainerProfileOut(
-        name=admin.name or "",
-        email=admin.email or "",
-        mobileNumber=str(admin.phone) if admin.phone else "",
-        altPhone=str(admin.altPhone) if admin.altPhone else "",
-        gender=admin.gender or "",
-        dob=admin.dob or "",
-        city=admin.localCity or "",
-        district=admin.localDistrict or "",
-        state=admin.localState or "",
-        pincode=admin.localPinCode or "",
-        landmark=admin.localLandmark or "",
-        permanentSameAsLocal=True,
-        permanentCity=admin.permanentCity or "",
-        permanentDistrict=admin.permanentDistrict or "",
-        permanentState=admin.permanentState or "",
-        permanentPincode=admin.permanentPinCode or "",
-        permanentLandmark=admin.permanentLandmark or "",
-        aadharNumber=admin.aadharNo or "",
-        aadharFile=admin.aadharImage or "",
-        profilePicture=resolve_trainer_avatar(admin.profilePhoto, admin.gender),
-        about=admin.about or "",
-        resume=admin.resume or "",
-        otherDocument=admin.otherDocument or "",
-        facebookUsername=admin.facebook or "",
-        twitterUsername=admin.twitter or "",
-        instagramUsername=admin.instagram or "",
-        linkedinUsername=admin.linkedin or "",
-        youtubeUsername=admin.youtube or "",
-        github=admin.github or "",
-        jobStatus=admin.jobStatus or "",
-        joinedOn=admin.joinedOn or "",
-        role=admin.role or "",
-        designation=admin.designation or "",
-        salary=admin.salary or "",
-        companyEmail=admin.companyEmail or "",
-        visitingCard=admin.visitingCard or "",
-        idCard=admin.idCard or "",
-        offerLetter=admin.offerLetter or "",
-        letterhead=admin.letterHead or "",
-        promocode=admin.promoCode or "",
-        username=admin.username or "",
-        password="",
-        remarks=admin.remarks or "",
-        agreedToTerms=True,
-    )
-
-
-def _agency_to_profile(agent: AgencyTeam) -> TrainerProfileOut:
-    """AgencyTeam-backed login (the real trainers seeded via
-    seed_more_trainers.py etc.): that table has no documents/social-media/
-    salary/official-docs columns at all, so those fields come back blank
-    rather than fabricated. district/landmark/permanent*/aadharImage are
-    real columns (see scripts/add_agencyteam_district_landmark.py,
-    scripts/add_agencyteam_permanent_address.py and
-    scripts/add_agencyteam_aadhar.py)."""
-    return TrainerProfileOut(
-        name=agent.name or "",
-        email=agent.email or "",
-        mobileNumber=str(agent.phone) if agent.phone else "",
-        altPhone=str(agent.altPhone) if agent.altPhone else "",
-        gender=agent.gender or "",
-        dob=agent.dob or "",
-        city=agent.jobCity or "",
-        district=agent.district or "",
-        state=agent.jobState or "",
-        pincode=agent.jobPincode or "",
-        landmark=agent.landmark or "",
-        permanentSameAsLocal=True,
-        permanentCity=agent.permanentCity or "",
-        permanentDistrict=agent.permanentDistrict or "",
-        permanentState=agent.permanentState or "",
-        permanentPincode=agent.permanentPinCode or "",
-        permanentLandmark=agent.permanentLandmark or "",
-        aadharNumber="",
-        aadharFile=agent.aadharImage or "",
-        profilePicture=resolve_trainer_avatar(agent.profilePhoto, agent.gender),
-        about="",
-        resume="",
-        otherDocument="",
-        facebookUsername="",
-        twitterUsername="",
-        instagramUsername="",
-        linkedinUsername="",
-        youtubeUsername="",
-        github="",
-        jobStatus=agent.status or "",
-        joinedOn="",
-        role=agent.role or "",
-        designation=agent.designation or "",
-        salary="",
-        companyEmail=agent.officialEmail or "",
-        visitingCard="No",
-        idCard="No",
-        offerLetter="No",
-        letterhead="No",
-        promocode="No",
-        username=agent.username or "",
-        password="",
-        remarks="",
-        agreedToTerms=True,
-    )
-
-
+# Profile field -> the column it is stored in, per table. The ONE mapping both directions use:
+# `_profile` reads through it and `_apply_profile_update` writes through it, so a field can't show
+# one column and save to another.
+#   admin (Common DB): almost every profile field has a real column (see models/admin.py).
+#   agencyteam (tenant DB, the real trainers seeded via seed_more_trainers.py etc.): no documents /
+#     social-media / salary / official-docs columns at all - those come back blank or "No"
+#     (`_AGENCY_UNSTORED`) rather than fabricated. district / landmark / permanent* / aadharImage
+#     are real columns (scripts/add_agencyteam_district_landmark.py,
+#     scripts/add_agencyteam_permanent_address.py, scripts/add_agencyteam_aadhar.py).
 _ADMIN_FIELD_MAP = {
     "name": "name",
     "email": "email",
@@ -269,6 +185,47 @@ _AGENCY_FIELD_MAP = {
     "companyEmail": "officialEmail",
 }
 
+# What an agencyteam profile shows for the fields that table has no column for.
+_AGENCY_UNSTORED = {
+    "aadharNumber": "",
+    "about": "",
+    "resume": "",
+    "otherDocument": "",
+    "facebookUsername": "",
+    "twitterUsername": "",
+    "instagramUsername": "",
+    "linkedinUsername": "",
+    "youtubeUsername": "",
+    "github": "",
+    "joinedOn": "",
+    "salary": "",
+    "remarks": "",
+    "visitingCard": "No",
+    "idCard": "No",
+    "offerLetter": "No",
+    "letterhead": "No",
+    "promocode": "No",
+}
+
+
+def _profile(account: Admin | AgencyTeam, field_map: dict[str, str], **fields) -> TrainerProfileOut:
+    """The profile screen for one account: every field its table stores (read through the same map
+    an update writes through), plus the ones shown here but never edited through the form."""
+    stored = {field: getattr(account, column) or "" for field, column in field_map.items()}
+    return TrainerProfileOut(
+        **stored,
+        mobileNumber=str(account.phone) if account.phone else "",
+        altPhone=str(account.altPhone) if account.altPhone else "",
+        aadharFile=account.aadharImage or "",
+        profilePicture=resolve_trainer_avatar(account.profilePhoto, account.gender),
+        role=account.role or "",
+        username=account.username or "",
+        password="",
+        permanentSameAsLocal=True,
+        agreedToTerms=True,
+        **fields,
+    )
+
 
 _OFFICIAL_FIELDS = (
     "jobStatus", "joinedOn", "designation", "salary", "companyEmail",
@@ -302,8 +259,9 @@ def _apply_profile_update(target: Admin | AgencyTeam, updates: dict, field_map: 
 
 def get_profile(admin: Admin | AgencyTeam) -> TrainerProfileOut:
     if isinstance(admin, Admin):
-        return _admin_to_profile(admin)
-    return _agency_to_profile(admin)
+        return _profile(admin, _ADMIN_FIELD_MAP)
+    # agencyteam keeps its job status in `status`, read-only here (an official field).
+    return _profile(admin, _AGENCY_FIELD_MAP, jobStatus=admin.status or "", **_AGENCY_UNSTORED)
 
 
 def update_profile(
@@ -340,8 +298,7 @@ async def upload_profile_photo(
     orphans. Admin (Common DB) and AgencyTeam (tenant DB) ids come from
     separate auto-increment sequences and can collide, so which table this
     account is in has to be part of the filename."""
-    contents = await file.read()
-    extension = validate_profile_photo_upload(file.content_type, contents, size_error_detail="Image must be 5MB or smaller")
+    contents, extension = await read_photo_upload(file, size_error_detail="Image must be 5MB or smaller")
 
     # Admin accounts get their own folder; agency trainers stay in trainer_photos.
     is_admin = isinstance(admin, Admin)
@@ -366,8 +323,7 @@ async def upload_aadhar_document(
     own trainer_documents/aadhar/ folder rather than trainer_photos/ - a
     different kind of file, worth keeping browsable separately rather
     than mixed in with profile pictures."""
-    contents = await file.read()
-    extension = validate_aadhar_upload(file.content_type, contents, size_error_detail="File must be 5MB or smaller")
+    contents, extension = await read_document_upload(file, size_error_detail="File must be 5MB or smaller")
 
     doc_dir = media_subdir("trainer_documents/aadhar", tenant_id)
     is_admin = isinstance(admin, Admin)

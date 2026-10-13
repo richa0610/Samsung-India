@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: 12,
-    color: "#1E293B",
+    color: Colors.black,
     letterSpacing: 0.4,
   },
   filterBtn: {

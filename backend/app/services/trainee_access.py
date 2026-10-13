@@ -23,6 +23,7 @@ from app.models.trainee import Trainee
 from app.repositories import assessment_repository, attendance_repository, conference_repository
 
 NOT_PRESENT = "You must be marked present by the trainer to take part in this session."
+PROCTORING_LOCKED = "You're locked out of this test for proctoring violations. Ask your trainer to unlock you."
 
 # Assessment modules answered through /assessments (the Live Quiz has its own endpoints).
 SUBMITTABLE_MODULES = ("STANDARD_TEST", "SURVEY")
@@ -69,13 +70,16 @@ def module_of_suite(conference: Conference, suite_uid: str) -> Optional[str]:
 
 def open_assessment(db: Session, trainee: Trainee, conference_uid: str, suite_uid: str, *, lock: bool = False) -> tuple[Conference, str]:
     """The session and module key for a trainee taking `suite_uid` there right now: Present, the
-    suite is that session's Standard Test or Survey, and that module is live in a running session."""
+    suite is that session's Standard Test or Survey, that module is live in a running session, and -
+    for the proctored Standard Test - the trainee isn't locked out of it (proctoring_strikes)."""
     from app.services.session_service import session_is_running  # local: session_service imports this module
 
-    conference, _ = present_conference(db, trainee, conference_uid, lock=lock)
+    conference, attendance = present_conference(db, trainee, conference_uid, lock=lock)
     module_key = module_of_suite(conference, suite_uid)
     if module_key is None:
         raise not_found("Assessment not found")
     if not session_is_running(conference) or conference.activeModuleId != module_key:
         raise conflict("This module isn't open right now")
+    if module_key == "STANDARD_TEST" and attendance.isTheftLocked:
+        raise forbidden(PROCTORING_LOCKED)
     return conference, module_key

@@ -1,6 +1,4 @@
-import { USE_MOCK_DATA } from "@/config/dataSource";
 import { apiRequest, apiUpload } from "./client";
-import * as mock from "./mockService";
 
 // Field names mirror the `trainee` table from the legacy database dump.
 export type Trainee = {
@@ -41,25 +39,24 @@ export type RegisterPayload = {
   district?: string;
 };
 
+/** Self-registration (no password) also signs the new trainee in - it returns their session. */
 export function registerTrainee(payload: RegisterPayload) {
-  if (USE_MOCK_DATA) return mock.registerTrainee(payload);
-  return apiRequest<Trainee>("/trainees/register", {
+  return apiRequest<AuthSession>("/trainees/register", {
     method: "POST",
     body: JSON.stringify({ ...payload, phone: Number(payload.phone) }),
   });
 }
 
-export function loginTrainee(phone: string) {
-  if (USE_MOCK_DATA) return mock.loginTrainee(phone);
+/** `identifier` is what the trainee typed as Company ID / Phone No: Trainee UID, username or phone. */
+export function loginTrainee(identifier: string, password: string) {
   return apiRequest<AuthSession>("/trainees/login", {
     method: "POST",
-    body: JSON.stringify({ phone: Number(phone) }),
+    body: JSON.stringify({ identifier, password }),
   });
 }
 
 /** Signs the trainee out on the server: every token issued for them stops working (all devices). */
 export function logoutTrainee(token: string) {
-  if (USE_MOCK_DATA) return Promise.resolve(null);
   return apiRequest<null>("/trainees/logout", {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
@@ -79,7 +76,6 @@ export type UpdateProfilePayload = Partial<{
 }>;
 
 export function updateTrainee(token: string, payload: UpdateProfilePayload) {
-  if (USE_MOCK_DATA) return mock.updateTrainee(token, payload);
   return apiRequest<AuthSession>("/trainees/me", {
     method: "PATCH",
     headers: { Authorization: `Bearer ${token}` },
@@ -97,7 +93,6 @@ export type PickedImage = {
 };
 
 export function uploadTraineePhoto(token: string, image: PickedImage) {
-  if (USE_MOCK_DATA) return mock.uploadTraineePhoto(token, image);
   const formData = new FormData();
   formData.append("file", {
     uri: image.uri,

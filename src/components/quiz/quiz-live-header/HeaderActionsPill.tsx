@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     width: 1,
     alignSelf: "stretch",
     marginVertical: 5,
-    backgroundColor: "#CBD5E1",
+    backgroundColor: Colors.gray300,
   },
   spinningIcon: {
     transform: [{ rotate: "180deg" }],

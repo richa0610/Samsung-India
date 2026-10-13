@@ -151,6 +151,8 @@ export type TraineeRow = {
   markedOn: string | null;
   checkOutTime: string | null;
   score: string | null;
+  /** The score is at or above the pass mark (server-side); null while there's no score. */
+  scorePassed?: boolean | null;
   profilePhoto: string | null;
   // On-device proctoring lockout (post-test). Drives the red "LOCKED" pill +
   // the trainer's unlock control on the Participant Master List.
@@ -158,6 +160,19 @@ export type TraineeRow = {
   proctoringStrikes: number;
   proctoringMaxStrikes: number;
   proctoringLogs: string[];
+  /** Times a trainer lifted this trainee's lockout in this training, of the most allowed (2). */
+  proctoringUnlocks?: number;
+  proctoringMaxUnlocks?: number;
+  /** Stage column: "Attendance" once marked Present, else "Not Started". */
+  stage?: string;
+  /** Done / not done for each activity after Attendance (Test, Quiz, Survey), in run order. */
+  stageModules?: ParticipantModuleProgress[];
+};
+
+export type ParticipantModuleProgress = {
+  key: string;
+  label: string;
+  done: boolean;
 };
 
 export type ExecutionFlowStatus = "Pending" | "Running" | "Completed";
@@ -464,12 +479,21 @@ export type UploadFile = { uri: string; name: string; type: string };
 
 // Ending a session is a Security Check-Out: the trainer's face photo + the
 // signed attendance sheet (PDF or image) are both required.
+/** Where the trainer is when they act on a session - recorded on its activity log. Optional:
+ *  an action is never refused for a missing location. */
+export type TrainerPosition = { latitude: number; longitude: number };
+
+function positionBody(position?: TrainerPosition | null): Pick<RequestInit, "body"> {
+  return position ? { body: JSON.stringify({ latitude: position.latitude, longitude: position.longitude }) } : {};
+}
+
 export function endTraining(
   token: string,
   conferenceUid: string,
   photo: UploadFile,
   attendanceSheet: UploadFile,
   totalPax: number,
+  position?: TrainerPosition | null,
 ) {
   const formData = new FormData();
   formData.append("photo", { uri: photo.uri, name: photo.name, type: photo.type } as unknown as Blob);
@@ -478,34 +502,48 @@ export function endTraining(
     { uri: attendanceSheet.uri, name: attendanceSheet.name, type: attendanceSheet.type } as unknown as Blob,
   );
   formData.append("totalPax", String(totalPax));
+  if (position) {
+    formData.append("latitude", String(position.latitude));
+    formData.append("longitude", String(position.longitude));
+  }
   return apiUpload<TrainingOut>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/end`, formData, token);
 }
 
 // Manually opens one module. The trainer walks the flow forward one Start
 // at a time - the backend rejects a start that's out of sequence or while
 // another module is still live.
-export function startModule(token: string, conferenceUid: string, moduleKey: string) {
+export function startModule(
+  token: string,
+  conferenceUid: string,
+  moduleKey: string,
+  position?: TrainerPosition | null,
+) {
   return apiRequest<TrainingOut>(
     `/admin/trainings/${encodeURIComponent(conferenceUid)}/modules/${encodeURIComponent(moduleKey)}/start`,
-    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+    { method: "POST", headers: { Authorization: `Bearer ${token}` }, ...positionBody(position) },
   );
 }
 
 // Force-ends the currently live module without opening the next one. Never
 // ends the session (only endTraining does that).
-export function stopActiveModule(token: string, conferenceUid: string) {
+export function stopActiveModule(token: string, conferenceUid: string, position?: TrainerPosition | null) {
   return apiRequest<TrainingOut>(
     `/admin/trainings/${encodeURIComponent(conferenceUid)}/modules/stop-active`,
-    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+    { method: "POST", headers: { Authorization: `Bearer ${token}` }, ...positionBody(position) },
   );
 }
 
 // Re-runs a finished module. The backend rejects it while another module is
 // still live.
-export function restartModule(token: string, conferenceUid: string, moduleKey: string) {
+export function restartModule(
+  token: string,
+  conferenceUid: string,
+  moduleKey: string,
+  position?: TrainerPosition | null,
+) {
   return apiRequest<TrainingOut>(
     `/admin/trainings/${encodeURIComponent(conferenceUid)}/modules/${encodeURIComponent(moduleKey)}/restart`,
-    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+    { method: "POST", headers: { Authorization: `Bearer ${token}` }, ...positionBody(position) },
   );
 }
 
@@ -622,6 +660,24 @@ export function fetchTrainers(token: string, company?: string) {
 export function fetchVenues(token: string, district?: string) {
   const query = district ? `?district=${encodeURIComponent(district)}` : "";
   return apiRequest<SelectOption[]>(`/admin/venues${query}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/** A master-list option and the options that depend on it - a zone and its regions, a state and
+ *  its districts. A training saves both as these names. */
+export type MasterGroup = { name: string; options: string[] };
+
+/** The master list's zones (East, North, ...), each with its regions. */
+export function fetchZones(token: string) {
+  return apiRequest<MasterGroup[]>("/admin/zones", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+/** The master list's states, each with its districts. */
+export function fetchStates(token: string) {
+  return apiRequest<MasterGroup[]>("/admin/states", {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

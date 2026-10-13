@@ -147,7 +147,7 @@ export default function Global_Percentage({
         <View style={styles.rankBox}>
           <View style={styles.rankRow}>
             <View style={[styles.iconCircle, { backgroundColor: "#FAF5FF" }]}>
-              <Ionicons name="location-outline" size={16} color="#475569" />
+              <Ionicons name="location-outline" size={16} color={Colors.gray600} />
             </View>
             <View style={styles.rankMeta}>
               <AppText variant="tiny" weight={FontWeight.bold} color={Colors.gray800} numberOfLines={1}>

@@ -97,7 +97,7 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     borderRadius: 20,
     overflow: "hidden",
-    backgroundColor: "#BDBDBD",
+    backgroundColor: Colors.gray300,
     alignItems: "center",
     justifyContent: "center",
     marginVertical: 10,

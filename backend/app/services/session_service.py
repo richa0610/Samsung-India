@@ -1,10 +1,16 @@
 import json
+from dataclasses import dataclass
 from datetime import datetime
 
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
-from app.core.constants import DEMO_TRAINER_EMPLOYEE_ID, PASS_THRESHOLD_PERCENT
+from app.core.constants import (
+    DEFAULT_SESSION_TITLE,
+    DEMO_TRAINER_EMPLOYEE_ID,
+    MODULE_NAMES,
+    PASS_THRESHOLD_PERCENT,
+)
 from app.core.exceptions import bad_request, not_found
 from app.models.attendance import Attendance
 from app.models.conference import Conference
@@ -22,25 +28,20 @@ from app.schemas.session import (
     CurrentSession,
     ProctoringLockOut,
     ProctoringLockRequest,
+    ProctoringStrikeOut,
+    ProctoringStrikeRequest,
     SessionHistoryItem,
     SessionJoinInfo,
     SessionModule,
 )
-from app.services.module_flow import auto_advance_if_due, configured_modules
+from app.services.module_flow import auto_advance_if_due, configured_modules, scored_suite_uids
 from app.services.proctoring_settings_service import get_proctoring_settings
-from app.services import trainee_access
+from app.services import proctoring_strikes, trainee_access
 from app.utils import join_code
 from app.utils.date_utils import duration, ist_now, parse_module_start, utc_now
 from app.utils.status import title_status
 
 _LIVE_STATUSES = ("Ongoing", "Live")
-
-MODULE_NAMES = {
-    "ATTENDANCE": "Attendance",
-    "STANDARD_TEST": "Standard Test",
-    "LIVE_QUIZ": "Live Quiz",
-    "SURVEY": "Survey",
-}
 
 
 def _parse_session_config(raw: str | None) -> dict:
@@ -90,77 +91,105 @@ def _select_current_conference(
       3. Otherwise an Approved scheduled conference.
       4. Otherwise the newest conference on record.
     """
-    if requested_conference_uid:
-        req_conf = db.query(Conference).filter(Conference.conferenceUid == requested_conference_uid).first()
-        # Honoured only for a session this trainee is on; any other ID falls through to the normal
-        # selection below instead of exposing that session's modules.
-        if req_conf and (trainee is None or trainee_access.has_taken_part(db, trainee, requested_conference_uid)):
-            return req_conf, req_conf.conferenceStatus in _LIVE_STATUSES and not _session_is_over(req_conf), _conference_start(req_conf)
-
-    # 1. Did the trainee actively participate in a session today?
-    if trainee:
-        latest_attendance = (
-            db.query(Attendance)
-            .filter(
-                Attendance.traineeUid == trainee.traineeUid,
-                (Attendance.status == "Present") | Attendance.markedOn.isnot(None),
-            )
-            .order_by(Attendance.id.desc())
-            .first()
-        )
-        if not latest_attendance:
-            latest_attendance = (
-                db.query(Attendance)
-                .filter(Attendance.traineeUid == trainee.traineeUid)
-                .order_by(Attendance.id.desc())
-                .first()
-            )
-        if latest_attendance and latest_attendance.conferenceUid:
-            attended_conf = (
-                db.query(Conference)
-                .filter(Conference.conferenceUid == latest_attendance.conferenceUid)
-                .first()
-            )
-            if attended_conf:
-                # If this conference is still live right now, it is unconditionally their active session
-                if attended_conf.conferenceStatus in _LIVE_STATUSES and not _session_is_over(attended_conf):
-                    return attended_conf, True, _conference_start(attended_conf)
-                # If this conference was attended today, show it so the trainee sees its final state (Completed)
-                now_str = ist_now().strftime("%Y-%m-%d")
-                attended_today = (
-                    attended_conf.conferenceDate == now_str
-                    or (attended_conf.actualEndedAt and attended_conf.actualEndedAt.strftime("%Y-%m-%d") == now_str)
-                    or (latest_attendance.markedOn and str(latest_attendance.markedOn).startswith(now_str))
-                )
-                if attended_today:
-                    # Only override if there is an active LIVE session for this trainee right now
-                    has_live_now = False
-                    if trainee.trainerEmployeeId:
-                        newer_live = (
-                            db.query(Conference)
-                            .filter(
-                                Conference.trainerEmployeeId == trainee.trainerEmployeeId,
-                                Conference.conferenceStatus.in_(_LIVE_STATUSES),
-                            )
-                            .all()
-                        )
-                        for live_c in newer_live:
-                            if not _session_is_over(live_c):
-                                has_live_now = True
-                                break
-                    if not has_live_now:
-                        return attended_conf, False, _conference_start(attended_conf)
-
-    ongoing_query = db.query(Conference).filter(
-        Conference.conferenceStatus.in_(_LIVE_STATUSES)
+    # Each step runs only if every step before it found nothing.
+    return (
+        _requested_conference(db, trainee, requested_conference_uid)
+        or _attended_conference(db, trainee)
+        or _live_conference(db, trainee)
+        or _scheduled_conference(db, trainee)
     )
+
+
+_Selection = tuple[Conference | None, bool, datetime | None]
+
+
+def _is_running(conference: Conference) -> bool:
+    return conference.conferenceStatus in _LIVE_STATUSES and not _session_is_over(conference)
+
+
+def _requested_conference(db: Session, trainee: Trainee | None, requested_conference_uid: str | None) -> _Selection | None:
+    """0. The explicitly requested conference - honoured only for a session this trainee is on; any
+    other ID falls through to the normal selection instead of exposing that session's modules."""
+    if not requested_conference_uid:
+        return None
+    req_conf = db.query(Conference).filter(Conference.conferenceUid == requested_conference_uid).first()
+    if req_conf and (trainee is None or trainee_access.has_taken_part(db, trainee, requested_conference_uid)):
+        return req_conf, _is_running(req_conf), _conference_start(req_conf)
+    return None
+
+
+def _attended_conference(db: Session, trainee: Trainee | None) -> _Selection | None:
+    """1. The session the trainee actively took part in: still live (always theirs), or attended
+    today - shown even once Completed so they see their final results, unless their own trainer
+    is running a session right now."""
+    if not trainee:
+        return None
+    latest_attendance = _latest_attendance(db, trainee)
+    if not (latest_attendance and latest_attendance.conferenceUid):
+        return None
+    attended_conf = db.query(Conference).filter(Conference.conferenceUid == latest_attendance.conferenceUid).first()
+    if not attended_conf:
+        return None
+    if _is_running(attended_conf):
+        return attended_conf, True, _conference_start(attended_conf)
+    if _attended_today(attended_conf, latest_attendance) and not _trainer_running_session(db, trainee):
+        return attended_conf, False, _conference_start(attended_conf)
+    return None
+
+
+def _latest_attendance(db: Session, trainee: Trainee) -> Attendance | None:
+    """The trainee's newest attendance showing real participation (Present, or checked in), else
+    their newest attendance row of any kind."""
+    participated = (
+        db.query(Attendance)
+        .filter(
+            Attendance.traineeUid == trainee.traineeUid,
+            (Attendance.status == "Present") | Attendance.markedOn.isnot(None),
+        )
+        .order_by(Attendance.id.desc())
+        .first()
+    )
+    return participated or (
+        db.query(Attendance)
+        .filter(Attendance.traineeUid == trainee.traineeUid)
+        .order_by(Attendance.id.desc())
+        .first()
+    )
+
+
+def _attended_today(conference: Conference, attendance: Attendance) -> bool:
+    now_str = ist_now().strftime("%Y-%m-%d")
+    return bool(
+        conference.conferenceDate == now_str
+        or (conference.actualEndedAt and conference.actualEndedAt.strftime("%Y-%m-%d") == now_str)
+        or (attendance.markedOn and str(attendance.markedOn).startswith(now_str))
+    )
+
+
+def _trainer_running_session(db: Session, trainee: Trainee) -> bool:
+    """Whether the trainee's own trainer has a live session right now."""
+    if not trainee.trainerEmployeeId:
+        return False
+    live = (
+        db.query(Conference)
+        .filter(
+            Conference.trainerEmployeeId == trainee.trainerEmployeeId,
+            Conference.conferenceStatus.in_(_LIVE_STATUSES),
+        )
+        .all()
+    )
+    return any(not _session_is_over(c) for c in live)
+
+
+def _live_conference(db: Session, trainee: Trainee | None) -> _Selection | None:
+    """2. A live (`Ongoing`/`Live`) conference - the trainee's own trainer first, then the demo
+    trainer, then any live one; the newest of them."""
+    ongoing_query = db.query(Conference).filter(Conference.conferenceStatus.in_(_LIVE_STATUSES))
 
     if trainee and trainee.trainerEmployeeId:
         trainer_ongoing = [
             c
-            for c in ongoing_query.filter(
-                Conference.trainerEmployeeId == trainee.trainerEmployeeId
-            ).all()
+            for c in ongoing_query.filter(Conference.trainerEmployeeId == trainee.trainerEmployeeId).all()
             if not _session_is_over(c)
         ]
         if trainer_ongoing:
@@ -168,14 +197,17 @@ def _select_current_conference(
             return conf, True, _conference_start(conf)
 
     all_ongoing = [c for c in ongoing_query.all() if not _session_is_over(c)]
-    if all_ongoing:
-        demo_ongoing = [c for c in all_ongoing if c.trainerEmployeeId == DEMO_TRAINER_EMPLOYEE_ID]
-        conf = max(demo_ongoing or all_ongoing, key=lambda c: c.id)
-        return conf, True, _conference_start(conf)
+    if not all_ongoing:
+        return None
+    demo_ongoing = [c for c in all_ongoing if c.trainerEmployeeId == DEMO_TRAINER_EMPLOYEE_ID]
+    conf = max(demo_ongoing or all_ongoing, key=lambda c: c.id)
+    return conf, True, _conference_start(conf)
 
-    conferences = db.query(Conference).filter(Conference.status == "Approved").all()
-    if not conferences:
-        conferences = db.query(Conference).all()
+
+def _scheduled_conference(db: Session, trainee: Trainee | None) -> _Selection:
+    """3. An Approved conference (else 4. any on record), the trainee's own trainer's when they
+    have one: the next to start, else the latest started, else the newest undated one."""
+    conferences = db.query(Conference).filter(Conference.status == "Approved").all() or db.query(Conference).all()
     if not conferences:
         return None, False, None
 
@@ -183,7 +215,10 @@ def _select_current_conference(
         trainer_confs = [c for c in conferences if c.trainerEmployeeId == trainee.trainerEmployeeId]
         if trainer_confs:
             conferences = trainer_confs
+    return _nearest_by_start(conferences)
 
+
+def _nearest_by_start(conferences: list[Conference]) -> _Selection:
     now = ist_now()
     timed: list[tuple[datetime, Conference]] = []
     undated: list[Conference] = []
@@ -214,7 +249,7 @@ def _join_info(conference: Conference) -> SessionJoinInfo:
     start_at = _conference_start(conference)
     return SessionJoinInfo(
         conferenceUid=conference.conferenceUid,
-        title=conference.suiteTitle or conference.trainingType or "Training Session",
+        title=conference.suiteTitle or conference.trainingType or DEFAULT_SESSION_TITLE,
         sessionType=conference.sessionType,
         date=conference.conferenceDate,
         location=", ".join(filter(None, [conference.district, conference.state])) or None,
@@ -316,27 +351,49 @@ def report_proctoring_lock(
 ) -> ProctoringLockOut:
     """The trainee's post-test proctoring struck out - persist the lock onto
     their attendance row so the trainer's Participant Master List shows it and
-    the trainer can unlock them (training_service.unlock_proctoring). No schema
+    the trainer can unlock them (training.attendance_actions.unlock_proctoring). No schema
     change: uses the pre-existing `isTheftLocked` / `theftAttemptsLeft` /
     `theftRemarks` columns (SCHEMA.md documents them for exactly this).
 
     Only on a session the trainee is already on - a lock is reported from inside that session's
     assessment. It never creates a roster row (that would let a lock report join any session,
     around the QR join's own gate)."""
-    conference, attendance = trainee_access.rostered_conference(db, trainee, payload.conferenceUid)
-
-    _, proctoring_max_warnings = get_proctoring_settings(tenant_id)
-    attendance.isTheftLocked = 1
-    attendance.theftAttemptsLeft = max(0, proctoring_max_warnings - payload.strikeNumber)
-    stamp = utc_now().strftime("%Y-%m-%d %H:%M:%S")
-    line = f"[{stamp}] LOCKED strike #{payload.strikeNumber}: {payload.violationType}"
-    attendance.theftRemarks = f"{line}\n{attendance.theftRemarks}" if attendance.theftRemarks else line
+    # Locked like a strike report (record_proctoring_strike), so the two never miscount each other.
+    conference, attendance = trainee_access.rostered_conference(db, trainee, payload.conferenceUid, lock=True)
+    proctoring_strikes.record_lockout(attendance, payload.violationType, payload.strikeNumber, payload.strikeId)
     attendance_repository.save(db)
 
     background_tasks.add_task(
         ws_manager.send_to_room, tenant_id, conference.conferenceUid, {"type": "session"}
     )
     return ProctoringLockOut(locked=True)
+
+
+def record_proctoring_strike(
+    db: Session,
+    trainee: Trainee,
+    payload: ProctoringStrikeRequest,
+    background_tasks: BackgroundTasks,
+    tenant_id: str,
+) -> ProctoringStrikeOut:
+    """One proctoring strike during the trainee's test: its reason counted, and the trainee locked
+    out on the server once their strikes since the last unlock reach the company's warning limit
+    (proctoring_strikes.record_strike). Only a trainee marked Present on that training - the one
+    taking its test; their attendance row is held so concurrent strikes count one after another.
+    A strike sent twice counts once."""
+    # Read before the row is held: the warning limit lives in the Common DB.
+    _, warning_limit = get_proctoring_settings(tenant_id)
+    conference, attendance = trainee_access.present_conference(db, trainee, payload.conferenceUid, lock=True)
+    outcome = proctoring_strikes.record_strike(attendance, payload.violationType, payload.strikeId, warning_limit)
+    attendance_repository.save(db)
+    if outcome.counted:
+        background_tasks.add_task(
+            ws_manager.send_to_room, tenant_id, conference.conferenceUid, {"type": "session"}
+        )
+    return ProctoringStrikeOut(counted=outcome.counted, attemptsLeft=attendance.theftAttemptsLeft, locked=outcome.locked)
+
+
+_CHECK_IN_FIRST = "Complete your check-in to unlock this."
 
 
 def get_current_session(
@@ -359,29 +416,119 @@ def get_current_session(
 
     location = ", ".join(filter(None, [conference.district, conference.state])) or None
     is_over = _session_is_over(conference)
-
     config = _parse_session_config(conference.sessionConfig)
+    timeline = _ModuleTimeline.load(db, conference, is_over)
+    attendance = _session_attendance(db, conference, trainee)
+
+    # Admission: the trainee self-admits once the Attendance module is live, then runs Secure
+    # Check-In (location + face photo); the row keeps status "Present" and gains `checkInPhoto`,
+    # which is how we tell "admitted, not yet checked in" from "checked in". "Absent" is a hard
+    # eject (the app blocks the whole screen). The other modules stay locked until the trainee has
+    # actually checked in.
+    trainee_checked_in = attendance.status == "Present" and attendance.checkInPhoto is not None
+    # The Attendance card is done only once the trainee has completed their
+    # own check-in (or the trainer marked them Absent).
+    attendance_completed = trainee_checked_in or attendance.status == "Absent"
+    attendance_cfg = config.get("attendance", {})
+
     # Built keyed, then emitted in `configured_modules` order (which is sorted
     # by each module's planned start time).
-    module_by_key: dict[str, SessionModule] = {}
+    module_by_key = {"ATTENDANCE": _attendance_module(conference, attendance_cfg, attendance, timeline, attendance_completed)}
+    for key, suite_uid, config_key in _assessment_modules(conference, config):
+        if suite_uid:
+            module_by_key[key] = _assessment_module(
+                db, conference, trainee, key, suite_uid, config.get(config_key, {}), timeline, trainee_checked_in
+            )
 
-    # A module counts as "missed" once the flow has moved past it (or its own
-    # window / the whole session has closed) without the trainee completing
-    # it - as opposed to just not-yet-live, which still shows "please wait".
-    module_order = configured_modules(conference)
-    active_index = module_order.index(conference.activeModuleId) if conference.activeModuleId in module_order else None
+    # Emit in the flow's time-sorted order; anything built but not in that
+    # list (shouldn't happen) trails at the end in build order.
+    modules = [module_by_key[k] for k in timeline.module_order if k in module_by_key]
+    modules += [m for k, m in module_by_key.items() if k not in timeline.module_order]
 
-    # Per-module run history from the trainer's Start/End actions. A module
-    # the trainer has already Started and Ended - `ran_seconds` set - is over:
-    # a trainee who never completed it (didn't check in / joined after it
-    # ended) has missed it, and we can show how long it actually ran.
-    logs = activity_log_repository.list_for_conference(db, conference.conferenceUid)
-    module_runs: dict[str, list[ConferenceActivityLog]] = {}
-    for log in logs:
-        module_runs.setdefault(log.moduleId, []).append(log)
+    return CurrentSession(
+        conferenceUid=conference.conferenceUid,
+        title=conference.suiteTitle or DEFAULT_SESSION_TITLE,
+        sessionType=conference.sessionType,
+        date=conference.conferenceDate,
+        location=location,
+        trainerName=conference.trainerName,
+        confirmationStatus=_confirmation_status(is_over, attendance_completed),
+        started=False if is_over else started,
+        sessionClosed=is_over,
+        startsAt=_starts_at_label(start_at, started, is_over),
+        admitted=trainee_checked_in,
+        attendanceStatus=attendance.status,
+        # On-device proctoring lockout (post-test). The trainer clears it from
+        # the Participant Master List; the trainee's screen sees the flip here
+        # and lets them back into the test.
+        proctoringLocked=bool(attendance.isTheftLocked),
+        liveProctoringEnabled=live_proctoring_enabled,
+        proctoringMaxWarnings=proctoring_max_warnings,
+        attendanceGeoFencing=bool(attendance_cfg.get("geoFencing")),
+        modules=modules,
+    )
 
-    def _ran_seconds(key: str) -> int | None:
-        entries = module_runs.get(key, [])
+
+def _starts_at_label(start_at: datetime | None, started: bool, is_over: bool) -> str | None:
+    """When a session that hasn't started yet begins, e.g. "10 Oct 2026, 09:00 AM"."""
+    if start_at and not started and not is_over:
+        return start_at.strftime("%d %b %Y, %I:%M %p")
+    return None
+
+
+def _confirmation_status(is_over: bool, attendance_completed: bool) -> str:
+    if is_over:
+        return "Completed"
+    return "Confirmed" if attendance_completed else "Not Confirmed"
+
+
+def _session_attendance(db: Session, conference: Conference, trainee: Trainee) -> Attendance:
+    """The trainee's attendance row on this session - created as "Joined", tagged with how they
+    reached it, the first time they open it."""
+    attendance = attendance_repository.get_for_conference_and_trainee(db, conference.conferenceUid, trainee.traineeUid)
+    if attendance is not None:
+        return attendance
+    attendance = Attendance(
+        conferenceUid=conference.conferenceUid,
+        trainerUid=conference.trainerEmployeeId,
+        traineeUid=trainee.traineeUid,
+        phone=trainee.phone,
+        status="Joined",
+    )
+    audience = "ASSIGNED" if trainee.trainerEmployeeId == conference.trainerEmployeeId else "UNASSIGNED"
+    _set_attendance_audience(attendance, audience)
+    return attendance_repository.create(db, attendance)
+
+
+@dataclass
+class _ModuleTimeline:
+    """One session's modules as the trainer actually ran them (their Start/End actions): how long
+    each ran, and whether a trainee who didn't complete one has missed it."""
+
+    conference: Conference
+    is_over: bool
+    module_order: list[str]
+    active_index: int | None
+    runs: dict[str, list[ConferenceActivityLog]]
+
+    @classmethod
+    def load(cls, db: Session, conference: Conference, is_over: bool) -> "_ModuleTimeline":
+        # A module counts as "missed" once the flow has moved past it (or its own
+        # window / the whole session has closed) without the trainee completing
+        # it - as opposed to just not-yet-live, which still shows "please wait".
+        module_order = configured_modules(conference)
+        active_index = module_order.index(conference.activeModuleId) if conference.activeModuleId in module_order else None
+        # Per-module run history from the trainer's Start/End actions. A module
+        # the trainer has already Started and Ended - `ran_seconds` set - is over:
+        # a trainee who never completed it (didn't check in / joined after it
+        # ended) has missed it, and we can show how long it actually ran.
+        runs: dict[str, list[ConferenceActivityLog]] = {}
+        for log in activity_log_repository.list_for_conference(db, conference.conferenceUid):
+            runs.setdefault(log.moduleId, []).append(log)
+        return cls(conference, is_over, module_order, active_index, runs)
+
+    def ran_seconds(self, key: str) -> int | None:
+        entries = self.runs.get(key, [])
         starts = [e for e in entries if e.action == "STARTED"]
         stops = [e for e in entries if e.action == "STOPPED"]
         if not stops or not starts:
@@ -389,121 +536,84 @@ def get_current_session(
         start = starts[min(len(stops), len(starts)) - 1]
         return max(0, int((stops[-1].timestamp - start.timestamp).total_seconds()))
 
-    def is_missed(key: str, completed: bool, live: bool) -> bool:
-        if completed or live:
-            return False
-        # Module flow is fully manual now - the trainer Starts/Ends each
-        # module by hand, so the scheduled clock times in `sessionConfig`
-        # are only a plan and must NOT make a module "missed". A module is
-        # missed only when it actually ran without the trainee completing
-        # it, or the whole session is over.
-        #
-        # 1. The trainer Started then Ended this module and the trainee
-        #    never completed it (didn't check in / joined after).
-        if _ran_seconds(key) is not None:
-            return True
-        # 2. The session itself has ended.
-        if is_over or conference.conferenceStatus == "Completed":
-            return True
-        now_date_str = utc_now().strftime("%Y-%m-%d")
-        if conference.conferenceEndsOn and str(conference.conferenceEndsOn) < now_date_str:
-            return True
-        # 3. The trainer has manually advanced the flow past this module.
-        if key in module_order and active_index is not None and module_order.index(key) < active_index:
-            return True
-        return False
-
-    def _ran_label(key: str) -> str | None:
+    def ran_label(self, key: str) -> str | None:
         """How long the module actually ran, e.g. "45m 3s" - for the
         duration pill / the "Ran : ..." badge on a finished module."""
-        secs = _ran_seconds(key)
-        if secs is None:
-            return None
-        hours, rem = divmod(secs, 3600)
-        minutes, seconds = divmod(rem, 60)
-        if hours:
-            return f"{hours}h {minutes}m"
-        if minutes:
-            return f"{minutes}m {seconds}s"
-        return f"{seconds}s"
+        secs = self.ran_seconds(key)
+        return None if secs is None else _run_length(secs)
 
-    def _ran_badge(key: str) -> str | None:
-        label = _ran_label(key)
+    def ran_badge(self, key: str) -> str | None:
+        label = self.ran_label(key)
         return f"Ran : {label}" if label else None
 
-    attendance = attendance_repository.get_for_conference_and_trainee(
-        db, conference.conferenceUid, trainee.traineeUid
-    )
-    if attendance is None:
-        attendance = Attendance(
-            conferenceUid=conference.conferenceUid,
-            trainerUid=conference.trainerEmployeeId,
-            traineeUid=trainee.traineeUid,
-            phone=trainee.phone,
-            status="Joined",
-        )
-        audience = "ASSIGNED" if trainee.trainerEmployeeId == conference.trainerEmployeeId else "UNASSIGNED"
-        _set_attendance_audience(attendance, audience)
-        attendance_repository.create(db, attendance)
+    def is_missed(self, key: str, completed: bool, live: bool) -> bool:
+        """Module flow is fully manual now - the trainer Starts/Ends each
+        module by hand, so the scheduled clock times in `sessionConfig`
+        are only a plan and must NOT make a module "missed". A module is
+        missed only when (1) the trainer Started then Ended it and the trainee
+        never completed it (didn't check in / joined after), (2) the session
+        itself has ended, or (3) the trainer has manually advanced the flow
+        past it."""
+        if completed or live:
+            return False
+        return self.ran_seconds(key) is not None or self._session_ended() or self._advanced_past(key)
 
-    attendance_status = attendance.status if attendance else None
-    # Admission is trainer-gated. The trainer marking this trainee "Present"
-    # on the Participant Master List is what unlocks the Attendance card -
-    # until then it stays locked ("waiting for the trainer"). Once admitted,
-    # the trainee runs Secure Check-In (location + face photo); the row keeps
-    # status "Present" and gains `checkInPhoto`, which is how we tell
-    # "admitted, not yet checked in" from "checked in". "Absent" is a hard
-    # eject (the app blocks the whole screen). The other modules stay locked
-    # until the trainee has actually checked in.
-    trainer_admitted = attendance_status == "Present"
-    trainee_checked_in = trainer_admitted and attendance.checkInPhoto is not None
-    is_absent = attendance_status == "Absent"
-    checked_in = trainee_checked_in
-    attendance_is_active_module = conference.activeModuleId == "ATTENDANCE"
+    def _session_ended(self) -> bool:
+        conference = self.conference
+        if self.is_over or conference.conferenceStatus == "Completed":
+            return True
+        now_date_str = utc_now().strftime("%Y-%m-%d")
+        return bool(conference.conferenceEndsOn and str(conference.conferenceEndsOn) < now_date_str)
+
+    def _advanced_past(self, key: str) -> bool:
+        return key in self.module_order and self.active_index is not None and self.module_order.index(key) < self.active_index
+
+
+def _run_length(secs: int) -> str:
+    hours, rem = divmod(secs, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if hours:
+        return f"{hours}h {minutes}m"
+    if minutes:
+        return f"{minutes}m {seconds}s"
+    return f"{seconds}s"
+
+
+def _attendance_module(
+    conference: Conference, attendance_cfg: dict, attendance: Attendance, timeline: _ModuleTimeline, completed: bool
+) -> SessionModule:
     # Every trainee self-admits once the Attendance module is live - no
     # per-trainee admission gate (assigned/unassigned/fresh doesn't matter
     # here; routers/attendance.py accepts a self check-in from any of them
     # the same way, only a trainer's already-final Present/Absent decision
-    # blocks it). Kept as its own variable (rather than inlining `True`)
-    # since attendance_live/_lock_reason below both read it.
-    attendance_admitted = True
-
-    def _lock_reason(module_key: str) -> str | None:
-        if module_key == "ATTENDANCE":
-            if not attendance_is_active_module or attendance_admitted or is_absent:
-                return None
-            return "Waiting for the trainer to mark you present."
-        return None if trainee_checked_in else "Complete your check-in to unlock this."
-
-    # The Attendance card is done only once the trainee has completed their
-    # own check-in (or the trainer marked them Absent).
-    attendance_completed = trainee_checked_in or is_absent
-    attendance_live = attendance_is_active_module and attendance_admitted and not attendance_completed
-
-    attendance_cfg = config.get("attendance", {})
+    # blocks it) - so this card is never locked waiting for the trainer.
+    live = conference.activeModuleId == "ATTENDANCE" and not completed
     # Sessions imported without a Session Flow config have no per-module
     # times - fall back to the conference's own start time so the trainee
     # sees a real value instead of a hardcoded placeholder.
-    attendance_open = attendance_cfg.get("checkInOpens") or conference.conferenceTime
-    attendance_close = attendance_cfg.get("checkOutCloses")
-    module_by_key["ATTENDANCE"] = SessionModule(
+    opens = attendance_cfg.get("checkInOpens") or conference.conferenceTime
+    closes = attendance_cfg.get("checkOutCloses")
+    return SessionModule(
         key="ATTENDANCE",
         name=MODULE_NAMES["ATTENDANCE"],
-        time=attendance_open,
-        endTime=attendance_close,
-        duration=duration(attendance_open, attendance_close) or _ran_label("ATTENDANCE"),
-        ranDuration=_ran_badge("ATTENDANCE"),
-        isLive=attendance_live,
-        isCompleted=attendance_completed,
-        isMissed=is_missed("ATTENDANCE", attendance_completed, attendance_live),
-        # The admission lock is carried by `lockReason` - the client's
-        # `isLocked` path is the security-violation card, a different thing.
+        time=opens,
+        endTime=closes,
+        duration=duration(opens, closes) or timeline.ran_label("ATTENDANCE"),
+        ranDuration=timeline.ran_badge("ATTENDANCE"),
+        isLive=live,
+        isCompleted=completed,
+        isMissed=timeline.is_missed("ATTENDANCE", completed, live),
+        # The client's `isLocked` path is the security-violation card, a
+        # different thing from admission.
         isLocked=False,
-        lockReason=_lock_reason("ATTENDANCE"),
-        completedAt=attendance.markedOn.split(" ")[-1][:5] if attendance and attendance.markedOn else None,
+        lockReason=None,
+        completedAt=attendance.markedOn.split(" ")[-1][:5] if attendance.markedOn else None,
     )
 
-    for key, suite_uid, config_key in (
+
+def _assessment_modules(conference: Conference, config: dict) -> tuple[tuple[str, str | None, str], ...]:
+    """(module key, its question set, its sessionConfig key) for the Test, Live Quiz and Survey cards."""
+    return (
         ("STANDARD_TEST", conference.postAssessmentUid, "standardTest"),
         # Unlike Standard Test/Survey, Live Quiz has no dedicated Conference
         # column yet - its assessmentSuiteUid only ever lives in
@@ -512,65 +622,45 @@ def get_current_session(
         # question live for trainees to answer is a future iteration.
         ("LIVE_QUIZ", config.get("liveQuiz", {}).get("assessmentSuiteUid"), "liveQuiz"),
         ("SURVEY", conference.surveyUid, "survey"),
-    ):
-        if not suite_uid:
-            continue
+    )
 
-        module_cfg = config.get(config_key, {})
-        start_time_str = module_cfg.get("startTime") or conference.conferenceTime
-        end_time_str = module_cfg.get("endTime")
-        result = assessment_repository.get_latest_result(db, conference.conferenceUid, trainee.traineeUid, suite_uid)
-        completed = result is not None
-        live = not is_over and not completed and conference.activeModuleId == key
-        suite = assessment_repository.get_suite_by_uid(db, suite_uid)
-        suite_name = (suite.examTitle or suite.courseName) if suite else None
-        question_count = module_cfg.get("questionCount") or (suite.noOfQuestion if suite else None)
 
-        module_by_key[key] = SessionModule(
-            key=key,
-            name=MODULE_NAMES[key],
-            time=start_time_str,
-            endTime=end_time_str,
-            duration=duration(start_time_str, end_time_str) or _ran_label(key),
-            ranDuration=_ran_badge(key),
-            isLive=live,
-            isCompleted=completed,
-            isMissed=is_missed(key, completed, live),
-            isLocked=not checked_in,
-            lockReason=_lock_reason(key),
-            completedAt=result.submittedAt.strftime("%H:%M") if result and result.submittedAt else None,
-            score=f"{float(result.totalScore):g}/{float(result.maxScore):g}" if result else None,
-            assessmentSuiteUid=suite_uid,
-            suiteName=suite_name,
-            questionCount=question_count or None,
-        )
-
-    # Emit in the flow's time-sorted order; anything built but not in that
-    # list (shouldn't happen) trails at the end in build order.
-    modules = [module_by_key[k] for k in module_order if k in module_by_key]
-    modules += [m for k, m in module_by_key.items() if k not in module_order]
-
-    return CurrentSession(
-        conferenceUid=conference.conferenceUid,
-        title=conference.suiteTitle or "Training Session",
-        sessionType=conference.sessionType,
-        date=conference.conferenceDate,
-        location=location,
-        trainerName=conference.trainerName,
-        confirmationStatus="Completed" if is_over else ("Confirmed" if attendance_completed else "Not Confirmed"),
-        started=False if is_over else started,
-        sessionClosed=is_over,
-        startsAt=start_at.strftime("%d %b %Y, %I:%M %p") if start_at and not started and not is_over else None,
-        admitted=checked_in,
-        attendanceStatus=attendance_status,
-        # On-device proctoring lockout (post-test). The trainer clears it from
-        # the Participant Master List; the trainee's screen sees the flip here
-        # and lets them back into the test.
-        proctoringLocked=bool(attendance and attendance.isTheftLocked),
-        liveProctoringEnabled=live_proctoring_enabled,
-        proctoringMaxWarnings=proctoring_max_warnings,
-        attendanceGeoFencing=bool(attendance_cfg.get("geoFencing")),
-        modules=modules,
+def _assessment_module(
+    db: Session,
+    conference: Conference,
+    trainee: Trainee,
+    key: str,
+    suite_uid: str,
+    module_cfg: dict,
+    timeline: _ModuleTimeline,
+    checked_in: bool,
+) -> SessionModule:
+    """A Test / Live Quiz / Survey card - locked until the trainee has checked in."""
+    start_time_str = module_cfg.get("startTime") or conference.conferenceTime
+    end_time_str = module_cfg.get("endTime")
+    result = assessment_repository.get_latest_result(db, conference.conferenceUid, trainee.traineeUid, suite_uid)
+    completed = result is not None
+    live = not timeline.is_over and not completed and conference.activeModuleId == key
+    suite = assessment_repository.get_suite_by_uid(db, suite_uid)
+    question_count = module_cfg.get("questionCount") or (suite.noOfQuestion if suite else None)
+    return SessionModule(
+        key=key,
+        name=MODULE_NAMES[key],
+        time=start_time_str,
+        endTime=end_time_str,
+        duration=duration(start_time_str, end_time_str) or timeline.ran_label(key),
+        ranDuration=timeline.ran_badge(key),
+        isLive=live,
+        isCompleted=completed,
+        isMissed=timeline.is_missed(key, completed, live),
+        isLocked=not checked_in,
+        lockReason=None if checked_in else _CHECK_IN_FIRST,
+        completedAt=result.submittedAt.strftime("%H:%M") if result and result.submittedAt else None,
+        # A Survey is only submitted, never scored (module_flow.scored_suite_uids).
+        score=f"{float(result.totalScore):g}/{float(result.maxScore):g}" if result and key != "SURVEY" else None,
+        assessmentSuiteUid=suite_uid,
+        suiteName=(suite.examTitle or suite.courseName) if suite else None,
+        questionCount=question_count or None,
     )
 
 
@@ -587,20 +677,23 @@ def get_session_history(db: Session, trainee: Trainee, limit: int) -> list[Sessi
     conferences = conference_repository.list_by_uids(db, conference_uids, limit=limit)
 
     attendance_by_conference = {a.conferenceUid: a for a in attendance_rows}
-    # Rows are already ordered by submittedAt desc, so the first one seen
-    # per conference is that trainee's most recent result there.
-    latest_result_by_conference = {}
+    results_by_conference: dict[str, list] = {}
     for result in result_rows:
-        latest_result_by_conference.setdefault(result.conferenceUid, result)
+        results_by_conference.setdefault(result.conferenceUid, []).append(result)
 
     items: list[SessionHistoryItem] = []
     for conference in conferences:
         attendance = attendance_by_conference.get(conference.conferenceUid)
-        result = latest_result_by_conference.get(conference.conferenceUid)
+        # The newest mark there (rows come submittedAt desc) - a Standard Test or Live Quiz, never a
+        # Survey, whose 0% would read as a failed session.
+        scored = scored_suite_uids(conference)
+        result = next(
+            (r for r in results_by_conference.get(conference.conferenceUid, []) if r.assessmentSuiteUid in scored), None
+        )
         items.append(
             SessionHistoryItem(
                 conferenceUid=conference.conferenceUid,
-                title=conference.suiteTitle or conference.trainingType or "Training Session",
+                title=conference.suiteTitle or conference.trainingType or DEFAULT_SESSION_TITLE,
                 date=conference.conferenceDate,
                 trainerName=conference.trainerName,
                 attendanceStatus=attendance.status if attendance else None,
