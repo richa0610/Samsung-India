@@ -5,6 +5,7 @@ import { Fonts } from "@/theme/fonts";
 import PersonalDetails from "@/components/registration/PersonalDetails";
 import ProfessionalDetails from "@/components/registration/ProfessionalDetails";
 import RegisterButton from "@/components/registration/RegisterButton";
+import ZoneRegionFields from "@/components/registration/ZoneRegionFields";
 import SecurityFooter from "@/components/common/SecurityFooter";
 import AppModal from "@/components/ui/AppModal";
 import AppText from "@/components/ui/AppText";
@@ -13,18 +14,25 @@ import { useRegisterForm } from "@/hooks/useRegisterForm";
 type RegisterSheetProps = {
     visible: boolean;
     onClose: () => void;
+    // Set when registering as part of a scanned-QR session join.
+    joinCode?: string;
 };
 
 
 export default function RegisterSheet({
     visible,
     onClose,
+    joinCode,
 }: RegisterSheetProps) {
     const router = useRouter();
+    // Registering signs the trainee in (no password to log in with later), so
+    // they go straight on - to the scanned session (QR join) or the trainee
+    // home - the same places the login form sends them.
     const { control, errors, setValue, onSubmit, loading, error } = useRegisterForm({
+        joinCode,
         onSuccess: () => {
             onClose();
-            router.push("/session");
+            router.replace(joinCode ? "/session" : ("/session_detail" as any));
         },
     });
 
@@ -49,6 +57,7 @@ export default function RegisterSheet({
             >
                 <PersonalDetails control={control} errors={errors} />
                 <ProfessionalDetails control={control} setValue={setValue} errors={errors} />
+                <ZoneRegionFields control={control} setValue={setValue} errors={errors} />
 
                 {error && (
                     <AppText style={styles.error}>{error}</AppText>

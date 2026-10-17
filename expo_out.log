@@ -1,0 +1,28 @@
+env: load .env
+env: export EXPO_PUBLIC_API_URL EXPO_PUBLIC_BYPASS_LOGIN EXPO_PUBLIC_USE_RN_FETCH
+Starting project at C:\Users\jay mata di\OneDrive\Desktop\Samsung-India
+Using src/app as the root directory for Expo Router.
+React Compiler enabled
+Starting Metro Bundler
+
+Waiting on http://localhost:8081
+
+An update for expo is available: 57.0.4 → ~57.0.12
+18 other packages may need updating. Run npx expo install --check for details.
+Logs for your project will appear below.
+| [BABEL] Note: The code generator has deoptimised the styling of C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\assets\images\svg\time_up.svg as it exceeds the max of 500KB.
+| [BABEL] Note: The code generator has deoptimised the styling of C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\assets\images\svg\correct.svg as it exceeds the max of 500KB.
+λ Bundled 121234ms node_modules\expo\node_modules\@expo\cli\node_modules\@expo\router-server\node\render.js (1823 modules)
+Web Bundled 121730ms node_modules\expo-router\entry.js (1555 modules)
+"shadow*" style props are deprecated. Use "boxShadow".
+λ  WARN  Image: style.tintColor is deprecated. Please use props.tintColor. 
+  console.logWithStack [as warn] (C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\node_modules\expo\node_modules\@expo\cli\build\src\start\server\serverLogLikeMetro.js:214:27)
+  warnOnce (C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\node_modules\react-native-web\dist\modules\warnOnce\index.js:24:13)
+  extractNonStandardStyleProps (C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\node_modules\react-native-web\dist\exports\Image\index.js:62:13)
+  Component (C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\node_modules\react-native-web\dist\exports\Image\index.js:181:31)
+  Object.callComponentInDEV [as react_stack_bottom_frame] (C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\node_modules\react-dom\cjs\react-dom-server-legacy.node.development.js:9808:18)
+  renderWithHooks (C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\node_modules\react-dom\cjs\react-dom-server-legacy.node.development.js:5062:19)
+  run (C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\node_modules\react-dom\cjs\react-dom-server-legacy.node.development.js:6017:39)
+  retryNode (C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\node_modules\react-dom\cjs\react-dom-server-legacy.node.development.js:6417:31)
+  renderNodeDestructive (C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\node_modules\react-dom\cjs\react-dom-server-legacy.node.development.js:6367:11)
+  renderNode (C:\Users\jay mata di\OneDrive\Desktop\Samsung-India\node_modules\react-dom\cjs\react-dom-server-legacy.node.development.js:6905:18)

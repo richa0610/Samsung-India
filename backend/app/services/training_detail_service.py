@@ -1,0 +1,153 @@
+"""Builds the trainee-facing Training Detail screen (`GET
+/sessions/{conferenceUid}/detail`) - one past training's full module
+breakdown, with a question-by-question review for every assessment-type
+module the trainee attempted. Tap-through target from the Training History
+screen's table rows.
+"""
+
+
+from sqlalchemy.orm import Session
+
+from app.core.constants import DEFAULT_SESSION_TITLE, MODULE_LABELS
+from app.core.exceptions import not_found
+from app.models.quiz import Question
+from app.models.trainee import Trainee
+from app.repositories import assessment_repository, attendance_repository, conference_repository
+from app.schemas.assessment import QuestionOption
+from app.schemas.session import TrainingDetailOut, TrainingModuleDetail, TrainingQuestionAttempt
+from app.services import answer_numbers, session_service
+from app.services.module_flow import configured_modules, module_suite_uid
+from app.services.trainee_dashboard_service import _fmt_score, _trainee_status_for
+from app.services import trainee_access
+from app.utils import question_format
+from app.utils.conference_format import location_label
+
+# The trainee's outcomes that show no module breakdown (see get_training_detail).
+OUTCOME_ONLY_STATUSES = ("Missed", "Absent")
+
+
+def _question_options(question: Question) -> list[QuestionOption]:
+    return [QuestionOption(**option) for option in question_format.options(question)]
+
+
+def _attendance_module(attendance, overall_status: str) -> TrainingModuleDetail:
+    # `overall_status` (Missed/Absent/Ongoing/Scheduled/Completed) already
+    # reflects this trainee's attendance outcome for the whole training - the
+    # only refinement needed here is "Present" -> "Completed" specifically
+    # for this module's own card.
+    status = "Completed" if attendance and attendance.status == "Present" else overall_status
+    return TrainingModuleDetail(
+        key="ATTENDANCE",
+        name=MODULE_LABELS["ATTENDANCE"],
+        status=status,
+        completedAt=attendance.markedOn if attendance else None,
+    )
+
+
+def _reviewable_questions(
+    questions: list[Question], answers_by_qid: dict, module_key: str, submitted: bool, session_over: bool
+) -> list[Question]:
+    """The questions - with their correct answers - this trainee may review. Once the training is
+    over, all of them. Until then only what can't help them, or anyone they'd tell, answer it: a
+    module they've submitted, and in the Live Quiz just the questions that reached them (answered
+    or timed out - the live screen already showed those answers), never one still to be asked."""
+    if session_over:
+        return questions
+    if module_key == "LIVE_QUIZ":
+        return [q for q in questions if str(q.id) in answers_by_qid]
+    return questions if submitted else []
+
+
+def _assessment_module(
+    db: Session, conference_uid: str, trainee_uid: str, module_key: str, suite_uid: str | None, session_over: bool
+) -> TrainingModuleDetail:
+    if not suite_uid:
+        return TrainingModuleDetail(key=module_key, name=MODULE_LABELS[module_key], status="Missed")
+
+    result = assessment_repository.get_latest_result(db, conference_uid, trainee_uid, suite_uid)
+    questions = assessment_repository.list_questions_for_suite(db, suite_uid)
+    answers_by_qid = {
+        a.questionId: a
+        for a in assessment_repository.list_answers_for_trainee_suite(db, conference_uid, trainee_uid, suite_uid)
+    }
+
+    attempts: list[TrainingQuestionAttempt] = []
+    for q in _reviewable_questions(questions, answers_by_qid, module_key, result is not None, session_over):
+        answer = answers_by_qid.get(str(q.id))
+        saved = answer.selectedOption if answer else None
+        # Saved as its option's number (answer_numbers) - a survey answer too since 2026-10-17; one
+        # saved before as the option itself still reads as that option.
+        selected_id = answer_numbers.option_id(q, saved)
+        options = _question_options(q)
+        options_by_id = {o.id: o.text for o in options}
+        correct_id = answer_numbers.correct_option_id(q)
+        # Surveys have no right answer - correct_answer is unset, so both
+        # correctOptionId/Text stay None and isCorrect is never true.
+        attempts.append(
+            TrainingQuestionAttempt(
+                id=q.id,
+                question=q.question or "",
+                options=options,
+                selectedOptionId=selected_id,
+                selectedOptionText=options_by_id.get(selected_id) if selected_id else None,
+                correctOptionId=correct_id,
+                correctOptionText=options_by_id.get(correct_id) if correct_id else None,
+                isCorrect=bool(selected_id) and bool(correct_id) and selected_id == correct_id,
+                answered=answer is not None,
+                points=float(q.points or 0),
+            )
+        )
+
+    if result:
+        status = "Completed"
+    elif session_over:
+        status = "Missed"
+    else:
+        status = "Scheduled"
+
+    return TrainingModuleDetail(
+        key=module_key,
+        name=MODULE_LABELS[module_key],
+        status=status,
+        # A Survey is only submitted, never scored (module_flow.scored_suite_uids).
+        score=_fmt_score(result.totalScore, result.maxScore) if result and module_key != "SURVEY" else None,
+        completedAt=result.submittedAt.strftime("%Y-%m-%d %H:%M:%S") if result and result.submittedAt else None,
+        questions=attempts,
+    )
+
+
+def get_training_detail(db: Session, trainee: Trainee, conference_uid: str) -> TrainingDetailOut:
+    conference = conference_repository.get_by_uid(db, conference_uid)
+    # Only a session this trainee took part in (on its roster, or with a result there) - any other
+    # ID looks the same as one that doesn't exist.
+    if not conference or not trainee_access.has_taken_part(db, trainee, conference_uid):
+        raise not_found("Training not found")
+
+    attendance = attendance_repository.get_for_conference_and_trainee(db, conference_uid, trainee.traineeUid)
+    overall_status = _trainee_status_for(conference, attendance)
+    session_over = session_service._session_is_over(conference)
+
+    # A trainee who missed the training or was marked absent sees only its outcome - no module
+    # breakdown, questions or answer key (user, 2026-10-13); the app shows a notice instead.
+    module_keys = [] if overall_status in OUTCOME_ONLY_STATUSES else configured_modules(conference)
+    modules: list[TrainingModuleDetail] = []
+    for module_key in module_keys:
+        if module_key == "ATTENDANCE":
+            modules.append(_attendance_module(attendance, overall_status))
+        else:
+            suite_uid = module_suite_uid(conference, module_key)
+            modules.append(
+                _assessment_module(db, conference_uid, trainee.traineeUid, module_key, suite_uid, session_over)
+            )
+
+    location = location_label(conference)
+
+    return TrainingDetailOut(
+        conferenceUid=conference.conferenceUid,
+        title=conference.suiteTitle or conference.trainingType or DEFAULT_SESSION_TITLE,
+        date=conference.conferenceDate,
+        location=location,
+        trainerName=conference.trainerName,
+        status=overall_status,
+        modules=modules,
+    )

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 
-import { ApiError, loginTrainee, registerTrainee } from "@/api/auth";
+import { ApiError, registerTrainee } from "@/api/auth";
+import { joinSession } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
 
 export type RegisterFormValues = {
@@ -14,6 +15,9 @@ export type RegisterFormValues = {
   supervisorName: string;
   state: string;
   district: string;
+  // Registration only (ZoneRegionFields) - the zone starts the trainee's ID.
+  zone: string;
+  region: string;
 };
 
 const defaultValues: RegisterFormValues = {
@@ -26,13 +30,19 @@ const defaultValues: RegisterFormValues = {
   supervisorName: "",
   state: "",
   district: "",
+  zone: "",
+  region: "",
 };
 
 type UseRegisterFormOptions = {
+  // Registration always signs the new trainee in (they have no password to
+  // log in with later). When set (QR-join flow), it also binds them to this
+  // session before `onSuccess` fires.
+  joinCode?: string;
   onSuccess?: () => void;
 };
 
-export function useRegisterForm({ onSuccess }: UseRegisterFormOptions = {}) {
+export function useRegisterForm({ joinCode, onSuccess }: UseRegisterFormOptions = {}) {
   const { setSession } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +59,7 @@ export function useRegisterForm({ onSuccess }: UseRegisterFormOptions = {}) {
     setLoading(true);
     setError(null);
     try {
-      const trainee = await registerTrainee({
+      const session = await registerTrainee({
         name: values.name.trim(),
         phone: values.phone.trim(),
         email: values.email.trim(),
@@ -57,13 +67,21 @@ export function useRegisterForm({ onSuccess }: UseRegisterFormOptions = {}) {
         designation: values.designation || undefined,
         employee_id: values.employee_id || undefined,
         supervisorName: values.supervisorName || undefined,
-        state: values.state || undefined,
+        state: values.state,
         district: values.district || undefined,
+        zone: values.zone || undefined,
+        region: values.region || undefined,
       });
 
-      // Registration has no password, so log the trainee straight in.
-      const session = await loginTrainee(String(trainee.phone));
       setSession(session);
+      if (joinCode) {
+        try {
+          await joinSession(joinCode, session.access_token, true);
+        } catch {
+          // Non-fatal - they still land on /session.
+        }
+      }
+
       reset(defaultValues);
       onSuccess?.();
     } catch (err) {

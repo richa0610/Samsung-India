@@ -11,8 +11,12 @@ export type Trainee = {
   designation: string | null;
   employee_id: string | null;
   supervisorName: string | null;
+  // Optional: a session saved on the phone before these were sent has none until the next sign-in.
+  supervisorDesignation?: string | null;
   state: string | null;
   district: string | null;
+  zone?: string | null;
+  region?: string | null;
   profilePhoto: string | null;
   status: string;
 };
@@ -31,21 +35,34 @@ export type RegisterPayload = {
   designation?: string;
   employee_id?: string;
   supervisorName?: string;
-  state?: string;
+  state: string;
   district?: string;
+  // From the master list; the zone starts the trainee's ID (e.g. SOUTH2610001).
+  zone?: string;
+  region?: string;
 };
 
+/** Self-registration (no password) also signs the new trainee in - it returns their session. */
 export function registerTrainee(payload: RegisterPayload) {
-  return apiRequest<Trainee>("/trainees/register", {
+  return apiRequest<AuthSession>("/trainees/register", {
     method: "POST",
     body: JSON.stringify({ ...payload, phone: Number(payload.phone) }),
   });
 }
 
-export function loginTrainee(phone: string) {
+/** `identifier` is what the trainee typed as Company ID / Phone No: Trainee UID, username or phone. */
+export function loginTrainee(identifier: string, password: string) {
   return apiRequest<AuthSession>("/trainees/login", {
     method: "POST",
-    body: JSON.stringify({ phone: Number(phone) }),
+    body: JSON.stringify({ identifier, password }),
+  });
+}
+
+/** Signs the trainee out on the server: every token issued for them stops working (all devices). */
+export function logoutTrainee(token: string) {
+  return apiRequest<null>("/trainees/logout", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
   });
 }
 

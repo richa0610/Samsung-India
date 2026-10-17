@@ -1,5 +1,5 @@
-import Starter1 from "@/components/test/starter1";
+import LoginLandingScreen from "@/components/auth/LoginLandingScreen";
 
 export default function HomeScreen() {
-  return <Starter1 />;
+  return <LoginLandingScreen />;
 }

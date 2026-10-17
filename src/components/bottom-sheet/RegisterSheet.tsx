@@ -27,4 +27,6 @@ const RegisterBottomSheet = forwardRef<React.ComponentRef<typeof BottomSheet>>((
 
 });
 
+RegisterBottomSheet.displayName = "RegisterBottomSheet";
+
 export default RegisterBottomSheet;

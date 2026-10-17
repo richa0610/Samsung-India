@@ -1,6 +1,5 @@
 import React from "react";
 import AppButton from "@/components/ui/AppButton";
-import { Fonts } from "@/theme/fonts";
 import { Ionicons } from "@expo/vector-icons";
 
 interface RegisterButtonProps {

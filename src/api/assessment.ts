@@ -6,7 +6,10 @@ export type AssessmentQuestion = {
   question_type: string;
   sort_order: number;
   options: { id: string; text: string }[];
+  correctAnswer?: string | null;
+  explanation?: string | null;
 };
+
 
 export type AssessmentAnswer = {
   questionId: number;
@@ -27,8 +30,11 @@ export type AssessmentQuestionsResponse = {
   questions: AssessmentQuestion[];
 };
 
-export function getAssessmentQuestions(token: string, suiteUid: string) {
-  return apiRequest<AssessmentQuestionsResponse>(`/assessments/${suiteUid}/questions`, {
+/** The questions of a test the trainee is taking now - the server checks the session is theirs,
+ *  they're marked Present and this test's module is open. */
+export function getAssessmentQuestions(token: string, suiteUid: string, conferenceUid: string) {
+  const query = `conferenceUid=${encodeURIComponent(conferenceUid)}`;
+  return apiRequest<AssessmentQuestionsResponse>(`/assessments/${encodeURIComponent(suiteUid)}/questions?${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -46,4 +52,6 @@ export function submitAssessment(
   });
 }
 
-export { ApiError } from "./client";
+export { ApiError } from "@/api/client";
+
+

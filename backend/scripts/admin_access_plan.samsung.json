@@ -1,0 +1,13 @@
+{
+  "_comment": "Reviewed assignments for the first admin_access grants (Phase C step 2). Account ids only. Coordinators take their zones from data_scopes; the Company Admin is the ONE for its company. Account 1's Super Admin stays HELD until confirmed.",
+  "tenant": "samsung",
+  "assignments": [
+    {"admin_id": 1, "role": "super_admin"},
+    {"admin_id": 2, "role": "trainer"},
+    {"admin_id": 3, "role": "company_admin", "company": "Samsung India"},
+    {"admin_id": 4, "role": "coordinator"},
+    {"admin_id": 5, "role": "coordinator"},
+    {"admin_id": 6, "role": "coordinator"},
+    {"admin_id": 7, "role": "coordinator"}
+  ]
+}
