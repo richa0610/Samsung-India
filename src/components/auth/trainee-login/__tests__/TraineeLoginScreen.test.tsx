@@ -56,6 +56,11 @@ test("renders the brand, hero text, trainee login card, and security badge", asy
   expect(screen.getByText("Your information is secure")).toBeTruthy();
 });
 
+test("the Company ID / Phone No field takes at most 10 characters", async () => {
+  await render(<TraineeLoginScreen />);
+  expect(screen.getByPlaceholderText("Enter Company ID or Phone No").props.maxLength).toBe(10);
+});
+
 test("successfully signs in a trainee with company id / phone", async () => {
   mockLogin.mockResolvedValueOnce({
     access_token: "fake-trainee-token",

@@ -34,6 +34,7 @@ from app.models.common.tenant_registry import Tenant
 from app.models.conference import Conference
 from app.models.trainee import Trainee
 from app.services.media_access import KNOWN_FOLDERS, SHARED_FILES
+from app.utils.conference_format import uploaded
 
 # Every tenant-database column that stores an upload path (see the upload code in services/).
 TENANT_REFERENCE_COLUMNS = (
@@ -57,10 +58,11 @@ class PlanEntry:
 
 
 def collect_tenant_references(db: Session) -> set[str]:
-    """Every upload path a tenant database refers to."""
+    """Every upload path a tenant database refers to (a training's "nothing uploaded yet" marker,
+    conference_format.NO_FILE, is not one)."""
     paths: set[str] = set()
     for column in TENANT_REFERENCE_COLUMNS:
-        paths |= {value for (value,) in db.query(column).filter(column.isnot(None), column != "") if value}
+        paths |= {value for (value,) in db.query(column).filter(column.isnot(None), column != "") if uploaded(value)}
     return paths
 
 

@@ -1,25 +1,39 @@
+from collections.abc import Collection
 from typing import Iterable, Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.category import Category, SubCategory
 from app.models.venue import Venue
+from app.repositories.location_repository import pincode_key_sql, place_key_sql
+from app.utils.conference_format import NOT_ASSIGNED
+from app.utils.places import place_spellings
 
 APPROVED = "Approved"
 
 
-def _district_key(value: str) -> str:
-    """A district compared case-insensitively, "_" as a space: the master's "New Delhi" and the
-    code older app builds saved ("new_delhi") are one district."""
-    return value.strip().lower().replace("_", " ")
-
-
-def list_venues(db: Session, district: Optional[str] = None) -> list[Venue]:
+def list_venues(
+    db: Session,
+    district: Optional[str] = None,
+    state: Optional[str] = None,
+    pincodes: Collection[str] = (),
+) -> list[Venue]:
+    """Approved venues, A to Z. With a `district`, only that district's: a venue whose own district
+    names it (any case, "_" as a space, an old app build's code) - and, given a `state`, whose own
+    state names it too or is blank, so a district name two states share never mixes them - or
+    whose pincode is one of `pincodes` (the district's, from the pincode directory), whatever its
+    own district / state say."""
     query = db.query(Venue).filter(Venue.status == APPROVED)
     if district:
-        stored = func.replace(func.lower(func.trim(func.coalesce(Venue.district, ""))), "_", " ")
-        query = query.filter(stored == _district_key(district))
+        named_here = place_key_sql(Venue.district).in_(place_spellings(district))
+        if state:
+            stored_state = place_key_sql(Venue.state)
+            named_here = and_(named_here, or_(stored_state == "", stored_state.in_(place_spellings(state))))
+        in_district = [named_here]
+        if pincodes:
+            in_district.append(pincode_key_sql(Venue.pincode).in_(sorted(pincodes)))
+        query = query.filter(or_(*in_district))
     return query.order_by(Venue.name).all()
 
 
@@ -53,9 +67,8 @@ def list_approved_subcategory_names(db: Session, category_name: str) -> list[str
 
 def list_category_groups(db: Session, group: str) -> list[tuple[str, list[str]]]:
     """The approved categories marked `visibleOnWeb` = `group` (any case), each with its
-    approved subcategory names - the zones and their regions (East -> East 1, ...), the states
-    and their districts. Two queries whatever the size; two categories with one name are one
-    option."""
+    approved subcategory names - the zones and their regions (East -> East 1, ...). Two queries
+    whatever the size; two categories with one name are one option."""
     categories = db.query(Category.categoryUid, Category.name).filter(
         func.lower(func.trim(Category.visibleOnWeb)) == group.strip().lower(), Category.status == APPROVED
     ).all()
@@ -84,8 +97,14 @@ def list_distinct_conference_values(db: Session, column, conditions: Optional[li
     tenant's conferences - backs the Training Hub / Requested By pickers (no
     master category), the Audience / Session Type / Training Type pickers
     while their master category has no options, and the Sessions screen's
-    filter options. `conditions` narrows to the conferences a caller may see."""
-    rows = db.query(column).filter(column.isnot(None), column != "", *(conditions or [])).distinct().all()
+    filter options. `conditions` narrows to the conferences a caller may see. The other system's
+    "Not Assigned" placeholder (conference_format.NOT_ASSIGNED) is never an option."""
+    rows = (
+        db.query(column)
+        .filter(column.isnot(None), column != "", func.lower(column) != NOT_ASSIGNED.lower(), *(conditions or []))
+        .distinct()
+        .all()
+    )
     return _sorted_names(row[0] for row in rows)
 
 

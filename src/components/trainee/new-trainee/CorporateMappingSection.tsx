@@ -4,7 +4,7 @@ import AppCard from "@/components/ui/AppCard";
 import AppInput from "@/components/ui/AppInput";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { SectionTitle } from "@/components/training/add-training/SectionTitle";
-import { COMPANY_OPTIONS, REQUESTED_BY_OPTIONS, ZONES, regionsForZone } from "./constants";
+import { COMPANY_OPTIONS, REQUESTED_BY_OPTIONS } from "./constants";
 import { NewTraineeForm } from "./useNewTraineeForm";
 
 export function CorporateMappingSection({ form }: { form: NewTraineeForm }) {
@@ -17,7 +17,7 @@ export function CorporateMappingSection({ form }: { form: NewTraineeForm }) {
         placeholder="Select Zone"
         icon="location-outline"
         value={form.zone}
-        options={ZONES.map((z) => ({ label: z, value: z }))}
+        options={form.zoneOptions}
         onSelect={(option) => {
           form.setZone(option.value);
           form.setRegion("");
@@ -29,7 +29,7 @@ export function CorporateMappingSection({ form }: { form: NewTraineeForm }) {
         placeholder={form.zone ? "Select Region" : "Select Zone First"}
         icon="globe-outline"
         value={form.region}
-        options={regionsForZone(form.zone).map((r) => ({ label: r, value: r }))}
+        options={form.regionOptions}
         onSelect={(option) => form.setRegion(option.value)}
         disabled={!form.zone}
       />

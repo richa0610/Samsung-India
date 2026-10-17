@@ -41,7 +41,12 @@ export type NewTraineeRecord = {
   timestamp: string | null;
 };
 
-export type NewTraineeInput = Omit<NewTraineeRecord, "registeredAt" | "approvalStatus" | "updatedBy" | "updationOn" | "timestamp">;
+// The server makes the trainee's ID from their zone (e.g. SOUTH2610001) and signs them in with it, so
+// the form sends neither an ID nor a username.
+export type NewTraineeInput = Omit<
+  NewTraineeRecord,
+  "traineeUid" | "username" | "registeredAt" | "approvalStatus" | "updatedBy" | "updationOn" | "timestamp"
+>;
 export type TraineeListItem = NewTraineeRecord;
 
 export function registerNewTrainee(token: string, payload: NewTraineeInput) {

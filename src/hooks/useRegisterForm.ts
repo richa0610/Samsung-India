@@ -15,6 +15,9 @@ export type RegisterFormValues = {
   supervisorName: string;
   state: string;
   district: string;
+  // Registration only (ZoneRegionFields) - the zone starts the trainee's ID.
+  zone: string;
+  region: string;
 };
 
 const defaultValues: RegisterFormValues = {
@@ -27,6 +30,8 @@ const defaultValues: RegisterFormValues = {
   supervisorName: "",
   state: "",
   district: "",
+  zone: "",
+  region: "",
 };
 
 type UseRegisterFormOptions = {
@@ -64,6 +69,8 @@ export function useRegisterForm({ joinCode, onSuccess }: UseRegisterFormOptions 
         supervisorName: values.supervisorName || undefined,
         state: values.state,
         district: values.district || undefined,
+        zone: values.zone || undefined,
+        region: values.region || undefined,
       });
 
       setSession(session);

@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, Form, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_admin, require_admin_role
@@ -27,7 +27,6 @@ from app.schemas.training import (
     SessionReportOut,
     TopPerformer,
     TrainerSummaryOut,
-    TrainerLocation,
     TrainingAdminUpdate,
     TrainingCreate,
     TrainingDetailOut,
@@ -84,9 +83,9 @@ def add_question(
     suite_uid: str,
     payload: QuestionCreate,
     db: Session = Depends(get_db),
-    _admin: Admin = Depends(require_admin_role),
+    admin: Admin = Depends(require_admin_role),
 ):
-    return assessment_builder_service.add_question(db, suite_uid, payload)
+    return assessment_builder_service.add_question(db, suite_uid, payload, admin)
 
 
 @router.delete("/assessment-suites/{suite_uid}/questions/{question_id}", response_model=AssessmentSuiteDetail)
@@ -315,16 +314,10 @@ async def start_training(
     )
 
 
-def _coordinates(location: Optional[TrainerLocation]) -> dict:
-    """The trainer's position for a module action's activity-log row (none when the app sent none)."""
-    return {"latitude": location.latitude, "longitude": location.longitude} if location else {}
-
-
 @router.post("/trainings/{conference_uid}/advance-module", response_model=TrainingOut)
 def advance_module(
     conference_uid: str,
     background_tasks: BackgroundTasks,
-    location: Optional[TrainerLocation] = Body(None),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
@@ -332,7 +325,6 @@ def advance_module(
 ):
     return session_control.advance_module(
         db, admin, conference_uid, background_tasks, common_db, tenant_id,
-        **_coordinates(location),
     )
 
 
@@ -341,7 +333,6 @@ def start_module(
     conference_uid: str,
     module_key: str,
     background_tasks: BackgroundTasks,
-    location: Optional[TrainerLocation] = Body(None),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
@@ -349,7 +340,6 @@ def start_module(
 ):
     return session_control.start_module(
         db, admin, conference_uid, module_key, background_tasks, common_db, tenant_id,
-        **_coordinates(location),
     )
 
 
@@ -358,7 +348,6 @@ def restart_module(
     conference_uid: str,
     module_key: str,
     background_tasks: BackgroundTasks,
-    location: Optional[TrainerLocation] = Body(None),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
@@ -366,7 +355,6 @@ def restart_module(
 ):
     return session_control.restart_module(
         db, admin, conference_uid, module_key, background_tasks, common_db, tenant_id,
-        **_coordinates(location),
     )
 
 
@@ -374,7 +362,6 @@ def restart_module(
 def stop_active_module(
     conference_uid: str,
     background_tasks: BackgroundTasks,
-    location: Optional[TrainerLocation] = Body(None),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
@@ -382,7 +369,6 @@ def stop_active_module(
 ):
     return session_control.stop_active_module(
         db, admin, conference_uid, background_tasks, common_db, tenant_id,
-        **_coordinates(location),
     )
 
 
@@ -459,8 +445,6 @@ async def end_training(
     photo: UploadFile = File(...),
     attendance_sheet: UploadFile = File(..., alias="attendanceSheet"),
     total_pax: int = Form(..., alias="totalPax"),
-    latitude: Optional[float] = Form(None, ge=-90, le=90),
-    longitude: Optional[float] = Form(None, ge=-180, le=180),
     db: Session = Depends(get_db),
     admin: Admin = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
@@ -468,7 +452,6 @@ async def end_training(
 ):
     return await session_control.end_training(
         db, admin, conference_uid, background_tasks, photo, attendance_sheet, total_pax, common_db, tenant_id,
-        latitude=latitude, longitude=longitude,
     )
 
 

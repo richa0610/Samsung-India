@@ -41,7 +41,7 @@ test_app_startup_cannot_create_the_table).
 """
 
 import enum
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Optional
 
 from sqlalchemy import or_
@@ -51,6 +51,8 @@ from app.core.exceptions import forbidden
 from app.models.admin import Admin
 from app.models.admin_access import AdminAccess
 from app.models.agency_team import AgencyTeam
+from app.services.account_ids import account_keys
+from app.services.company_ids import company_keys
 from app.utils.zones import zone_key, zone_spellings
 
 
@@ -89,15 +91,24 @@ def company_admin_key(tenant_uid: str, company: str) -> str:
 class ScopeRule:
     """One slice of data: a company, optionally narrowed to a zone and/or a region.
     `None` means "any". A row with a blank zone never matches a rule that names a zone. Zones
-    compare by `zone_key`, so a "North Zone" grant covers a training saved as "North"."""
+    compare by `zone_key`, so a "North Zone" grant covers a training saved as "North".
+
+    A row may store the company by name or - the other system's way, since 2026-10-17 - by its
+    agency ID; `company_keys` holds both (resolve_scope fills it; company_ids.company_keys)."""
 
     company: str
     zone: Optional[str] = None
     region: Optional[str] = None
+    company_keys: frozenset[str] = frozenset()
+
+    @property
+    def keys(self) -> frozenset[str]:
+        """Every (normalized) value a row may store for this rule's company."""
+        return self.company_keys or frozenset({self.company})
 
     def matches(self, company: Optional[str], zone: Optional[str], region: Optional[str]) -> bool:
         return (
-            norm(company) == self.company
+            norm(company) in self.keys
             and (self.zone is None or zone_key(zone) == zone_key(self.zone))
             and (self.region is None or norm(region) == self.region)
         )
@@ -111,6 +122,8 @@ class AccessScope:
     is_super: bool = False
     rules: tuple[ScopeRule, ...] = ()  # union of the company / zone / region slices granted
     trainer_username: Optional[str] = None  # set for trainers: their own trainings / assigned trainees
+    # Every value a row may name that trainer by - their ID or login name (account_ids.account_keys).
+    trainer_keys: frozenset[str] = frozenset()
     reason: str = ""  # why access was denied (for logs only, never shown to clients)
 
     @classmethod
@@ -150,7 +163,9 @@ def resolve_scope(common_db: Session, principal: object, tenant_id: Optional[str
     if isinstance(principal, AgencyTeam):
         if norm(principal.role) != "trainer":
             return AccessScope.denied(tenant, "agency-team account is not a trainer")
-        return AccessScope(True, tenant, AccessRole.TRAINER, trainer_username=principal.username)
+        return AccessScope(
+            True, tenant, AccessRole.TRAINER, trainer_username=principal.username, trainer_keys=account_keys(principal)
+        )
 
     if isinstance(principal, Admin):
         if common_db is None:
@@ -182,17 +197,18 @@ def reject_outside_scope(scope: AccessScope, company: Optional[str], zone: Optio
         raise forbidden("This company, zone or region is outside your authorized scope")
 
 
-def own_trainings_username(common_db: Optional[Session], principal: object, tenant_id: Optional[str]) -> str:
-    """The verified username whose OWN trainings the caller's personal views list (trainer Home,
-    Training List, Attendance List). A trainer gets their own username only once `resolve_scope`
-    confirms they are an active trainer in this tenant (agency-team role "trainer", or an
-    admin-table trainer grant). An admin-panel account keeps its existing "trainings assigned to
-    my username" view. Anything else - no grant, wrong role, missing tenant - is refused."""
+def own_trainings_keys(common_db: Optional[Session], principal: object, tenant_id: Optional[str]) -> frozenset[str]:
+    """The verified account whose OWN trainings the caller's personal views list (trainer Home,
+    Training List, Attendance List) - as every value a training may name it by (its ID or login
+    name, account_ids.account_keys). A trainer gets their own only once `resolve_scope` confirms
+    they are an active trainer in this tenant (agency-team role "trainer", or an admin-table
+    trainer grant). An admin-panel account keeps its existing "trainings assigned to me" view.
+    Anything else - no grant, wrong role, missing tenant - is refused."""
     scope = resolve_scope(common_db, principal, tenant_id)
     if scope.is_trainer:
-        return scope.trainer_username
+        return scope.trainer_keys
     if scope.is_admin_panel:
-        return principal.username
+        return account_keys(principal)
     raise forbidden("This action requires an active trainer account")
 
 
@@ -212,16 +228,27 @@ def _resolve_admin(common_db: Session, admin: Admin, tenant: str) -> AccessScope
     if not grants:
         return AccessScope.denied(tenant, "no grant for this tenant")
     roles = [role for role, _ in grants]
-    rules = [rule for _, rule in grants if rule is not None]
+    rules = list(dict.fromkeys(rule for _, rule in grants if rule is not None))  # de-duplicated, order kept
     top = max(roles, key=lambda r: _RANK[r])
+    is_trainer = top == AccessRole.TRAINER
     return AccessScope(
         True,
         tenant,
         top,
         is_super=AccessRole.SUPER_ADMIN in roles,
-        rules=tuple(dict.fromkeys(rules)),  # de-duplicated, order kept
-        trainer_username=admin.username if top == AccessRole.TRAINER else None,
+        rules=_with_company_ids(common_db, rules),
+        trainer_username=admin.username if is_trainer else None,
+        trainer_keys=account_keys(admin) if is_trainer else frozenset(),
     )
+
+
+def _with_company_ids(common_db: Session, rules: list[ScopeRule]) -> tuple[ScopeRule, ...]:
+    """Each rule with its company's agency IDs as well as its name, so it covers a training stored
+    either way (one registry read, only when a rule names a company)."""
+    if not rules:
+        return ()
+    keys = company_keys(common_db, {rule.company for rule in rules})
+    return tuple(replace(rule, company_keys=keys.get(rule.company, frozenset())) for rule in rules)
 
 
 def _row_grant(row: AdminAccess, account_role: str, tenant: str) -> Optional[tuple[AccessRole, Optional[ScopeRule]]]:

@@ -21,7 +21,7 @@ from app.models.logs_master import LogsMaster
 from app.models.quiz import AssessmentResult
 from app.repositories import conference_repository, dashboard_repository
 from app.services import conference_access
-from app.services.access_service import own_trainings_username, resolve_scope
+from app.services.access_service import own_trainings_keys, resolve_scope
 from fastapi import HTTPException
 from tests.tenant_fixtures import ALPHA, BETA, TenantWorld, uid
 
@@ -32,14 +32,15 @@ MARK = {"status": "Present", "reason": "Walked in late"}
 class TrainerWorldTestCase(unittest.TestCase):
     def setUp(self):
         self.w = TenantWorld()
+        # A cleanup, not tearDown: cleanups run last-in first-out, so a patch a subclass starts after
+        # this (e.g. on the UID hook) is undone before the world's own - in the wrong order the world's
+        # stand-in would stay installed for every later test.
+        self.addCleanup(self.w.close)
         self.alpha = self.w.tenant_db[ALPHA]
         self.alpha.add(Conference(conferenceUid=uid("ADM"), company="Samsung India", zone="North Zone", region="North 1",
                                   trainerEmployeeId="adm_trainer", trainerName="Adm Trainer", conferenceDate="2026-09-20",
                                   conferenceStatus="Scheduled", status="Approved", postAssessmentUid="SUITE-1"))
         self.alpha.commit()
-
-    def tearDown(self):
-        self.w.close()
 
     def get(self, who, path, tenant=ALPHA, **headers):
         return self.w.client.get(path, headers={**self.w.headers(who, tenant), **headers})
@@ -143,7 +144,7 @@ class MissingContextFailsClosed(TrainerWorldTestCase):
                 principal = self.w.principal(who)
                 self.assertIsNone(conference_access.find_authorized_conference(self.alpha, principal, OWN, self.w.common, None))
                 with self.assertRaises(HTTPException) as caught:
-                    own_trainings_username(self.w.common, principal, "")
+                    own_trainings_keys(self.w.common, principal, "")
                 self.assertEqual(caught.exception.status_code, 403)
 
     def test_no_common_database_denies_admin_table_accounts_instead_of_crashing(self):

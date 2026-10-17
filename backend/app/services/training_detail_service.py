@@ -5,7 +5,6 @@ module the trainee attempted. Tap-through target from the Training History
 screen's table rows.
 """
 
-import json
 
 from sqlalchemy.orm import Session
 
@@ -16,18 +15,19 @@ from app.models.trainee import Trainee
 from app.repositories import assessment_repository, attendance_repository, conference_repository
 from app.schemas.assessment import QuestionOption
 from app.schemas.session import TrainingDetailOut, TrainingModuleDetail, TrainingQuestionAttempt
-from app.services import session_service
+from app.services import answer_numbers, session_service
 from app.services.module_flow import configured_modules, module_suite_uid
 from app.services.trainee_dashboard_service import _fmt_score, _trainee_status_for
 from app.services import trainee_access
+from app.utils import question_format
+from app.utils.conference_format import location_label
+
+# The trainee's outcomes that show no module breakdown (see get_training_detail).
+OUTCOME_ONLY_STATUSES = ("Missed", "Absent")
 
 
 def _question_options(question: Question) -> list[QuestionOption]:
-    try:
-        raw = json.loads(question.options) if question.options else []
-    except ValueError:
-        raw = []
-    return [QuestionOption(id=str(o.get("id")), text=o.get("text", "")) for o in raw if isinstance(o, dict)]
+    return [QuestionOption(**option) for option in question_format.options(question)]
 
 
 def _attendance_module(attendance, overall_status: str) -> TrainingModuleDetail:
@@ -74,10 +74,13 @@ def _assessment_module(
     attempts: list[TrainingQuestionAttempt] = []
     for q in _reviewable_questions(questions, answers_by_qid, module_key, result is not None, session_over):
         answer = answers_by_qid.get(str(q.id))
-        selected_id = answer.selectedOption if answer else None
+        saved = answer.selectedOption if answer else None
+        # Saved as its option's number (answer_numbers) - a survey answer too since 2026-10-17; one
+        # saved before as the option itself still reads as that option.
+        selected_id = answer_numbers.option_id(q, saved)
         options = _question_options(q)
         options_by_id = {o.id: o.text for o in options}
-        correct_id = q.correct_answer
+        correct_id = answer_numbers.correct_option_id(q)
         # Surveys have no right answer - correct_answer is unset, so both
         # correctOptionId/Text stay None and isCorrect is never true.
         attempts.append(
@@ -124,8 +127,11 @@ def get_training_detail(db: Session, trainee: Trainee, conference_uid: str) -> T
     overall_status = _trainee_status_for(conference, attendance)
     session_over = session_service._session_is_over(conference)
 
+    # A trainee who missed the training or was marked absent sees only its outcome - no module
+    # breakdown, questions or answer key (user, 2026-10-13); the app shows a notice instead.
+    module_keys = [] if overall_status in OUTCOME_ONLY_STATUSES else configured_modules(conference)
     modules: list[TrainingModuleDetail] = []
-    for module_key in configured_modules(conference):
+    for module_key in module_keys:
         if module_key == "ATTENDANCE":
             modules.append(_attendance_module(attendance, overall_status))
         else:
@@ -134,7 +140,7 @@ def get_training_detail(db: Session, trainee: Trainee, conference_uid: str) -> T
                 _assessment_module(db, conference_uid, trainee.traineeUid, module_key, suite_uid, session_over)
             )
 
-    location = ", ".join(filter(None, [conference.district, conference.state])) or None
+    location = location_label(conference)
 
     return TrainingDetailOut(
         conferenceUid=conference.conferenceUid,

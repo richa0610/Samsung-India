@@ -9,6 +9,7 @@ from app.models.conference import Conference
 from app.routers.ws import manager as ws_manager
 from app.schemas.training import TrainingOut
 from app.services import conference_access
+from app.utils.conference_format import session_status
 
 
 def owned_conference(
@@ -45,6 +46,6 @@ def training_out(conference: Conference) -> TrainingOut:
     """The answer to a training action: its ID, run status and approval status."""
     return TrainingOut(
         conferenceUid=conference.conferenceUid,
-        conferenceStatus=conference.conferenceStatus,
+        conferenceStatus=session_status(conference.conferenceStatus),
         status=conference.status,
     )

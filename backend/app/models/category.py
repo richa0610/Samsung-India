@@ -1,13 +1,15 @@
-from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy.sql import func
 
 from app.database.connection import Base
 
 
 class Category(Base):
     """Mirrors the real `category` table (mmtbtwob_tops). A category is a form field whose options
-    are its subcategories - except the zones and the states, which are categories themselves,
-    marked by `visibleOnWeb` ("Zone": East, North, ...; "State"), whose subcategories are their
-    regions (East 1, ...) and districts - see catalog_repository.list_category_groups."""
+    are its subcategories - except the zones, which are categories themselves, marked by
+    `visibleOnWeb` = "Zone" (East, North, ...), whose subcategories are their regions (East 1, ...)
+    - see catalog_repository.list_category_groups. States and districts come from the pincode
+    directory instead (models/pincode.py)."""
 
     __tablename__ = "category"
 
@@ -16,11 +18,16 @@ class Category(Base):
     categoryUid = Column(String(100), unique=True, nullable=True)
 
     name = Column(String(200))
-    visibleOnWeb = Column(String(100))
-    status = Column(String(100), nullable=False, default="Pending")
-    # Who added / last changed the row and why - set by scripts/add_master_options.py.
+    description = Column(Text)
+    visibleOnWeb = Column(String(100), nullable=False, default="No")
     updatedBy = Column(String(100))
+    updatedOn = Column(DateTime, onupdate=func.now())
+    token = Column(String(100))
+    timestamp = Column(DateTime, server_default=func.now(), nullable=False)
+    status = Column(String(100), nullable=False, default="Pending")
     remarks = Column(Text)
+    securityDetails = Column(Text)
+    masterRemarks = Column(Text)
 
 
 class SubCategory(Base):
@@ -37,7 +44,13 @@ class SubCategory(Base):
 
     categoryUid = Column(String(100))
     subCategory = Column(String(200))
-    status = Column(String(100), nullable=False, default="Pending")
-    # Who added / last changed the row and why - set by scripts/add_master_options.py.
+    description = Column(Text)
+    visibleOnWeb = Column(String(100), nullable=False, default="No")
     updatedBy = Column(String(100))
+    updatedOn = Column(DateTime, onupdate=func.now())
+    token = Column(String(100))
+    timestamp = Column(DateTime, server_default=func.now(), nullable=False)
+    status = Column(String(100), nullable=False, default="Pending")
     remarks = Column(Text)
+    securityDetails = Column(Text)
+    masterRemarks = Column(Text)

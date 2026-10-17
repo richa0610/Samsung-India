@@ -72,14 +72,6 @@ export function TraineeProfileSection({ form }: { form: NewTraineeForm }) {
         </Pressable>
       </View>
 
-      <AppInput
-        label="Trainee UID *"
-        placeholder="Enter Trainee UID"
-        icon="briefcase-outline"
-        autoCapitalize="characters"
-        value={form.traineeUid}
-        onChangeText={form.setTraineeUid}
-      />
       <SearchableSelect
         label="Agency ID (Optional)"
         placeholder="Select if applicable"

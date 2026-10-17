@@ -8,18 +8,35 @@ from app.core.config import settings
 
 
 def client_ip(request: Request) -> Optional[str]:
-    """The caller's IP as the trusted proxy saw it - used for rate limiting and activity logs.
+    """The caller's IP as the trusted proxy saw it - recorded in activity logs and audit columns.
 
     Only the entries our own proxies appended to X-Forwarded-For are trusted
     (settings.TRUSTED_PROXY_HOPS, counted from the right); anything to their left, and any
     other client-settable header (CF-Connecting-IP, X-Real-IP, ...), is whatever the caller
-    chose to send and is ignored - otherwise a new fake value per request escapes every
-    per-IP limit. Falls back to the socket peer. Never raises."""
+    chose to send and is ignored - otherwise any caller could write a fake address into the
+    audit trail. Falls back to the socket peer. Never raises."""
     hops = settings.TRUSTED_PROXY_HOPS
     forwarded = [part.strip() for part in (request.headers.get("x-forwarded-for") or "").split(",") if part.strip()]
     if hops > 0 and len(forwarded) >= hops:
         return forwarded[-hops]
     return request.client.host if request.client else None
+
+
+def audience_class(attendance) -> str:
+    """ASSIGNED (admin pre-seeded roster) / FRESH (registered via the QR flow) /
+    UNASSIGNED (existing trainee who logged in and joined). Written to
+    `attendance.sessionMeta` at join time (session_service.join_session);
+    legacy rows with no meta fall back to UNASSIGNED."""
+    if attendance is None:
+        return "UNASSIGNED"
+    if attendance.sessionMeta:
+        try:
+            value = (json.loads(attendance.sessionMeta) or {}).get("audience")
+            if value in ("ASSIGNED", "FRESH", "UNASSIGNED"):
+                return value
+        except (ValueError, TypeError):
+            pass
+    return "UNASSIGNED"
 
 
 def attendance_is_assigned(attendance) -> bool:
@@ -44,14 +61,11 @@ def geofence_enabled(conference) -> bool:
     """True when this session's attendance module is configured for geofenced
     check-in AND the conference has venue coordinates to fence against. When
     either is missing the geofence simply isn't enforced."""
+    from app.utils.conference_format import read_session_config  # local: conference_format imports utils
+
     if conference is None or conference.geoLatitude is None or conference.geoLongitude is None:
         return False
-    if not conference.sessionConfig:
-        return False
-    try:
-        return bool(json.loads(conference.sessionConfig).get("attendance", {}).get("geoFencing"))
-    except (ValueError, AttributeError):
-        return False
+    return bool((read_session_config(conference.sessionConfig).get("attendance") or {}).get("geoFencing"))
 
 
 def within_geofence(conference, latitude: float, longitude: float) -> tuple[bool, Optional[float]]:

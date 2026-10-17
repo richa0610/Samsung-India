@@ -13,6 +13,7 @@ import {
   getCurrentSession,
   getSessionFlowState,
   isModuleLeft,
+  isSessionLive,
   setSessionFlowState,
 } from "@/api/session";
 import { isSessionLocked, resetSessionViolations, setProctoringSettings } from "@/components/proctoring/violations";
@@ -261,6 +262,9 @@ export function useTraineeHome() {
   // The trainer hasn't started the session yet - the whole timeline renders
   // dimmed and non-interactive, and every module falls back to "Please Wait".
   const notStarted = session != null && !session.started && !sessionClosed;
+
+  // Session is live only when started and not closed.
+  const isTrainingLive = isSessionLive(session);
 
   // The trainer marked this trainee Absent - a hard eject. The whole screen
   // is blocked until (if) the trainer flips them back to Present.
@@ -623,6 +627,7 @@ export function useTraineeHome() {
     error,
     notAssigned,
     notStarted,
+    isTrainingLive,
     ejected,
     sessionClosed,
     activeTab,

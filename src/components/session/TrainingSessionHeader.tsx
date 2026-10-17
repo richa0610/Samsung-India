@@ -29,6 +29,10 @@ export type TrainingSessionHeaderProps = {
   date?: string;
   location?: string;
   sessionClosed?: boolean;
+  showSessionDetails?: boolean;
+  showSessionPill?: boolean;
+  userSubtitle?: string;
+  isTrainingLive?: boolean;
 };
 
 export default function TrainingSessionHeader({
@@ -39,10 +43,14 @@ export default function TrainingSessionHeader({
   profilePhoto,
   confirmationStatus = "Not Confirmed",
   sessionType = "Training",
-  title = "Training Session",
-  date = "--",
-  location = "--",
+  title,
+  date,
+  location,
   sessionClosed = false,
+  showSessionDetails = true,
+  showSessionPill = true,
+  userSubtitle,
+  isTrainingLive,
 }: TrainingSessionHeaderProps) {
   const { token } = useAuth();
   const avatar: ImageSourcePropType = traineeAvatar({ gender, profilePhoto }, token);
@@ -57,6 +65,10 @@ export default function TrainingSessionHeader({
     !confirmationStatus.toLowerCase().includes("not");
 
   const displayStatus = isCompleted ? "Session Completed" : confirmationStatus;
+
+  const hasValidDate = Boolean(date && date.trim() !== "" && date.trim() !== "--");
+  const hasValidLocation = Boolean(location && location.trim() !== "" && location.trim() !== "--");
+  const showMeta = isTrainingLive !== false && (hasValidDate || hasValidLocation);
 
   return (
     <View style={styles.header}>
@@ -86,32 +98,40 @@ export default function TrainingSessionHeader({
           {/* User Details */}
           <View style={styles.userMeta}>
             <AppText
-              variant="body"
               color={Colors.white}
-              weight={FontWeight.medium}
+              weight={FontWeight.bold}
+              style={styles.userName}
             >
               {userName}
             </AppText>
 
-            <View style={styles.statusRow}>
-              <View
-                style={[
-                  styles.statusIndicator,
-                  {
-                    backgroundColor: isCompleted || isConfirmed
-                      ? Colors.statusGreen
-                      : Colors.statusYellow,
-                  },
-                ]}
-              />
+            {userSubtitle ? (
               <AppText
-                variant="tiny"
                 color={Colors.white}
-                style={styles.statusText}
+                style={styles.userSubtitle}
               >
-                {displayStatus}
+                {userSubtitle}
               </AppText>
-            </View>
+            ) : showSessionDetails && displayStatus ? (
+              <View style={styles.statusRow}>
+                <View
+                  style={[
+                    styles.statusIndicator,
+                    {
+                      backgroundColor: isCompleted || isConfirmed
+                        ? Colors.statusGreen
+                        : Colors.statusYellow,
+                    },
+                  ]}
+                />
+                <AppText
+                  color={Colors.white}
+                  style={styles.statusText}
+                >
+                  {displayStatus}
+                </AppText>
+              </View>
+            ) : null}
           </View>
         </View>
 
@@ -130,58 +150,74 @@ export default function TrainingSessionHeader({
         </View>
       </View>
 
-      {/* Session Type / Status Pill */}
-      <View style={[styles.sessionPill, isCompleted && styles.completedPill]}>
-        {isCompleted ? (
-          <Ionicons name="checkmark-circle" size={13} color={Colors.recordedGreen} />
-        ) : (
-          <CalendarIcon width={13} height={13} color={Colors.headerBlue} />
-        )}
-        <AppText
-          variant="overline"
-          color={isCompleted ? Colors.recordedGreen : Colors.headerBlue}
-          weight={FontWeight.bold}
-        >
-          {isCompleted ? "SESSION COMPLETED" : sessionType}
-        </AppText>
-      </View>
+      {showSessionDetails && (
+        <>
+          {/* Session Type / Status Pill */}
+          {showSessionPill && sessionType ? (
+            <View style={[styles.sessionPill, isCompleted && styles.completedPill]}>
+              {isCompleted ? (
+                <Ionicons name="checkmark-circle" size={13} color={Colors.recordedGreen} />
+              ) : (
+                <CalendarIcon width={13} height={13} color={Colors.headerBlue} />
+              )}
+              <AppText
+                variant="overline"
+                color={isCompleted ? Colors.recordedGreen : Colors.headerBlue}
+                weight={FontWeight.bold}
+              >
+                {isCompleted ? "SESSION COMPLETED" : sessionType}
+              </AppText>
+            </View>
+          ) : null}
 
-      {/* Large Session Title */}
-      <AppText
-        variant="h2"
-        color={Colors.white}
-        weight={FontWeight.bold}
-        style={styles.sessionTitle}
-      >
-        {title}
-      </AppText>
+          {/* Large Session Title */}
+          {title ? (
+            <AppText
+              variant="h2"
+              color={Colors.white}
+              weight={FontWeight.bold}
+              style={[styles.sessionTitle, !showSessionPill && styles.sessionTitleNoPill]}
+            >
+              {title}
+            </AppText>
+          ) : null}
 
-      {/* Date & Location Meta Row */}
-      <View style={styles.metaRow}>
-        <View style={styles.metaItem}>
-          <CalendarIcon width={14} height={14} color={Colors.white} />
-          <AppText
-            variant="caption"
-            color={Colors.white}
-            style={styles.metaText}
-          >
-            {date}
-          </AppText>
-        </View>
+          {/* Date & Location Meta Row */}
+          {showMeta && (
+            <View style={styles.metaRow}>
+              {hasValidDate && (
+                <View style={styles.metaItem}>
+                  <CalendarIcon width={14} height={14} color={Colors.white} />
+                  <AppText
+                    variant="caption"
+                    color={Colors.white}
+                    style={styles.metaText}
+                  >
+                    {date}
+                  </AppText>
+                </View>
+              )}
 
-        <View style={styles.verticalDivider} />
+              {hasValidDate && hasValidLocation && (
+                <View style={styles.verticalDivider} />
+              )}
 
-        <View style={styles.metaItem}>
-          <Ionicons name="location-outline" size={15} color={Colors.white} />
-          <AppText
-            variant="caption"
-            color={Colors.white}
-            style={styles.metaText}
-          >
-            {location}
-          </AppText>
-        </View>
-      </View>
+              {hasValidLocation && (
+                <View style={styles.metaItem}>
+                  <Ionicons name="location-outline" size={15} color={Colors.white} />
+                  <AppText
+                    variant="caption"
+                    color={Colors.white}
+                    style={styles.metaText}
+                  >
+                    {location}
+                  </AppText>
+                </View>
+              )}
+            </View>
+          )}
+        </>
+      )}
     </View>
   );
 }
@@ -230,20 +266,33 @@ const styles = StyleSheet.create({
     borderColor: Colors.headerBlue,
   },
   userMeta: {
-    gap: 1,
+    gap: 3,
+    justifyContent: "center",
+  },
+  userName: {
+    fontSize: 20,
+    lineHeight: 24,
+    letterSpacing: 0.2,
+  },
+  userSubtitle: {
+    fontSize: 14.5,
+    lineHeight: 18,
+    opacity: 0.92,
   },
   statusRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 6,
   },
   statusIndicator: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   statusText: {
-    opacity: 0.95,
+    fontSize: 13,
+    lineHeight: 18,
+    opacity: 0.92,
   },
   actionBtn: {
     width: 41,
@@ -270,6 +319,9 @@ const styles = StyleSheet.create({
   sessionTitle: {
     marginTop: 10,
     letterSpacing: 0.3,
+  },
+  sessionTitleNoPill: {
+    marginTop: 16,
   },
   metaRow: {
     flexDirection: "row",

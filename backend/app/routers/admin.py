@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.core.rate_limit import rate_limit
 from app.dependencies.auth import get_current_admin, require_admin_role, require_super_admin
 from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.dependencies.filters import ConferenceFilters, get_conference_filters
@@ -22,11 +21,7 @@ from app.utils.helpers import client_ip
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-@router.post(
-    "/login",
-    response_model=AdminAuthSession,
-    dependencies=[Depends(rate_limit(max_attempts=5, window_seconds=300))],
-)
+@router.post("/login", response_model=AdminAuthSession)
 def login(
     payload: AdminLoginRequest,
     request: Request,

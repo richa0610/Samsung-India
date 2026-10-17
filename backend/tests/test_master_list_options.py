@@ -1,10 +1,10 @@
 """The Add Training pickers come from the master list (user, 2026-10-13): a category is a form
-field, its approved subcategories are the options. The zones and the states are categories
-themselves, marked visibleOnWeb = "Zone" / "State" (East, North, ...), and their subcategories
-are their regions / districts (East -> East 1, East 2, ...). A training saves the master's
-spelling ("North"); "North" and the older "North Zone" are the same zone everywhere zones are
-compared - filters, access grants and their SQL twins - so older trainings and grants keep
-matching."""
+field, its approved subcategories are the options. The zones are categories themselves, marked
+visibleOnWeb = "Zone" (East, North, ...), and their subcategories are their regions (East ->
+East 1, East 2, ...). A training saves the master's spelling ("North"); "North" and the older
+"North Zone" are the same zone everywhere zones are compared - filters, access grants and their
+SQL twins - so older trainings and grants keep matching. State / District no longer come from
+the master (user, 2026-10-14) - the pincode directory replaced it (tests/test_locations.py)."""
 
 import unittest
 from types import SimpleNamespace
@@ -92,11 +92,10 @@ class MasterListPickers(unittest.TestCase):
             {"name": "North", "options": ["North 1", "North 2"]},
         ])
 
-    def test_the_states_are_the_approved_state_categories_each_with_its_approved_districts(self):
-        self.assertEqual(self.get("/admin/states"), [
-            {"name": "Delhi", "options": ["New Delhi"]},
-            {"name": "Maharashtra", "options": ["Mumbai", "Pune"]},
-        ])
+    def test_the_masters_state_categories_are_no_longer_the_state_list(self):
+        # The fixture still holds approved "State" categories with districts; the State picker now
+        # reads only the pincode directory, which is empty in this world.
+        self.assertEqual(self.get("/admin/states"), [])
 
     def test_a_district_name_finds_venues_saved_with_the_name_or_with_the_old_code(self):
         db = self.w.tenant_db[ALPHA]

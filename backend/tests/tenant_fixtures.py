@@ -26,6 +26,7 @@ Accounts (all in the shared database unless noted) and the grants they hold:
     trainer1..3  agency-team trainers inside ALPHA (implicit ALPHA members)
 """
 
+import itertools
 from datetime import datetime
 from unittest.mock import patch
 
@@ -44,8 +45,11 @@ from app.models.admin_access import AccessBase, AdminAccess
 from app.models.agency_team import AgencyTeam
 from app.models.attendance import Attendance
 from app.models.common.tenant_registry import Tenant
+from app.models.agency import AgencyBase
+from app.models.pincode import PincodeBase
 from app.models.conference import Conference
 from app.models.quiz import AssessmentResult
+from app.services import location_service
 from app.services.access_service import company_admin_key
 from app.models.trainee import Trainee
 
@@ -76,8 +80,11 @@ class TenantWorld:
     def __init__(self):
         mem = lambda: create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
         self.common_engine, self.alpha_engine, self.beta_engine = mem(), mem(), mem()
+        uid_numbers = itertools.count(1)
         self._patches = [
-            patch("app.models.uid_events.next_uid", return_value=None),
+            # IDs the app makes (a trainee's, an attendance row's, ...): unique stand-ins rather than
+            # the real per-prefix counter, so every world starts from the same numbers.
+            patch("app.models.uid_events.next_uid", side_effect=lambda _connection, prefix: f"{prefix}-{next(uid_numbers)}"),
             # A WebSocket handshake (app/routers/ws.py) and a couple of training-service lookups
             # aren't part of the FastAPI Depends graph, so app.dependency_overrides[get_common_db]
             # below can't reach them - they do their own local `from app.database.common import
@@ -91,6 +98,11 @@ class TenantWorld:
 
         CommonBase.metadata.create_all(self.common_engine)
         AccessBase.metadata.create_all(self.common_engine)
+        # The pincode directory the State / District pickers read (empty unless a test adds rows);
+        # its hourly cache starts empty in every world.
+        PincodeBase.metadata.create_all(self.common_engine)
+        AgencyBase.metadata.create_all(self.common_engine)  # the shared company registry (agency IDs)
+        location_service.clear_cache()
         TenantBase.metadata.create_all(self.alpha_engine)
         TenantBase.metadata.create_all(self.beta_engine)
         self.common = sessionmaker(bind=self.common_engine)()

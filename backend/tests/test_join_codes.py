@@ -1,5 +1,6 @@
 """The public training ID format (app/utils/conference_id.py) and signed QR join codes
-(app/utils/join_code.py): guessing or editing an ID, or changing the tenant, reveals nothing."""
+(app/utils/join_code.py): guessing or editing an ID, or changing the tenant, reveals nothing - so a
+counted ID (the other system's shape, user 2026-10-17) is safe to use."""
 
 import re
 import unittest
@@ -10,67 +11,44 @@ from app.core.security import create_access_token
 from app.models.conference import Conference
 from app.models.trainee import Trainee
 from app.utils import conference_id, join_code
+from app.utils.date_utils import ist_now
 from tests.tenant_fixtures import ALPHA, BETA, TenantWorld, uid
 
 OPEN = uid("S_N1")  # trainer1's training in ALPHA
 
 
-class ConferenceIdFormat(unittest.TestCase):
-    def test_the_format(self):
-        with patch("app.utils.conference_id.ist_now", return_value=datetime(2026, 9, 30, 12, 0)):
-            value = conference_id.candidate("Samsung India", "trainer1")
-        self.assertRegex(value, r"^CONF26\d{8}$")
-        self.assertEqual(len(value), 14)
-
-    def test_company_and_trainer_codes_are_stable_opaque_and_not_the_names(self):
-        a = conference_id.opaque_code("company", "Samsung India")
-        self.assertEqual(a, conference_id.opaque_code("company", "  samsung india "))  # spelling-insensitive
-        self.assertRegex(a, r"^\d{2}$")
-        codes = {conference_id.opaque_code("company", f"Company {n}") for n in range(200)}
-        self.assertGreater(len(codes), 50)                                     # spread over 00-99
-
-    def test_different_secrets_give_different_codes(self):
-        names = [f"Company {n}" for n in range(30)]
-        original = [conference_id.opaque_code("company", n) for n in names]
-        with patch.object(conference_id, "_KEY", b"another-server-secret"):
-            other = [conference_id.opaque_code("company", n) for n in names]
-        self.assertNotEqual(original, other)
-
-
 class ConferenceIdAllocation(unittest.TestCase):
+    """CONF + YY + a 5-digit running number, as the other system's IDs (user, 2026-10-17)."""
+
     def setUp(self):
         self.w = TenantWorld()
         self.addCleanup(self.w.close)
         self.db = self.w.tenant_db[ALPHA]
+        self.year = f"{ist_now().year % 100:02d}"
 
-    def test_a_taken_id_is_skipped(self):
-        taken = conference_id.candidate("Samsung India", "trainer1")
-        self.db.add(Conference(conferenceUid=taken, company="Samsung India", trainerEmployeeId="trainer1"))
-        self.db.commit()
-        draws = iter([int(taken[-4:]), int(taken[-4:]), 1234])
-        with patch("app.utils.conference_id.secrets.randbelow", lambda _n: next(draws)), \
-                patch("app.utils.conference_id.ist_now", return_value=datetime.now()):
-            with self.w.alpha_engine.connect() as conn:
-                fresh = conference_id.new_conference_uid(conn, "Samsung India", "trainer1")
-        self.assertNotEqual(fresh, taken)
-        self.assertTrue(fresh.endswith("1234"))
-
-    def test_it_gives_up_rather_than_reuse_an_id(self):
-        taken = conference_id.candidate("Samsung India", "trainer1")
-        self.db.add(Conference(conferenceUid=taken, company="Samsung India", trainerEmployeeId="trainer1"))
-        self.db.commit()
-        with patch("app.utils.conference_id.secrets.randbelow", lambda _n: int(taken[-4:])), \
-                patch("app.utils.conference_id.ist_now", return_value=datetime.now()):
-            with self.w.alpha_engine.connect() as conn, self.assertRaises(RuntimeError):
-                conference_id.new_conference_uid(conn, "Samsung India", "trainer1")
-
-    def test_new_trainings_get_the_new_format(self):
-        conference = Conference(company="Samsung India", trainerEmployeeId="trainer1", conferenceDate="2026-10-05")
+    def add_training(self, conference_uid=None):
+        conference = Conference(conferenceUid=conference_uid, company="Samsung India", conferenceDate="2026-10-05")
         self.db.add(conference)
         self.db.commit()
-        self.assertRegex(conference.conferenceUid, r"^CONF\d{10}$")
-        self.assertEqual(conference.conferenceUid[6:8], conference_id.opaque_code("company", "Samsung India"))
-        self.assertEqual(conference.conferenceUid[8:10], conference_id.opaque_code("trainer", "trainer1"))
+        return conference.conferenceUid
+
+    def test_new_trainings_get_their_shape_counting_up(self):
+        first, second = self.add_training(), self.add_training()
+        self.assertRegex(first, rf"^CONF{self.year}\d{{5}}$")
+        self.assertEqual(len(first), 11)
+        self.assertEqual(int(second[-5:]), int(first[-5:]) + 1)
+
+    def test_a_number_an_imported_training_already_has_is_skipped(self):
+        self.add_training(f"CONF{self.year}10001")                        # the counter's first number
+        self.add_training(f"CONF{self.year}10002")
+        self.assertEqual(self.add_training(), f"CONF{self.year}10003")
+
+    def test_it_gives_up_rather_than_reuse_an_id(self):
+        for n in range(3):
+            self.add_training(f"CONF{self.year}{10001 + n}")
+        with patch.object(conference_id, "MAX_SKIPS", 3), self.assertRaises(RuntimeError):
+            with self.w.alpha_engine.begin() as conn:
+                conference_id.new_conference_uid(conn)
 
     def test_an_explicit_id_is_kept(self):
         conference = Conference(conferenceUid="CONF-KEEP", company="Samsung India")

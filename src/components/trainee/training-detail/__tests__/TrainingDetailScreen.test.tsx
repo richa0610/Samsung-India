@@ -60,3 +60,12 @@ test("a missed training still shows the missed notice", async () => {
   expect(screen.getByText("Session Missed")).toBeTruthy();
   expect(screen.queryByText("Post Test")).toBeNull();
 });
+
+test("an absent trainee sees only the absent notice, like a missed training", async () => {
+  mockHook.detail = training("Absent");
+  await render(<TrainingDetailScreen />);
+
+  expect(screen.getByText("Marked Absent")).toBeTruthy();
+  expect(screen.queryByText("Post Test")).toBeNull();
+  expect(screen.queryByText("OVERALL STATUS")).toBeNull();
+});

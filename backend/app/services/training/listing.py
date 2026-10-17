@@ -12,7 +12,6 @@ from app.dependencies.paging import PageRequest
 from app.models.admin import Admin
 from app.models.conference import Conference
 from app.repositories import (
-    admin_repository,
     assessment_repository,
     attendance_repository,
     catalog_repository,
@@ -27,8 +26,11 @@ from app.schemas.training import (
     TrainingFacetsOut,
     TrainingPageResponse,
 )
-from app.services.access_service import AccessScope, own_trainings_username, resolve_scope
-from app.utils.date_utils import ist_now
+from app.services import account_ids
+from app.services.access_service import AccessScope, own_trainings_keys, resolve_scope
+from app.utils.conference_format import assigned, location_label, session_status
+from app.utils.date_utils import ist_now, to_venue_time
+from app.utils.places import place_name
 from app.utils.status import title_status
 
 
@@ -43,46 +45,32 @@ def _real_headcounts(db: Session, conference_uids: list[str]) -> dict[str, int]:
 
 
 def venue_names_for(db: Session, conferences: list[Conference]) -> dict[str, str]:
-    venue_uids = {c.venueUid for c in conferences if c.venueUid}
+    venue_uids = {assigned(c.venueUid) for c in conferences} - {None}
     if not venue_uids:
         return {}
     return {v.venueUid: v.name for v in catalog_repository.get_venues_by_uids(db, venue_uids) if v.name}
 
 
 def _updated_by_names_for(db: Session, conferences: list[Conference], common_db: Optional[Session] = None) -> dict[str, str]:
-    """`conference.updatedBy` stores whoever last saved the row as a bare
-    username (a trainer's phone number, or an admin's login) - resolve those
-    to display names in one batch, the same way `venue_names_for` resolves
-    venue UIDs. Anything that doesn't match a real admin/agencyteam account
-    (old seed-script rows, which stamped the script's filename instead of a
-    real username) is left for the caller to fall back to the raw value."""
-    usernames = {c.updatedBy for c in conferences if c.updatedBy}
-    if not usernames:
+    """`conference.updatedBy` names whoever last saved the row - by account ID since 2026-10-17
+    (account_ids), as a bare login name before - resolve those to display names in one batch, the
+    same way `venue_names_for` resolves venue UIDs. Anything that doesn't match a real
+    admin/agencyteam account (old seed-script rows, which stamped the script's filename instead)
+    is left for the caller to fall back to the raw value."""
+    stored = {c.updatedBy for c in conferences if c.updatedBy}
+    if not stored:
         return {}
-    names: dict[str, str] = {}
-
     # The request's own Common DB session when the caller has one (no extra connection).
     if common_db is not None:
-        names.update({a.username: a.name for a in admin_repository.get_admins_by_usernames(common_db, usernames) if a.name})
-        for agent in admin_repository.get_agents_by_usernames(db, usernames):
-            if agent.name:
-                names.setdefault(agent.username, agent.name)
-        return names
+        return account_ids.names_by_key(db, common_db, stored)
 
     from app.database.common import CommonSessionLocal
 
     common_db = CommonSessionLocal()
     try:
-        for admin in admin_repository.get_admins_by_usernames(common_db, usernames):
-            if admin.name:
-                names[admin.username] = admin.name
+        return account_ids.names_by_key(db, common_db, stored)
     finally:
         common_db.close()
-
-    for agent in admin_repository.get_agents_by_usernames(db, usernames):
-        if agent.name:
-            names.setdefault(agent.username, agent.name)
-    return names
 
 
 def _to_agenda_item(
@@ -99,15 +87,15 @@ def _to_agenda_item(
         zone=conference.zone,
         sessionType=conference.sessionType,
         conferenceDate=conference.conferenceDate,
-        conferenceTime=conference.conferenceTime,
-        conferenceStatus=title_status(conference.conferenceStatus),
+        conferenceTime=to_venue_time(conference.conferenceTime),
+        conferenceStatus=session_status(conference.conferenceStatus),
         approvalStatus=title_status(conference.status),
-        location=", ".join(filter(None, [conference.district, conference.state])) or None,
+        location=location_label(conference),
         batchSize=conference.batchSize,
         trainingType=conference.trainingType,
-        state=conference.state,
-        district=conference.district,
-        trainingHub=conference.trainingHub,
+        state=place_name(conference.state) or None,
+        district=place_name(conference.district) or None,
+        trainingHub=assigned(conference.trainingHub),
         venueName=venue_name_by_uid.get(conference.venueUid),
         updatedBy=(
             updated_by_name_by_username.get(conference.updatedBy, conference.updatedBy)
@@ -150,16 +138,17 @@ def trainer_summary(
     SQL (dashboard_repository.trainer_summary_counts - two statements, whatever the trainer's
     history), plus the Recent Sessions card - always the two most recently completed trainings,
     whatever the range. Only the trainer's own trainings, verified server-side."""
-    username = own_trainings_username(common_db, admin, tenant_id)
+    trainer = own_trainings_keys(common_db, admin, tenant_id)
     counts = dashboard_repository.trainer_summary_counts(
-        db, username, start, end, today=ist_now().date().isoformat(), today_ist=ist_now().date().isoformat()
+        db, trainer, start, end, today=ist_now().date().isoformat(), today_ist=ist_now().date().isoformat()
     )
     total = counts["totalSessions"]
-    recent = conference_repository.list_recent_completed_for_trainer(db, username, 2)
+    recent = conference_repository.list_recent_completed_for_trainer(db, trainer, 2)
+    pending_total = counts["pending"] + counts.get("pendingApproval", 0)
     return TrainerSummaryOut(
         **counts,
         executedPercentage=round(counts["completed"] / total * 100) if total else 0,
-        pendingPercentage=round(counts["pending"] / total * 100) if total else 0,
+        pendingPercentage=round(pending_total / total * 100) if total else 0,
         recentCompleted=_agenda_items(db, recent, common_db),
     )
 
@@ -211,6 +200,7 @@ def list_trainings_page(
     this page's rows are enriched (headcounts, venue and updater names), so the
     cost per request is the page size, not the size of the tenant."""
     scope = _list_scope(admin, common_db, tenant_id)
+    filters = account_ids.with_trainer_ids(db, common_db, filters)
     conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
     conditions += conference_repository.session_conditions(
         on_date, status, location, today=ist_now().date().isoformat()
@@ -237,6 +227,7 @@ def training_facets(
     """The Sessions screen's filter options (training hubs, training types), taken from the
     trainings the caller may see within `filters` - the same authorization as the list, so an
     option never reveals a training outside it."""
+    filters = account_ids.with_trainer_ids(db, common_db, filters)
     conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
     conditions += dashboard_repository.conference_authorization_conditions(resolve_scope(common_db, admin, tenant_id))
     return TrainingFacetsOut(
@@ -271,6 +262,7 @@ def list_attendance_page(
     and only the page's rows are enriched: at most 4 statements per request (page, total - first
     page only, post-test results, tallies)."""
     scope = _list_scope(admin, common_db, tenant_id)
+    filters = account_ids.with_trainer_ids(db, common_db, filters)
     conditions = dashboard_repository.conference_conditions(filters, include_cancelled=True)
     if scope is not None:
         conditions += dashboard_repository.conference_authorization_conditions(scope)

@@ -1,7 +1,7 @@
 """The attendance row's audit columns.
 
 - updationOn / token / logPath: every write stamps when (UTC), a one-way fingerprint of the login
-  token it was made with (never the token) and the request (models/attendance_events.py).
+  token it was made with (never the token) and the request (models/audit_stamp_events.py).
 - attemptCount: on a geofenced session, the secure check-in try the trainee got in on - 1 on the
   first, each refused try from outside the venue adds 1.
 - masterRemarks: the latest reason a trainer typed (mark, unlock).
@@ -22,7 +22,9 @@ class AttendanceAuditTestCase(CheckInTestCase):
         return attendance
 
     def trainer(self, path, body):
-        return self.w.client.post(path, json=body, headers=self.w.headers("trainer1"))
+        # Kept: a token made again later carries a later issue time once the clock ticks over a second.
+        self.trainer_headers = self.w.headers("trainer1")
+        return self.w.client.post(path, json=body, headers=self.trainer_headers)
 
     def join(self):
         """The trainee on the session as "Joined" - before any check-in of their own."""
@@ -45,7 +47,7 @@ class WhoWhenHow(AttendanceAuditTestCase):
         response = self.trainer(MARK_URL, {"status": "Absent", "reason": "Left after check-in"})
         self.assertEqual(response.status_code, 200, response.text)
         row = self.row()
-        trainer_token = self.w.headers("trainer1")["Authorization"].removeprefix("Bearer ")
+        trainer_token = self.trainer_headers["Authorization"].removeprefix("Bearer ")
         self.assertEqual(row.token, token_fingerprint(trainer_token))
         self.assertEqual(row.logPath, f"POST {MARK_URL}"[:100])
 

@@ -84,6 +84,20 @@ def get_agents_by_usernames(db: Session, usernames: set[str]) -> list[AgencyTeam
     return db.query(AgencyTeam).filter(AgencyTeam.username.in_(usernames)).all()
 
 
+def get_admins_by_keys(db: Session, keys: Collection[str]) -> list[Admin]:
+    """Admin-table accounts named by their login name or their ID (`adminUid`)."""
+    if not keys:
+        return []
+    return db.query(Admin).filter(or_(Admin.username.in_(sorted(keys)), Admin.adminUid.in_(sorted(keys)))).all()
+
+
+def get_agents_by_keys(db: Session, keys: Collection[str]) -> list[AgencyTeam]:
+    """Agency-team accounts named by their login name or their ID (`agencyTeamUid`)."""
+    if not keys:
+        return []
+    return db.query(AgencyTeam).filter(or_(AgencyTeam.username.in_(sorted(keys)), AgencyTeam.agencyTeamUid.in_(sorted(keys)))).all()
+
+
 def save(db: Session, entity: Admin | AgencyTeam) -> Admin | AgencyTeam:
     db.commit()
     db.refresh(entity)

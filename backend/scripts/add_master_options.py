@@ -20,6 +20,7 @@ is saved to backups/ before it is committed, so --undo removes exactly those row
 
 import argparse
 import json
+import random
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -116,13 +117,29 @@ def apply(db: Session, steps: list[Step], tenant: str) -> Path:
     created: list[Category] = []
     for step in steps:
         if step.category_uid is None:
-            category = Category(name=step.name, visibleOnWeb=step.visible_on_web, status=APPROVED, updatedBy=ADDED_BY, remarks=remark)
+            category = Category(
+                name=step.name,
+                visibleOnWeb=step.visible_on_web,
+                status=APPROVED,
+                updatedBy=ADDED_BY,
+                remarks=remark,
+                token=f"{random.randint(10000, 99999)}",
+                masterRemarks=f"New Category added by {ADDED_BY}",
+            )
             db.add(category)
             db.flush()  # the UID hook gives it its categoryUid
             created.append(category)
             step.category_uid = category.categoryUid
     added = [
-        SubCategory(categoryUid=step.category_uid, subCategory=option, status=APPROVED, updatedBy=ADDED_BY, remarks=remark)
+        SubCategory(
+            categoryUid=step.category_uid,
+            subCategory=option,
+            status=APPROVED,
+            updatedBy=ADDED_BY,
+            remarks=remark,
+            token=f"{random.randint(10000, 99999)}",
+            masterRemarks=f"New Sub Category added by {ADDED_BY}",
+        )
         for step in steps
         for option in step.options
     ]

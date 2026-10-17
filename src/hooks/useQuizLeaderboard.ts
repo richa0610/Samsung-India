@@ -7,14 +7,13 @@
  * screen shows an empty state - there is no sample/mock fallback.
  */
 
-import { LeaderboardFilterValues } from "@/components/quiz/LeaderboardFilter";
 import { LeaderboardUser } from "@/components/quiz/LeaderboardRow";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BackHandler, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { LiveQuizResults, getCurrentSession, getLiveQuizResults } from "@/api/session";
+import { CurrentSession, LiveQuizResults, getCurrentSession, getLiveQuizResults, isSessionLive } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
 import { useLiveQuizChannel } from "@/hooks/useLiveQuizChannel";
 import { TraineeTab } from "@/hooks/useTraineeHome";
@@ -40,6 +39,7 @@ export function useQuizLeaderboard() {
   const { token, logout } = useAuth();
 
   const [conferenceUid, setConferenceUid] = useState<string | null>(params.conferenceUid ?? null);
+  const [session, setSession] = useState<CurrentSession | null>(null);
   const [results, setResults] = useState<LiveQuizResults | null>(null);
   // Same confirm-before-logout flow as Home/Dashboard/Profile's power
   // button - opening the popup is separate from actually logging out,
@@ -56,13 +56,15 @@ export function useQuizLeaderboard() {
   const load = useCallback(async () => {
     if (!token) return;
     try {
-      let uid = params.conferenceUid ?? conferenceUid;
-      if (!uid) {
-        uid = (await getCurrentSession(token)).conferenceUid;
+      const current = await getCurrentSession(token, params.conferenceUid);
+      setSession(current);
+      const uid = params.conferenceUid ?? current.conferenceUid ?? conferenceUid;
+      if (uid) {
         setConferenceUid(uid);
+        setResults(await getLiveQuizResults(token, uid));
       }
-      if (uid) setResults(await getLiveQuizResults(token, uid));
     } catch {
+      setSession(null);
       setResults(null);
     }
   }, [token, params.conferenceUid, conferenceUid]);
@@ -99,14 +101,6 @@ export function useQuizLeaderboard() {
     ? formatMs(you?.totalResponseMs ?? (results!.durationSeconds ?? 0) * 1000)
     : "—";
 
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filterValues, setFilterValues] = useState<LeaderboardFilterValues>({
-    trainingType: "",
-    state: "",
-    district: "",
-    zone: "",
-  });
-
   const leaderboardUsers = useMemo<LeaderboardUser[]>(() => {
     if (!showResults || !results) return [];
     return results.leaderboard.map((r) => ({
@@ -117,7 +111,6 @@ export function useQuizLeaderboard() {
     }));
   }, [showResults, results]);
 
-  const handleApplyFilter = () => setFilterOpen(false);
   const handleContinue = () => {
     if (canNavigate()) router.replace("/session_detail");
   };
@@ -148,9 +141,13 @@ export function useQuizLeaderboard() {
     }
   };
 
+  const isTrainingLive = isSessionLive(session);
+
   return {
     insets,
     screenWidth,
+    session,
+    isTrainingLive,
     liveState,
     showResults,
     isLive: liveState === "live",
@@ -161,12 +158,7 @@ export function useQuizLeaderboard() {
     accuracy,
     incorrect,
     timeTakenFormatted,
-    filterOpen,
-    setFilterOpen,
-    filterValues,
-    setFilterValues,
     leaderboardUsers,
-    handleApplyFilter,
     handleContinue,
     handleTabSelect,
     confirmLogoutOpen,

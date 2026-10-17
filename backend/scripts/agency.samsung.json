@@ -1,0 +1,15 @@
+{
+  "_comment": "Samsung's own row in `agency` - companyName must be EXACTLY the company_name of its `tenants` row (that name is the only link between the two). Replace every <...> before running; the script refuses to write while the email / phone are placeholders.",
+  "agency": {
+    "companyName": "<company_name from the tenants row for samsung>",
+    "name": "<contact person>",
+    "email": "<contact email>",
+    "phone": "<10-digit mobile number>",
+    "website": "https://www.samsung.com/in/",
+    "localCity": "<city>",
+    "localDistrict": "<district>",
+    "localState": "<state>",
+    "localPinCode": "<6-digit PIN code>",
+    "aboutAgency": "Samsung India - the first company on the TOPS training platform."
+  }
+}

@@ -5,14 +5,16 @@ import { Alert, BackHandler } from "react-native";
 import ImageCropPicker from "react-native-image-crop-picker";
 
 import { ApiError, uploadTraineePhoto } from "@/api/auth";
+import { CurrentSession, getCurrentSession, isSessionLive } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
 import { TraineeTab } from "@/hooks/useTraineeHome";
 import { canNavigate } from "@/utils/navigationGuard";
-import { DetailItem, MAX_PHOTO_BYTES, locationLabel } from "./constants";
+import { DetailItem, MAX_PHOTO_BYTES, placeName, shownValue } from "./constants";
 
 export function useProfile() {
   const router = useRouter();
   const { trainee, token, logout, setSession } = useAuth();
+  const [session, setSessionState] = useState<CurrentSession | null>(null);
   const [editVisible, setEditVisible] = useState(false);
   const [uploading, setUploading] = useState(false);
   // Same confirm-before-logout flow as the trainer's dashboard/profile
@@ -39,6 +41,18 @@ export function useProfile() {
       });
       return () => subscription.remove();
     }, []),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!token) {
+        setSessionState(null);
+        return;
+      }
+      getCurrentSession(token)
+        .then((s) => setSessionState(s))
+        .catch(() => setSessionState(null));
+    }, [token]),
   );
 
   const handlePickPhoto = async () => {
@@ -132,31 +146,29 @@ export function useProfile() {
     }
   };
 
-  // Personal Details Rows with robust backend property fallback bindings
+  // The trainee's own saved values - "--" where one is empty, never a made-up value (user, 2026-10-13).
   const personalDetails: DetailItem[] = [
-    { icon: "call", label: "Mobile", value: trainee?.phone ? String(trainee.phone) : "8750574444" },
-    { icon: "mail", label: "Email", value: trainee?.email || "anandkumar@quess.com" },
-    { icon: "briefcase", label: "Designation", value: trainee?.designation || "SEC" },
-    { icon: "card", label: "Employee ID", value: trainee?.employee_id || "SOUTH1234" },
-    {
-      icon: "location",
-      label: "Work Zone",
-      value: trainee?.workZone || (trainee?.state ? locationLabel(trainee.state, trainee.district) : "SOUTH"),
-    },
+    { icon: "call", label: "Mobile", value: shownValue(trainee?.phone) },
+    { icon: "mail", label: "Email", value: shownValue(trainee?.email) },
+    { icon: "briefcase", label: "Designation", value: shownValue(trainee?.designation) },
+    { icon: "card", label: "Employee ID", value: shownValue(trainee?.employee_id) },
+    { icon: "location", label: "Zone", value: shownValue(trainee?.zone) },
+    { icon: "map", label: "Region", value: shownValue(trainee?.region) },
   ];
 
-  // Organization Details Rows with backend property fallback bindings
   const organizationDetails: DetailItem[] = [
-    { icon: "person", label: "Reporting Manager", value: trainee?.supervisorName || "ANAND ROY" },
-    { icon: "call", label: "Department Support", value: trainee?.departmentSupport || "8569741259" },
-    { icon: "business", label: "Department", value: trainee?.department || "SALES HEAD" },
+    { icon: "person", label: "Reporting Manager", value: shownValue(trainee?.supervisorName) },
+    { icon: "ribbon", label: "Manager's Designation", value: shownValue(trainee?.supervisorDesignation) },
   ];
 
-  const sessionPillLabel =
-    trainee?.sessionCode || (trainee?.state ? locationLabel(trainee.state, trainee.district) : "SOUTH 12234");
+  // The saved district and state ("" - no pill - when neither is saved).
+  const sessionPillLabel = [placeName(trainee?.district), placeName(trainee?.state)].filter(Boolean).join(", ");
+  const isTrainingLive = isSessionLive(session);
 
   return {
     trainee,
+    session,
+    isTrainingLive,
     uploading,
     editVisible,
     setEditVisible,

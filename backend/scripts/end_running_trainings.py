@@ -1,13 +1,15 @@
-"""Ends trainings left running ("Ongoing" / "Live") the way a trainer's End Session does
+"""Ends trainings left running ("Started", or "Ongoing" / "Live" from before) the way a trainer's End Session does
 (services/training/session_control.end_training) - minus the trainer's check-out photo and signed
 attendance sheet, which only the trainer's own device can provide:
 
   - the live module, if any, is stopped - a Live Quiz is scored first, so everyone who answered
     gets their result, exactly as when a trainer ends it
-  - the training is marked Completed with its end time (conferenceEndsOn / actualEndedAt; one
-    already stamped keeps its time)
-  - its Execution Flow gets the STOPPED / SESSION_ENDED lines, marked as an admin data fix, and the
-    activity log an END_SESSION row
+  - the training is marked "Session Completed" with its end time (actualEndedAt, India time; one
+    already stamped keeps its time) and no running module (""), as the other system stores an ended
+    training (user, 2026-10-17); `conferenceEndsOn` - its planned last day - is left as it is
+  - its Execution Flow gets the module's STOPPED and the session's end (the other system's way:
+    STOPPED with no module), performed by "system:admin-data-fix", and the activity log an
+    END_SESSION row saying why
 
     cd backend
     venv/Scripts/python.exe scripts/end_running_trainings.py                        # list them - writes nothing
@@ -35,21 +37,21 @@ from app.models.conference_activity_log import ConferenceActivityLog  # noqa: E4
 from app.services import live_quiz_service  # noqa: E402
 from app.services.activity_log_service import log_activity  # noqa: E402
 from app.services.module_flow import log_module_action  # noqa: E402
-from app.utils.date_utils import utc_now  # noqa: E402
+from app.utils.conference_format import NO_MODULE, SESSION_ENDED, STORED_COMPLETED, active_module, status_sql  # noqa: E402
+from app.utils.date_utils import ist_now  # noqa: E402
 from scripts._tenant_db import tenant_engine  # noqa: E402
 
 PERFORMED_BY = "system:admin-data-fix"
 REMARK = "Ended by an admin data fix - left running; no trainer check-out photo or attendance sheet"
 BACKUP_DIR = Path(__file__).resolve().parent.parent / "backups"
-_RUNNING = ("ongoing", "live")
 _BEFORE_FIELDS = ("conferenceStatus", "conferenceEndsOn", "actualEndedAt", "activeModuleId", "liveQuizState")
 
 
 def running(db: Session) -> list[Conference]:
-    """Trainings whose status says they are running (any letter case), oldest first."""
+    """Trainings whose status says they are running (any letter case, either system's word), oldest first."""
     return (
         db.query(Conference)
-        .filter(func.lower(func.coalesce(Conference.conferenceStatus, "")).in_(_RUNNING))
+        .filter(status_sql(Conference.conferenceStatus) == "ongoing")
         .order_by(Conference.id)
         .all()
     )
@@ -63,7 +65,7 @@ def describe(db: Session, conference: Conference) -> dict:
         "date": conference.conferenceDate,
         "time": conference.conferenceTime,
         "trainer": conference.trainerEmployeeId,
-        "activeModule": conference.activeModuleId,
+        "activeModule": active_module(conference),
         "participants": db.query(func.count(Attendance.id)).filter(Attendance.conferenceUid == uid).scalar(),
         "lastActivity": db.query(func.max(ConferenceActivityLog.timestamp))
         .filter(ConferenceActivityLog.conferenceUid == uid)
@@ -82,17 +84,15 @@ def _plain(value):
 def end(db: Session, conference: Conference) -> None:
     """Ends one running training (see the module docstring)."""
     uid = conference.conferenceUid
-    now = utc_now()
-    active = conference.activeModuleId
+    active = active_module(conference)
     if active:
         if active == "LIVE_QUIZ":
             live_quiz_service.finish_quiz(db, conference)  # scores everyone who answered; commits
-        log_module_action(db, uid, active, "STOPPED", PERFORMED_BY, location_remark=REMARK)
-        conference.activeModuleId = None
-    log_module_action(db, uid, None, "SESSION_ENDED", PERFORMED_BY, location_remark=REMARK)
-    conference.conferenceEndsOn = conference.conferenceEndsOn or now.strftime("%Y-%m-%d %H:%M:%S")
-    conference.actualEndedAt = conference.actualEndedAt or now
-    conference.conferenceStatus = "Completed"
+        log_module_action(db, conference, active, "STOPPED", PERFORMED_BY)
+    conference.activeModuleId = NO_MODULE
+    log_module_action(db, conference, None, SESSION_ENDED, PERFORMED_BY)
+    conference.actualEndedAt = conference.actualEndedAt or ist_now()
+    conference.conferenceStatus = STORED_COMPLETED
     db.commit()
     log_activity(db, action="END_SESSION", username=PERFORMED_BY, role="admin",
                  remarks=f"Ended training {uid} - {REMARK}")

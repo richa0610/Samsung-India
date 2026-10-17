@@ -3,12 +3,19 @@ from typing import Optional
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core.constants import FINISHED_RESULT_STATUSES, RESULT_STARTED
 from app.models.conference import Conference
 from app.models.quiz import Assessment, AssessmentResult, AssessmentSuite, Question
 
 
 def commit(db: Session) -> None:
     db.commit()
+
+
+def finished(status_column=AssessmentResult.status):
+    """SQL condition: a finished result - "Completed", or "Submitted" from before 2026-10-16
+    (core/constants.FINISHED_RESULT_STATUSES). `status_column` for an aliased results table."""
+    return status_column.in_(FINISHED_RESULT_STATUSES)
 
 
 # --- AssessmentSuite -------------------------------------------------------
@@ -178,7 +185,7 @@ def has_submitted_result(db: Session, conference_uid: str, trainee_uid: str) -> 
         .filter(
             AssessmentResult.conferenceUid == conference_uid,
             AssessmentResult.traineeUid == trainee_uid,
-            AssessmentResult.status == "Submitted",
+            finished(),
         )
         .first()
         is not None
@@ -194,7 +201,7 @@ def get_latest_result(
             AssessmentResult.conferenceUid == conference_uid,
             AssessmentResult.traineeUid == trainee_uid,
             AssessmentResult.assessmentSuiteUid == suite_uid,
-            AssessmentResult.status == "Submitted",
+            finished(),
         )
         .order_by(AssessmentResult.attemptNumber.desc())
         .first()
@@ -212,7 +219,7 @@ def get_started_result(
             AssessmentResult.conferenceUid == conference_uid,
             AssessmentResult.traineeUid == trainee_uid,
             AssessmentResult.assessmentSuiteUid == suite_uid,
-            AssessmentResult.status == "Started",
+            AssessmentResult.status == RESULT_STARTED,
         )
         .order_by(AssessmentResult.attemptNumber.desc())
         .first()
@@ -229,7 +236,7 @@ def submitted_trainees_by_suite(db: Session, conference_uid: str, suite_uids: li
         .filter(
             AssessmentResult.conferenceUid == conference_uid,
             AssessmentResult.assessmentSuiteUid.in_(suite_uids),
-            AssessmentResult.status == "Submitted",
+            finished(),
         )
         .distinct()
         .all()
@@ -246,7 +253,7 @@ def list_results_for_conference_suite(db: Session, conference_uid: str, suite_ui
         .filter(
             AssessmentResult.conferenceUid == conference_uid,
             AssessmentResult.assessmentSuiteUid == suite_uid,
-            AssessmentResult.status == "Submitted",
+            finished(),
         )
         .order_by(AssessmentResult.attemptNumber.desc())
         .all()
@@ -258,7 +265,7 @@ def list_results_for_conferences(db: Session, conference_uids: list[str]) -> lis
         return []
     return (
         db.query(AssessmentResult)
-        .filter(AssessmentResult.conferenceUid.in_(conference_uids), AssessmentResult.status == "Submitted")
+        .filter(AssessmentResult.conferenceUid.in_(conference_uids), finished())
         .order_by(AssessmentResult.attemptNumber.desc())
         .all()
     )
@@ -268,7 +275,7 @@ def list_results_for_trainee(db: Session, trainee_uid: str) -> list[AssessmentRe
     """The trainee's finished results (a test opened but not yet submitted is "Started" - not a result)."""
     return (
         db.query(AssessmentResult)
-        .filter(AssessmentResult.traineeUid == trainee_uid, AssessmentResult.status == "Submitted")
+        .filter(AssessmentResult.traineeUid == trainee_uid, finished())
         .order_by(AssessmentResult.submittedAt.desc())
         .all()
     )
@@ -298,7 +305,7 @@ def latest_post_test_results_for_pairs(db: Session, pairs: set[tuple[str, str]])
             ),
         )
         .where(
-            AssessmentResult.status == "Submitted",
+            finished(),
             or_(*[and_(AssessmentResult.conferenceUid == c, AssessmentResult.traineeUid == t) for c, t in pairs]),
         )
         .order_by(AssessmentResult.attemptNumber.desc())

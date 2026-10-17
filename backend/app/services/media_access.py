@@ -5,7 +5,9 @@ rest of the app already applies to that record - never "any logged-in user":
                                  conference (admin grant / assigned trainer - conference_access)
     trainer_checkin_photos/...,  a session's trainer photos and signed attendance sheet: whoever
     trainer_checkout_photos/..., may open that conference
-    attendance_sheets/...
+    attendance_sheets/...,
+    <conferenceUid>/...          (the other system's layout, used since 2026-10-17:
+                                 CONF2610001/Host_CHECKIN_START_....jpg)
     trainee_photos/...           a trainee's profile photo: that trainee, or whoever may see that
                                  trainee (admin grant / assigned-or-rostered trainer)
     trainer_photos/...,          a trainer's / admin's own profile photo and Aadhaar document: only
@@ -16,6 +18,7 @@ rest of the app already applies to that record - never "any logged-in user":
 Anything else - an unknown folder, a path no record owns - is refused. Every lookup runs in the
 caller's own tenant database, so another tenant's file is never even found."""
 
+import re
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -31,8 +34,10 @@ from app.services.access_service import resolve_scope
 SHARED_FILES = frozenset({default_trainer_avatar("male"), default_trainer_avatar("female")})
 _CONFERENCE_FILE_FOLDERS = frozenset({"trainer_checkin_photos", "trainer_checkout_photos", "attendance_sheets"})
 _ACCOUNT_FILE_FOLDERS = frozenset({"trainer_photos", "admin_profile", "trainer_documents"})
-# Every top-level folder an upload can live in (anything else is never served).
+# Every fixed top-level folder an upload can live in. The only other one served is a training's own
+# folder, named by its ID (_TRAINING_FOLDER) - anything else is never served.
 KNOWN_FOLDERS = frozenset({"attendance_photos", "trainee_photos"}) | _CONFERENCE_FILE_FOLDERS | _ACCOUNT_FILE_FOLDERS
+_TRAINING_FOLDER = re.compile(r"CONF[0-9A-Za-z_-]+")
 
 
 def can_read(
@@ -45,7 +50,9 @@ def can_read(
         return _can_read_attendance_photo(db, common_db, principal, tenant_id, file_path, rest)
     if folder == "trainee_photos":
         return _can_read_trainee_photo(db, common_db, principal, tenant_id, file_path)
-    if folder in _CONFERENCE_FILE_FOLDERS:
+    if folder in _CONFERENCE_FILE_FOLDERS or _TRAINING_FOLDER.fullmatch(folder):
+        # Only a path a conference row itself names - so a training's folder serves just its trainer
+        # photos and signed sheet, never another file someone put there.
         return not isinstance(principal, Trainee) and conference_repository.get_authorized_by_file(
             db, file_path, dashboard_repository.conference_authorization_conditions(resolve_scope(common_db, principal, tenant_id))
         ) is not None

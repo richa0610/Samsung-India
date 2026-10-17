@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "expo-router";
 import { Alert } from "react-native";
 
-import { fetchTrainers } from "@/api/training";
+import { MasterGroup, fetchTrainers, fetchZones } from "@/api/training";
 import { SelectOption } from "@/components/ui/SearchableSelect";
 import type { PickedImage } from "@/api/auth";
 import { ApiError, registerNewTrainee, uploadNewTraineePhoto } from "@/api/trainee";
-import { STATES } from "@/data/states";
 import { useAuth } from "@/hooks/useAuth";
+import { useStateDistricts } from "@/hooks/useStateDistricts";
 import { formatDate } from "@/components/training/add-training/formatting";
 import {
   cleanText,
@@ -46,6 +46,20 @@ export function useNewTraineeForm() {
   const [supervisorName, setSupervisorName] = useState("");
   const [supervisorDesignation, setSupervisorDesignation] = useState("");
 
+  // Zone / Region come from the master list: the zones, each with its regions (/admin/zones).
+  const [zoneGroups, setZoneGroups] = useState<MasterGroup[]>([]);
+  useEffect(() => {
+    if (!adminToken) return;
+    fetchZones(adminToken)
+      .then(setZoneGroups)
+      .catch(() => setZoneGroups([]));
+  }, [adminToken]);
+  const zoneOptions = useMemo(() => zoneGroups.map((group) => ({ label: group.name, value: group.name })), [zoneGroups]);
+  const regionOptions = useMemo(
+    () => (zoneGroups.find((group) => group.name === zone)?.options ?? []).map((name) => ({ label: name, value: name })),
+    [zoneGroups, zone],
+  );
+
   // Trainer / Supervisor pickers list this company's agencyteam trainers,
   // fetched live and re-fetched whenever the company changes.
   const [trainerOptions, setTrainerOptions] = useState<SelectOption[]>([]);
@@ -66,7 +80,6 @@ export function useNewTraineeForm() {
 
   // Trainee Profile
   const [profilePhoto, setProfilePhoto] = useState<PickedImage | null>(null);
-  const [traineeUid, setTraineeUid] = useState("");
   const [agencyId, setAgencyId] = useState("");
   const [fullName, setFullName] = useState("");
   const [designation, setDesignation] = useState("");
@@ -81,7 +94,8 @@ export function useNewTraineeForm() {
   const [address, setAddress] = useState("");
   const [stateValue, setStateValue] = useState("");
   const [district, setDistrict] = useState("");
-  const selectedState = useMemo(() => STATES.find((item) => item.value === stateValue), [stateValue]);
+  // State / District from the pincode directory; the District options are the chosen state's.
+  const { stateOptions, districtOptions } = useStateDistricts(stateValue, district);
 
   // Employment Details
   const [joinedOn, setJoinedOn] = useState(() => formatDate(new Date()));
@@ -105,7 +119,7 @@ export function useNewTraineeForm() {
   const handleSubmit = async () => {
     const missingRequired = firstError(
       required(zone), required(region), required(company), required(requestedBy),
-      required(trainerId), required(supervisorId), required(traineeUid),
+      required(trainerId), required(supervisorId),
       required(fullName), required(designation), required(gender),
       required(primaryEmail), required(primaryPhone),
       required(stateValue), required(district),
@@ -140,7 +154,6 @@ export function useNewTraineeForm() {
     setNotice(null);
     try {
       const created = await registerNewTrainee(adminToken, {
-        traineeUid: cleanText(traineeUid, 50),
         profilePhoto: null, // the photo itself is uploaded below, once the trainee exists
         agencyId: agencyId || null,
         fullName: cleanText(fullName, 120),
@@ -168,19 +181,25 @@ export function useNewTraineeForm() {
         jobCity: cleanText(jobCity, 80) || null,
         jobPincode: digitsOnly(jobPincode) || null,
         resignedOn: resignedOn || null,
-        username: cleanText(traineeUid, 50),
         password,
       });
 
+      let photoMissing = false;
       if (profilePhoto) {
         try {
           await uploadNewTraineePhoto(adminToken, created.traineeUid, profilePhoto);
         } catch {
           // The trainee is saved either way; only the photo is missing.
-          Alert.alert("Trainee added", "The profile photo couldn't be uploaded. The trainee can add it from their own profile.");
+          photoMissing = true;
         }
       }
 
+      // The server made the trainee's ID - their login ID - so it's shown once, with their password.
+      Alert.alert(
+        "Trainee added",
+        `Trainee ID (login): ${created.traineeUid}\nPassword: ${password}` +
+          (photoMissing ? "\n\nThe profile photo couldn't be uploaded. The trainee can add it from their own profile." : ""),
+      );
       router.back();
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
@@ -196,7 +215,9 @@ export function useNewTraineeForm() {
 
   return {
     zone, setZone,
+    zoneOptions,
     region, setRegion,
+    regionOptions,
     company, setCompany: changeCompany,
     requestedByOption, setRequestedByOption,
     requestedByOther, setRequestedByOther,
@@ -210,7 +231,6 @@ export function useNewTraineeForm() {
     trainerOptions,
 
     profilePhoto, setProfilePhoto,
-    traineeUid, setTraineeUid,
     agencyId, setAgencyId,
     fullName, setFullName,
     designation, setDesignation,
@@ -224,7 +244,8 @@ export function useNewTraineeForm() {
     address, setAddress,
     stateValue, setStateValue,
     district, setDistrict,
-    selectedState,
+    stateOptions,
+    districtOptions,
 
     joinedOn, setJoinedOn,
     jobStatus, setJobStatus: changeJobStatus,

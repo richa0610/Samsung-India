@@ -1,7 +1,6 @@
 
 """Creating and editing a training, and the admin's approve / reject decision on it."""
 
-import json
 from typing import Optional
 
 from fastapi import BackgroundTasks
@@ -11,7 +10,7 @@ from app.core.constants import DEFAULT_SESSION_TITLE
 from app.core.exceptions import bad_request, conflict
 from app.models.admin import Admin
 from app.models.conference import Conference
-from app.repositories import catalog_repository, conference_repository
+from app.repositories import assessment_repository, catalog_repository, conference_repository
 from app.routers.ws import manager as ws_manager
 from app.schemas.training import (
     AttendanceConfig,
@@ -24,23 +23,47 @@ from app.schemas.training import (
 )
 from app.services import placement_rules
 from app.services.access_service import resolve_scope
+from app.services.account_ids import account_id, account_keys, account_name, find_account, login_name
 from app.services.activity_log_service import log_activity
+from app.services.assessment_builder_service import suite_category
+from app.services.company_ids import company_id, company_names
 from app.services.training.common import owned_conference, training_out
+from app.utils.conference_format import (
+    NO_FILE,
+    SCHEDULED,
+    assigned,
+    conference_type,
+    creation_note,
+    is_cancelled,
+    is_completed,
+    is_residential,
+    read_session_config,
+    remark_text,
+    session_status,
+    stored_or_not_assigned,
+    stored_place,
+    stored_remark,
+    stored_status,
+    trainer_label,
+    uploaded,
+    write_session_config,
+)
+from app.utils.date_utils import to_stored_time, to_venue_time
+from app.utils.places import place_name
 from app.utils.status import title_status
 
 # Once a session has actually started, its schedule/venue/session-flow are
 # locked in (attendance may already be running against them) - only a
 # training that hasn't gone live yet can still have those changed. The admin
 # review fields (pax, approval/training status, message) stay editable.
-_EDITABLE_CONFERENCE_STATUSES = {"Scheduled", "Pending", "Not Started"}
+_EDITABLE_CONFERENCE_STATUSES = {"scheduled", "pending", "not started"}
 
 # Plain PATCH fields -> the conference column each one writes.
+# (company / trainerEmployeeId are stored as IDs - _apply_company_and_trainer.)
 _PATCH_COLUMNS = {
     "zone": "zone",
     "region": "region",
-    "company": "company",
     "requestedBy": "requestedBy",
-    "trainerEmployeeId": "trainerEmployeeId",
     "trainerName": "trainerName",
     "conferenceDate": "conferenceDate",
     "conferenceTime": "conferenceTime",
@@ -52,6 +75,14 @@ _PATCH_COLUMNS = {
     "state": "state",
     "district": "district",
 }
+# How a sent value is stored where the other system stores it differently (user, 2026-10-17); any
+# other field is stored as sent.
+_STORED_FORM = {
+    "conferenceTime": to_stored_time,
+    "state": stored_place,
+    "district": stored_place,
+    "trainingHub": stored_or_not_assigned,
+}
 # Fields that together decide the session flow (sessionConfig, check-in, geofence, module
 # question sets, residential type): when any of them is sent they are applied as one unit, the
 # way the edit form always sends them.
@@ -61,54 +92,59 @@ _SESSION_FLOW_FIELDS = frozenset({"isResidential", "trainingEndDate", "sessionFl
 _DECISION_ACTIONS = {"Approved": "APPROVE_TRAINING", "Rejected": "REJECT_TRAINING"}
 
 
-def _session_flow_columns(db: Session, payload: TrainingCreate) -> dict[str, object]:
-    """The conference columns the session flow decides - sessionConfig, check-in, geofence, the
-    module question sets and the residential type - built the same way on create and on edit."""
-    session_config = _session_config(payload)
-    attendance_cfg = session_config.get("attendance")
-    flow = payload.sessionFlow
+def _session_flow_columns(db: Session, payload: TrainingCreate, conference_date: Optional[str]) -> dict[str, object]:
+    """The conference columns the session flow decides - sessionConfig, the venue and its location,
+    the module question sets, the residential type and the training's last day - built the same
+    way on create and on edit, and stored the other system's way (user, 2026-10-17).
+    `conference_date` is the training's date as it will be stored (an edit may not send one)."""
+    flow = _session_flow(payload)
+    sent_flow = payload.sessionFlow
     return {
-        "conferenceType": "Residential Conference" if payload.isResidential else "Non Residential Conference",
-        "enableCheckIn": 1 if attendance_cfg else 0,
-        "venueUid": payload.venue,
-        **_geofence_columns(db, attendance_cfg, payload.venue),
-        "sessionConfig": json.dumps(session_config) if session_config else None,
+        "conferenceType": conference_type(payload.isResidential),
+        "conferenceEndsOn": _last_day(payload.isResidential, payload.trainingEndDate, conference_date),
+        # The other system keeps this 0 and lists the Attendance module in sessionConfig instead
+        # (module_flow.configured_modules reads it from there).
+        "enableCheckIn": 0,
+        "venueUid": stored_or_not_assigned(payload.venue),
+        **_venue_location(db, flow.get("attendance"), payload.venue),
+        "sessionConfig": write_session_config(flow, conference_date),
         # The trainee session flow (see session_service._select_current_conference
         # / get_current_session) only knows a Standard Test or Survey module
         # exists via these two columns - it doesn't read `sessionConfig` for
         # that, so the chosen question set has to be copied out here too,
         # not just stored in the JSON blob above.
-        "postAssessmentUid": flow.standardTest.assessmentSuiteUid if flow and flow.standardTest else None,
-        "surveyUid": flow.survey.assessmentSuiteUid if flow and flow.survey else None,
+        "postAssessmentUid": sent_flow.standardTest.assessmentSuiteUid if sent_flow and sent_flow.standardTest else None,
+        "surveyUid": sent_flow.survey.assessmentSuiteUid if sent_flow and sent_flow.survey else None,
     }
 
 
-def _session_config(payload: TrainingCreate) -> dict[str, object]:
-    """The `sessionConfig` JSON: a residential training's end date, plus each module the session
-    flow turns on."""
-    session_config = {}
-    if payload.isResidential and payload.trainingEndDate:
-        session_config["trainingEndDate"] = payload.trainingEndDate
-    if payload.sessionFlow:
-        for key in ("attendance", "standardTest", "liveQuiz", "survey"):
-            module_config = getattr(payload.sessionFlow, key)
-            if module_config:
-                session_config[key] = module_config.model_dump(exclude_none=True)
-    return session_config
-
-
-def _geofence_columns(db: Session, attendance_cfg: Optional[dict], venue_uid: Optional[str]) -> dict[str, object]:
-    """Geofenced attendance: pin the check-in radius to the chosen venue's coordinates. Only
-    meaningful if geoFencing is on AND the venue has coordinates on record - otherwise the
-    coordinates stay NULL and the check-in geofence is simply not enforced."""
-    if not (attendance_cfg and attendance_cfg.get("geoFencing")):
-        return {"geoLatitude": None, "geoLongitude": None, "geoRadius": None}
-    venue = catalog_repository.get_venue_by_uid(db, venue_uid) if venue_uid else None
-    pinned = bool(venue and venue.latitude is not None and venue.longitude is not None)
+def _session_flow(payload: TrainingCreate) -> dict[str, dict]:
+    """Each module the session flow turns on, as this app's session-flow dict."""
+    if not payload.sessionFlow:
+        return {}
     return {
-        "geoLatitude": venue.latitude if pinned else None,
-        "geoLongitude": venue.longitude if pinned else None,
-        "geoRadius": attendance_cfg.get("geoRadius") or 100,
+        key: module_config.model_dump(exclude_none=True)
+        for key in ("attendance", "standardTest", "liveQuiz", "survey")
+        if (module_config := getattr(payload.sessionFlow, key))
+    }
+
+
+def _last_day(residential: bool, program_end: Optional[str], conference_date: Optional[str]) -> Optional[str]:
+    """`conferenceEndsOn` - the training's last planned day: a residential program's end date, else
+    the training's own date."""
+    return program_end if residential and program_end else conference_date
+
+
+def _venue_location(db: Session, attendance_cfg: Optional[dict], venue_uid: Optional[str]) -> dict[str, object]:
+    """The chosen venue's location, when it has one on record - a training without one takes the
+    trainer's at Start Session (session_start). The check-in fence is only enforced with geoFencing
+    on (helpers.geofence_enabled); the radius is 100 m unless the flow sets one."""
+    venue = catalog_repository.get_venue_by_uid(db, venue_uid) if venue_uid else None
+    located = bool(venue and venue.latitude is not None and venue.longitude is not None)
+    return {
+        "geoLatitude": venue.latitude if located else None,
+        "geoLongitude": venue.longitude if located else None,
+        "geoRadius": (attendance_cfg or {}).get("geoRadius") or 100,
     }
 
 
@@ -125,35 +161,41 @@ def create_training(
         company=payload.company, zone=payload.zone, region=payload.region, trainer=payload.trainerEmployeeId,
     )
 
+    trainer = find_account(db, common_db, payload.trainerEmployeeId)
     conference = Conference(
         zone=payload.zone,
         region=payload.region,
-        company=payload.company,
         requestedBy=payload.requestedBy,
-        trainerEmployeeId=payload.trainerEmployeeId,
-        trainerName=payload.trainerName,
         conferenceDate=payload.conferenceDate,
-        conferenceTime=payload.conferenceTime,
-        conferenceStatus="Scheduled",
-        trainingHub=payload.trainingHub,
+        conferenceTime=to_stored_time(payload.conferenceTime),
+        conferenceStatus=SCHEDULED,
+        trainingHub=stored_or_not_assigned(payload.trainingHub),
         audience=payload.audience,
         sessionType=payload.sessionType,
         trainingType=payload.trainingType,
         batchSize=payload.batchSize,
-        state=payload.state,
-        district=payload.district,
+        state=stored_place(payload.state),
+        district=stored_place(payload.district),
         checklistUid=",".join(payload.checklist) if payload.checklist else None,
-        updatedBy=admin.username,
-        # Auto-approved on creation for now - the trainer can start it straight
-        # away without waiting on an admin review (see approve_training and the
-        # check in session_start.start_training).
-        status="Approved",
-        **_session_flow_columns(db, payload),
+        # Nothing is uploaded yet - marked the way the other system marks it.
+        attendanceSheet=NO_FILE,
+        hotelBill=NO_FILE,
+        conferenceImage=NO_FILE,
+        updatedBy=account_id(admin),
+        status="Pending",
+        remarks=None,
+        **_session_flow_columns(db, payload, payload.conferenceDate),
     )
-    conference = conference_repository.create(db, conference)
+    _apply_company_and_trainer(common_db, conference, payload, {"company", "trainerEmployeeId"}, trainer)
+    conference_repository.add(db, conference)
+    conference.masterRemarks = creation_note(
+        payload.isResidential, account_name(admin), account_id(admin), conference.conferenceUid
+    )
+    conference = conference_repository.save(db, conference)
 
-    assigned_to = conference.trainerEmployeeId
-    for_someone_else = f" for trainer {assigned_to}" if assigned_to and assigned_to != admin.username else ""
+    # The log names the assigned trainer by login name, readable whichever way the row stores them.
+    assigned_to = trainer.username if trainer is not None else conference.trainerEmployeeId
+    for_someone_else = f" for trainer {assigned_to}" if assigned_to and assigned_to not in account_keys(admin) else ""
     log_activity(
         db,
         action="CREATE_TRAINING",
@@ -165,7 +207,7 @@ def create_training(
     background_tasks.add_task(
         ws_manager.send_to,
         tenant_id,
-        conference.trainerEmployeeId,
+        trainer.username if trainer is not None else conference.trainerEmployeeId,  # live updates go by login name
         {"type": "training_created", "conferenceUid": conference.conferenceUid},
     )
     background_tasks.add_task(
@@ -185,20 +227,13 @@ def get_training_detail(
     the session (`owned_conference`): an out-of-scope training looks absent, not merely
     un-editable."""
     conference = owned_conference(db, admin, conference_uid, common_db, tenant_id)
-    session_config = json.loads(conference.sessionConfig) if conference.sessionConfig else {}
+    flow = read_session_config(conference.sessionConfig)
+    session_flow = _form_session_flow(db, conference, flow) if flow else None
 
-    session_flow = None
-    if session_config:
-        session_flow = SessionFlowConfig(
-            attendance=AttendanceConfig(**session_config["attendance"]) if session_config.get("attendance") else None,
-            standardTest=ModuleConfig(**session_config["standardTest"]) if session_config.get("standardTest") else None,
-            liveQuiz=ModuleConfig(**session_config["liveQuiz"]) if session_config.get("liveQuiz") else None,
-            survey=ModuleConfig(**session_config["survey"]) if session_config.get("survey") else None,
-        )
-
+    venue_uid = assigned(conference.venueUid)
     venue_name = None
-    if conference.venueUid:
-        venue = catalog_repository.get_venue_by_uid(db, conference.venueUid)
+    if venue_uid:
+        venue = catalog_repository.get_venue_by_uid(db, venue_uid)
         venue_name = venue.name if venue else None
 
     return TrainingDetailOut(
@@ -206,48 +241,118 @@ def get_training_detail(
         title=conference.suiteTitle or conference.trainingType or DEFAULT_SESSION_TITLE,
         zone=conference.zone,
         region=conference.region,
-        company=conference.company,
+        # The form shows the company's name and picks the trainer by login name.
+        company=company_names(common_db, [conference.company]).get(conference.company, conference.company),
         requestedBy=conference.requestedBy,
-        trainerEmployeeId=conference.trainerEmployeeId,
+        trainerEmployeeId=login_name(db, common_db, conference.trainerEmployeeId),
         trainerName=conference.trainerName,
-        state=conference.state,
-        district=conference.district,
-        venue=conference.venueUid,
+        state=place_name(conference.state) or None,
+        district=place_name(conference.district) or None,
+        venue=venue_uid,
         venueName=venue_name,
-        isResidential=conference.conferenceType == "Residential Conference",
+        isResidential=is_residential(conference),
         conferenceDate=conference.conferenceDate,
-        conferenceTime=conference.conferenceTime,
-        trainingEndDate=session_config.get("trainingEndDate"),
-        trainingHub=conference.trainingHub,
+        conferenceTime=to_venue_time(conference.conferenceTime),
+        trainingEndDate=_program_end(conference, flow),
+        trainingHub=assigned(conference.trainingHub),
         audience=conference.audience,
         sessionType=conference.sessionType,
         trainingType=conference.trainingType,
         batchSize=conference.batchSize,
         sessionFlow=session_flow,
         checklist=conference.checklistUid.split(",") if conference.checklistUid else [],
-        conferenceStatus=title_status(conference.conferenceStatus),
+        conferenceStatus=session_status(conference.conferenceStatus),
         approvalStatus=title_status(conference.status),
         attendanceSheetPax=conference.attendanceSheetPax,
         confirmedPax=conference.confirmedPax,
-        remarks=conference.remarks,
-        checkInPhoto=conference.startConferenceImage,
-        checkOutPhoto=conference.conferenceImage,
-        attendanceSheet=conference.attendanceSheet,
-        scheduleEditable=conference.conferenceStatus in _EDITABLE_CONFERENCE_STATUSES,
+        remarks=remark_text(conference.remarks),
+        checkInPhoto=uploaded(conference.startConferenceImage),
+        checkOutPhoto=uploaded(conference.conferenceImage),
+        attendanceSheet=uploaded(conference.attendanceSheet),
+        scheduleEditable=_schedule_editable(conference),
     )
 
 
-def _apply_schedule_fields(db: Session, conference: Conference, payload: TrainingCreate, sent: set[str]) -> None:
+def _schedule_editable(conference: Conference) -> bool:
+    return (conference.conferenceStatus or "").strip().lower() in _EDITABLE_CONFERENCE_STATUSES
+
+
+def _form_session_flow(db: Session, conference: Conference, flow: dict) -> SessionFlowConfig:
+    """The session flow as the edit form fills it in. The other system's stored list has no picker
+    category or check-in radius, so those come from each question set and the conference row."""
+    attendance = flow.get("attendance")
+    if attendance and attendance.get("geoFencing") and not attendance.get("geoRadius") and conference.geoRadius:
+        attendance = {**attendance, "geoRadius": conference.geoRadius}
+    return SessionFlowConfig(
+        attendance=AttendanceConfig(**attendance) if attendance else None,
+        standardTest=_form_module(db, flow.get("standardTest")),
+        liveQuiz=_form_module(db, flow.get("liveQuiz")),
+        survey=_form_module(db, flow.get("survey")),
+    )
+
+
+def _form_module(db: Session, block: Optional[dict]) -> Optional[ModuleConfig]:
+    if not block:
+        return None
+    if not block.get("category") and block.get("assessmentSuiteUid"):
+        suite = assessment_repository.get_suite_by_uid(db, block["assessmentSuiteUid"])
+        if suite is not None:
+            block = {**block, "category": suite_category(suite)}
+    return ModuleConfig(**block)
+
+
+def _program_end(conference: Conference, flow: dict) -> Optional[str]:
+    """A residential program's end date: `conferenceEndsOn` (a row written before kept it in its
+    session-flow dict instead)."""
+    if not is_residential(conference):
+        return None
+    return flow.get("trainingEndDate") or conference.conferenceEndsOn
+
+
+def _apply_company_and_trainer(
+    common_db: Optional[Session], conference: Conference, payload: TrainingCreate, sent: set[str], trainer
+) -> None:
+    """The company and trainer as the other system stores them (user, 2026-10-17): the company's
+    agency ID (its name when it isn't registered), the trainer's account ID and "Name (username)"
+    (as sent when no account matches). `trainer` is the account `payload.trainerEmployeeId` names."""
+    if "company" in sent:
+        conference.company = company_id(common_db, payload.company)
+    if "trainerEmployeeId" in sent:
+        if trainer is None:
+            conference.trainerEmployeeId, conference.trainerName = payload.trainerEmployeeId, payload.trainerName
+        else:
+            conference.trainerEmployeeId = account_id(trainer)
+            conference.trainerName = trainer_label(trainer.name, trainer.username)
+
+
+def _apply_schedule_fields(
+    db: Session, common_db: Optional[Session], conference: Conference, payload: TrainingCreate, sent: set[str]
+) -> None:
     """Writes only the fields the request sent (`sent` = payload.model_fields_set) - a field left
-    out keeps its stored value; one sent as null clears it."""
+    out keeps its stored value; one sent as null clears it. Stored the other system's way."""
     for field, column in _PATCH_COLUMNS.items():
         if field in sent:
-            setattr(conference, column, getattr(payload, field))
+            value = getattr(payload, field)
+            stored_form = _STORED_FORM.get(field)
+            setattr(conference, column, stored_form(value) if stored_form else value)
+    trainer = find_account(db, common_db, payload.trainerEmployeeId) if "trainerEmployeeId" in sent else None
+    _apply_company_and_trainer(common_db, conference, payload, sent, trainer)
     if "checklist" in sent:
         conference.checklistUid = ",".join(payload.checklist) if payload.checklist else None
     if sent & _SESSION_FLOW_FIELDS:
-        for column, value in _session_flow_columns(db, payload).items():
+        for column, value in _session_flow_columns(db, payload, conference.conferenceDate).items():
             setattr(conference, column, value)
+    elif "conferenceDate" in sent:
+        _follow_new_date(conference)
+
+
+def _follow_new_date(conference: Conference) -> None:
+    """A changed date moves what is stored with it: each module's date in sessionConfig, and the
+    training's last day - a residential program keeps its own end date."""
+    flow = read_session_config(conference.sessionConfig)
+    if flow:
+        conference.sessionConfig = write_session_config(flow, conference.conferenceDate)
+    conference.conferenceEndsOn = _last_day(is_residential(conference), _program_end(conference, flow), conference.conferenceDate)
 
 
 def update_training(
@@ -261,7 +366,7 @@ def update_training(
 ) -> TrainingOut:
     conference = owned_conference(db, admin, conference_uid, common_db, tenant_id)
 
-    if conference.conferenceStatus in _EDITABLE_CONFERENCE_STATUSES:
+    if _schedule_editable(conference):
         _update_schedule(db, common_db, admin, conference, payload, tenant_id)
 
     if payload.confirmedPax is not None:
@@ -271,9 +376,9 @@ def update_training(
     decision = _apply_approval_decision(conference, payload.approvalStatus, message)
     _apply_training_status(conference, payload.trainingStatus)
     if message:
-        conference.remarks = message
+        conference.remarks = stored_remark(message)
 
-    conference.updatedBy = admin.username
+    conference.updatedBy = account_id(admin)
     conference_repository.save(db, conference)
 
     action, remarks = _update_log_entry(conference.conferenceUid, decision, message)
@@ -283,7 +388,7 @@ def update_training(
         background_tasks.add_task(
             ws_manager.send_to,
             tenant_id,
-            conference.trainerEmployeeId,
+            login_name(db, common_db, conference.trainerEmployeeId),  # live updates go by login name
             {"type": "training_updated", "conferenceUid": conference.conferenceUid},
         )
 
@@ -302,16 +407,19 @@ def _update_schedule(
     values over stored ones) must be inside the caller's grant, and a changed trainer must be one
     they may assign."""
     sent = payload.model_fields_set
-    merged = {
-        field: getattr(payload, field) if field in sent else getattr(conference, column)
-        for field, column in (("company", "company"), ("zone", "zone"), ("region", "region"), ("trainerEmployeeId", "trainerEmployeeId"))
-    }
+    # Checked by name, as the form sends them - a stored company / trainer ID reads back as its
+    # name / login name, so an unchanged one stays unchanged.
+    stored_company = company_names(common_db, [conference.company]).get(conference.company, conference.company)
+    stored_trainer = login_name(db, common_db, conference.trainerEmployeeId)
     placement_rules.authorize_placement(
         db, common_db, admin, resolve_scope(common_db, admin, tenant_id), tenant_id,
-        company=merged["company"], zone=merged["zone"], region=merged["region"],
-        trainer=merged["trainerEmployeeId"], current_trainer=conference.trainerEmployeeId,
+        company=payload.company if "company" in sent else stored_company,
+        zone=payload.zone if "zone" in sent else conference.zone,
+        region=payload.region if "region" in sent else conference.region,
+        trainer=payload.trainerEmployeeId if "trainerEmployeeId" in sent else stored_trainer,
+        current_trainer=stored_trainer,
     )
-    _apply_schedule_fields(db, conference, payload, sent)
+    _apply_schedule_fields(db, common_db, conference, payload, sent)
 
 
 def _apply_approval_decision(conference: Conference, approval_status: Optional[str], message: str) -> Optional[str]:
@@ -327,12 +435,12 @@ def _apply_approval_decision(conference: Conference, approval_status: Optional[s
 
 
 def _apply_training_status(conference: Conference, training_status: Optional[str]) -> None:
-    if not training_status or training_status == title_status(conference.conferenceStatus):
+    if not training_status or training_status == session_status(conference.conferenceStatus):
         return
     # A finished training is final - its status can't be changed to anything else.
-    if title_status(conference.conferenceStatus) == "Completed":
+    if is_completed(conference):
         raise conflict("A completed training's status can't be changed")
-    conference.conferenceStatus = training_status
+    conference.conferenceStatus = stored_status(training_status)
 
 
 def _update_log_entry(conference_uid: str, decision: Optional[str], message: str) -> tuple[str, str]:
@@ -347,7 +455,7 @@ def _update_log_entry(conference_uid: str, decision: Optional[str], message: str
 def _ensure_approval_open(conference: Conference) -> None:
     """Approval is decided before a training runs: a Completed or Cancelled one can't be
     approved or rejected any more."""
-    if title_status(conference.conferenceStatus) in ("Completed", "Cancelled"):
+    if is_completed(conference) or is_cancelled(conference):
         raise conflict("A completed or cancelled training can't be approved or rejected")
 
 
@@ -365,9 +473,9 @@ def _decide_approval(
     conference = owned_conference(db, admin, conference_uid, common_db, tenant_id)
     _ensure_approval_open(conference)
     conference.status = decision
-    conference.updatedBy = admin.username
+    conference.updatedBy = account_id(admin)
     if reason:
-        conference.remarks = reason
+        conference.remarks = stored_remark(reason)
     conference_repository.save(db, conference)
     summary = f"{decision} training {conference.conferenceUid}"
     log_activity(

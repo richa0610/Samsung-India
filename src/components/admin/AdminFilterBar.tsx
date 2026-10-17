@@ -4,8 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { AdminAccessScope, fetchAdminAccessScope } from "@/api/admin";
 import { AdminFilters, monthToDateAdminFilters } from "@/api/adminFilters";
-import { fetchSessionTypes, fetchTrainers, fetchTrainingTypes } from "@/api/training";
-import { ZONES, regionsForZone } from "@/components/training/add-training/constants";
+import { MasterGroup, fetchSessionTypes, fetchTrainers, fetchTrainingTypes, fetchZones } from "@/api/training";
 import { zoneKey } from "@/utils/zones";
 import { MonthCard, useMonthYear } from "@/components/calendar/date-range";
 import { MONTH_NAMES } from "@/components/calendar/calendarUtils";
@@ -64,6 +63,8 @@ export default function AdminFilterBar({
   const [trainerOptions, setTrainerOptions] = useState<SelectOption[]>([]);
   const [sessionTypeOptions, setSessionTypeOptions] = useState<SelectOption[]>([]);
   const [trainingTypeOptions, setTrainingTypeOptions] = useState<SelectOption[]>([]);
+  // The master list's zones, each with its regions (/admin/zones).
+  const [zoneGroups, setZoneGroups] = useState<MasterGroup[]>([]);
   // The caller's own admin_access grant (null until it's loaded, or for `dateOnly` bars that
   // never show zone/region at all) - narrows which zone/region options this account even sees.
   // Display only: the backend enforces the real boundary regardless of what's picked here.
@@ -75,6 +76,7 @@ export default function AdminFilterBar({
     fetchTrainers(adminToken).then(setTrainerOptions).catch(() => setTrainerOptions([]));
     fetchSessionTypes(adminToken).then(setSessionTypeOptions).catch(() => setSessionTypeOptions([]));
     fetchTrainingTypes(adminToken).then(setTrainingTypeOptions).catch(() => setTrainingTypeOptions([]));
+    fetchZones(adminToken).then(setZoneGroups).catch(() => setZoneGroups([]));
     fetchAdminAccessScope(adminToken).then(setAccessScope).catch(() => setAccessScope(null));
   }, [open, adminToken, dateOnly]);
 
@@ -87,20 +89,22 @@ export default function AdminFilterBar({
   // `null` on either axis (Super Admin, Company Admin, or the scope hasn't loaded yet) means
   // "not restricted" - keep every zone/region option. A list narrows to just those.
   const zoneOptions = useMemo(() => {
-    if (!accessScope?.zones) return ZONES;
+    const zones = zoneGroups.map((group) => group.name);
+    if (!accessScope?.zones) return zones;
     const allowed = new Set(accessScope.zones.map(zoneKey));
-    return ZONES.filter((zone) => allowed.has(zoneKey(zone)));
-  }, [accessScope]);
+    return zones.filter((zone) => allowed.has(zoneKey(zone)));
+  }, [zoneGroups, accessScope]);
 
   const regionOptions = useMemo(() => {
-    const zones = draft.zones.length ? draft.zones : zoneOptions;
-    let regions = Array.from(new Set(zones.flatMap(regionsForZone)));
+    // A zone picked earlier may be spelled the older way ("North Zone"): match by zoneKey.
+    const picked = new Set((draft.zones.length ? draft.zones : zoneOptions).map(zoneKey));
+    let regions = Array.from(new Set(zoneGroups.filter((group) => picked.has(zoneKey(group.name))).flatMap((group) => group.options)));
     if (accessScope?.regions) {
       const allowed = new Set(accessScope.regions);
       regions = regions.filter((region) => allowed.has(region.trim().toLowerCase()));
     }
     return asOptions(regions);
-  }, [draft.zones, zoneOptions, accessScope]);
+  }, [draft.zones, zoneOptions, zoneGroups, accessScope]);
 
   const toggle = () => {
     if (!open) {

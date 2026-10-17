@@ -4,8 +4,12 @@ import json
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import not_found
+from app.models.admin import Admin
 from app.models.quiz import AssessmentSuite, Question
 from app.repositories import assessment_repository
+from app.services import answer_numbers
+from app.services.account_ids import account_name
+from app.utils import question_format
 from app.schemas.training import (
     AssessmentSuiteCreate,
     AssessmentSuiteDetail,
@@ -34,6 +38,11 @@ def suite_module(suite: AssessmentSuite) -> str:
     return "liveQuiz"
 
 
+def suite_category(suite) -> str:
+    """The picker category a question set is listed under - its `assessment_type`."""
+    return suite.assessment_type or "Uncategorised"
+
+
 def list_assessment_suites(db: Session, module: str | None = None) -> list[AssessmentSuiteOut]:
     """Powers the Category / Select Question Set pickers in the trainer's
     session-flow builder. `assessment_type` doubles as the category
@@ -44,7 +53,7 @@ def list_assessment_suites(db: Session, module: str | None = None) -> list[Asses
     return [
         AssessmentSuiteOut(
             assessmentSuiteUid=suite.assessmentSuiteUid,
-            category=suite.assessment_type or "Uncategorised",
+            category=suite_category(suite),
             name=suite.examTitle or suite.courseName or "Untitled",
             noOfQuestion=suite.noOfQuestion or 0,
         )
@@ -53,16 +62,16 @@ def list_assessment_suites(db: Session, module: str | None = None) -> list[Asses
 
 
 def _question_to_out(q: Question) -> QuestionOut:
-    settings = json.loads(q.settings) if q.settings else {}
     return QuestionOut(
         id=q.id,
         question=q.question or "",
         questionType=q.question_type,
-        options=[QuestionOptionIn(**o) for o in (json.loads(q.options) if q.options else [])],
-        correctAnswer=q.correct_answer,
+        options=[QuestionOptionIn(**o) for o in question_format.options(q)],
+        # Saved as the option's number (answer_numbers); the builder shows the option's id.
+        correctAnswer=answer_numbers.correct_option_id(q),
         points=q.points or 0,
-        timerSeconds=settings.get("timerSeconds"),
-        explanation=settings.get("explanation"),
+        timerSeconds=question_format.timer_seconds(q),
+        explanation=question_format.explanation(q),
         sortOrder=q.sort_order or 0,
     )
 
@@ -109,24 +118,30 @@ def get_assessment_suite(db: Session, suite_uid: str) -> AssessmentSuiteDetail:
     return _suite_to_detail(db, _existing_suite(db, suite_uid))
 
 
-def add_question(db: Session, suite_uid: str, payload: QuestionCreate) -> AssessmentSuiteDetail:
+def add_question(db: Session, suite_uid: str, payload: QuestionCreate, admin: Admin) -> AssessmentSuiteDetail:
+    """Adds a question, stored the other system's way (user, 2026-10-17 - utils/question_format):
+    plain-text options, the answer key as the correct option's position (["2"]), its timer in
+    settings, the explanation in `descriptions`, `updatedBy` = the adding admin's name."""
     suite = _existing_suite(db, suite_uid)
     next_order = assessment_repository.count_questions_for_suite(db, suite_uid) + 1
 
-    assessment_repository.add_question(
-        db,
-        Question(
-            assessmentSuiteUid=suite_uid,
-            question=payload.question,
-            question_type=payload.questionType,
-            sort_order=next_order,
-            options=json.dumps([o.model_dump() for o in payload.options]) if payload.options else None,
-            correct_answer=payload.correctAnswer,
-            points=payload.points,
-            settings=json.dumps({"timerSeconds": payload.timerSeconds, "explanation": payload.explanation}),
-            status="Approved",
-        ),
+    # The builder names the correct option by the id it gave it; the key keeps only its position.
+    option_ids = [option.id for option in payload.options]
+    key = option_ids.index(payload.correctAnswer) + 1 if payload.correctAnswer in option_ids else None
+    question = Question(
+        assessmentSuiteUid=suite_uid,
+        question=payload.question,
+        question_type=payload.questionType,
+        sort_order=next_order,
+        options=question_format.stored_options(option.text for option in payload.options),
+        correct_answer=question_format.stored_key([key] if key else []),
+        points=payload.points,
+        settings=question_format.stored_settings(payload.timerSeconds),
+        descriptions=(payload.explanation or "").strip() or None,
+        updatedBy=account_name(admin),
+        status="Approved",
     )
+    assessment_repository.add_question(db, question)
     suite.noOfQuestion = next_order
     assessment_repository.save_suite(db)
     return _suite_to_detail(db, suite)

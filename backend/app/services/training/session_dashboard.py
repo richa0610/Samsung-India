@@ -1,7 +1,6 @@
 """Read views of one session for whoever runs it: the Session Dashboard, the join code, the full
 performer ranking and the post-session report."""
 
-import json
 from datetime import datetime
 from typing import Optional
 
@@ -37,24 +36,10 @@ from app.services.training import timeline
 from app.services.training.common import owned_conference
 from app.services.training.listing import venue_names_for
 from app.utils import join_code
-from app.utils.date_utils import VENUE_TIME_FORMAT, to_utc_iso
+from app.utils.conference_format import active_module, is_completed, location_label, read_session_config, session_status
+from app.utils.date_utils import VENUE_TIME_FORMAT, ist_to_iso, to_venue_time
+from app.utils.helpers import audience_class  # noqa: F401 - also imported from here (admin_service)
 from app.utils.status import title_status
-
-def audience_class(attendance) -> str:
-    """ASSIGNED (admin pre-seeded roster) / FRESH (registered via the QR flow) /
-    UNASSIGNED (existing trainee who logged in and joined). Written to
-    `attendance.sessionMeta` at join time (session_service.join_session);
-    legacy rows with no meta fall back to UNASSIGNED."""
-    if attendance is None:
-        return "UNASSIGNED"
-    if attendance.sessionMeta:
-        try:
-            value = (json.loads(attendance.sessionMeta) or {}).get("audience")
-            if value in ("ASSIGNED", "FRESH", "UNASSIGNED"):
-                return value
-        except (ValueError, TypeError):
-            pass
-    return "UNASSIGNED"
 
 
 def latest_post_test_results(db: Session, conference: Conference) -> dict[str, object]:
@@ -134,7 +119,7 @@ def build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut:
     # above - only what Top Performers itself ranks changes here.
     top_performers = (
         live_quiz_service.live_quiz_ranked_results(db, conference)[:5]
-        if conference.activeModuleId == "LIVE_QUIZ"
+        if active_module(conference) == "LIVE_QUIZ"
         else sorted(latest_result_by_trainee.values(), key=lambda r: float(r.percentage), reverse=True)[:5]
     )
 
@@ -145,15 +130,16 @@ def build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut:
         title=conference.suiteTitle or conference.trainingType or DEFAULT_SESSION_TITLE,
         trainingType=conference.trainingType,
         conferenceDate=conference.conferenceDate,
-        conferenceTime=conference.conferenceTime,
+        conferenceTime=to_venue_time(conference.conferenceTime),
         trainerName=conference.trainerName,
-        location=", ".join(filter(None, [conference.district, conference.state])) or None,
-        conferenceStatus=title_status(conference.conferenceStatus),
+        location=location_label(conference),
+        conferenceStatus=session_status(conference.conferenceStatus),
         approvalStatus=title_status(conference.status),
-        activeModuleId=conference.activeModuleId,
+        activeModuleId=active_module(conference),
         activeModuleQuestionCount=timeline.active_module_question_count(db, conference),
-        actualStartedAt=to_utc_iso(conference.actualStartedAt),
-        actualEndedAt=to_utc_iso(conference.actualEndedAt),
+        # Stored in India time, like the other system's (user, 2026-10-17).
+        actualStartedAt=ist_to_iso(conference.actualStartedAt),
+        actualEndedAt=ist_to_iso(conference.actualEndedAt),
         runtimeSeconds=runtime_seconds,
         audience=_audience_breakdown(trainee_rows),
         assessment=AssessmentSummary(
@@ -166,7 +152,7 @@ def build_dashboard(db: Session, conference: Conference) -> SessionDashboardOut:
         sessionHeroes=timeline.session_heroes(db, conference),
         liveStudio=(
             live_quiz_service.build_live_studio(db, conference)
-            if conference.activeModuleId == "LIVE_QUIZ"
+            if active_module(conference) == "LIVE_QUIZ"
             else None
         ),
     )
@@ -278,7 +264,7 @@ def list_all_performers(
     conference. Reading no longer needs less authorization than running it."""
     conference = owned_conference(db, admin, conference_uid, common_db, tenant_id)
 
-    if conference.activeModuleId == "LIVE_QUIZ":
+    if active_module(conference) == "LIVE_QUIZ":
         ranked = live_quiz_service.live_quiz_ranked_results(db, conference)
     else:
         ranked = sorted(
@@ -293,10 +279,7 @@ def _report_duration_label(conference: Conference) -> Optional[str]:
     """"09:30 - 11:00" spanning the earliest module start to the latest
     module end in the session flow, falling back to the conference start
     time alone when there's no per-module config."""
-    try:
-        config = json.loads(conference.sessionConfig) if conference.sessionConfig else {}
-    except ValueError:
-        config = {}
+    config = read_session_config(conference.sessionConfig)
     times: list[str] = []
     for section in config.values():
         if isinstance(section, dict):
@@ -314,7 +297,7 @@ def _report_duration_label(conference: Conference) -> Optional[str]:
     times = sorted({t for t in times if _key(t) is not datetime.max}, key=_key)
     if len(times) >= 2:
         return f"{times[0]} - {times[-1]}"
-    return conference.conferenceTime
+    return to_venue_time(conference.conferenceTime)
 
 
 def get_session_report(
@@ -324,7 +307,7 @@ def get_session_report(
     # The report is a post-session artifact - only available once the trainer
     # has ended the session (mirrors the disabled "Report" button on the
     # Session Dashboard).
-    if title_status(conference.conferenceStatus) != "Completed":
+    if not is_completed(conference):
         raise bad_request("The session report is available once the session has ended")
 
     attendance_by_trainee = {
@@ -338,9 +321,9 @@ def get_session_report(
             sessionName=conference.suiteTitle or conference.trainingType or DEFAULT_SESSION_TITLE,
             date=conference.conferenceDate,
             state=conference.state,
-            schedule=", ".join(filter(None, [conference.conferenceDate, conference.conferenceTime])) or None,
+            schedule=", ".join(filter(None, [conference.conferenceDate, to_venue_time(conference.conferenceTime)])) or None,
             duration=_report_duration_label(conference),
-            venueLink=venue_name or ", ".join(filter(None, [conference.district, conference.state])) or None,
+            venueLink=venue_name or location_label(conference),
         ),
         standardTest=_report_participants(db, conference_uid, conference.postAssessmentUid, attendance_by_trainee),
         liveQuiz=_report_participants(db, conference_uid, live_quiz_suite_uid(conference), attendance_by_trainee),

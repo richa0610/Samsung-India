@@ -1,5 +1,9 @@
 """How a session's modules actually played out, read from its activity log (conference_activity_log):
-the Execution Flow rows, the audit log, the Session Heroes cards and the time modules were live."""
+the Execution Flow rows, the audit log, the Session Heroes cards and the time modules were live.
+
+The log is read through conference_format (log_module / log_action / log_time): rows are stored the
+other system's way since 2026-10-17 (module IDs, India time), and rows written before still read the
+same."""
 
 from typing import Optional
 
@@ -11,7 +15,8 @@ from app.models.conference_activity_log import ConferenceActivityLog
 from app.repositories import activity_log_repository, admin_repository, assessment_repository, trainee_repository
 from app.schemas.training import AuditLogEntry, ExecutionFlowItem, SessionHeroStat
 from app.services.module_flow import configured_modules, live_quiz_suite_uid, module_planned_minutes
-from app.utils.date_utils import to_utc_iso, utc_now
+from app.utils.conference_format import active_module, is_running, log_action, log_module, log_time
+from app.utils.date_utils import ist_now, ist_to_iso
 
 
 def activity_log_list(db: Session, conference_uid: str) -> list[ConferenceActivityLog]:
@@ -21,7 +26,7 @@ def activity_log_list(db: Session, conference_uid: str) -> list[ConferenceActivi
 def _by_module(logs: list[ConferenceActivityLog]) -> dict[str, list[ConferenceActivityLog]]:
     logs_by_module: dict[str, list[ConferenceActivityLog]] = {}
     for log in logs:
-        logs_by_module.setdefault(log.moduleId, []).append(log)
+        logs_by_module.setdefault(log_module(log), []).append(log)
     return logs_by_module
 
 
@@ -33,12 +38,12 @@ def execution_flow(db: Session, conference: Conference) -> list[ExecutionFlowIte
     logs_by_module = _by_module(activity_log_list(db, conference.conferenceUid))
 
     planned_minutes = module_planned_minutes(conference)
-    now = utc_now()
+    now = ist_now()
     items: list[ExecutionFlowItem] = []
     for module_key in modules:
         module_logs = logs_by_module.get(module_key, [])
-        starts = [entry for entry in module_logs if entry.action == "STARTED"]
-        stops = [entry for entry in module_logs if entry.action == "STOPPED"]
+        starts = [entry for entry in module_logs if log_action(entry) == "STARTED"]
+        stops = [entry for entry in module_logs if log_action(entry) == "STOPPED"]
 
         # A module can run more than once (Restart), so compare counts rather
         # than "has a STARTED / has a STOPPED": more starts than stops means
@@ -49,15 +54,15 @@ def execution_flow(db: Session, conference: Conference) -> list[ExecutionFlowIte
         # "Running" with no way to stop it, even after the session ended.
         is_actually_running = (
             len(starts) > len(stops)
-            and conference.conferenceStatus == "Ongoing"
-            and conference.activeModuleId == module_key
+            and is_running(conference)
+            and active_module(conference) == module_key
         )
         if is_actually_running:
             item_status = "Running"
             first_started = starts[0]
             last_started = starts[-1]
-            elapsed = int((now - last_started.timestamp).total_seconds())
-            started_at = to_utc_iso(first_started.timestamp)
+            elapsed = int((now - log_time(last_started)).total_seconds())
+            started_at = ist_to_iso(log_time(first_started))
             ended_at = None
         elif starts:
             item_status = "Completed"
@@ -67,9 +72,9 @@ def execution_flow(db: Session, conference: Conference) -> list[ExecutionFlowIte
             # stops but this isn't actually the live module) rather than
             # showing a runaway elapsed time.
             last_stopped = stops[-1] if stops else starts[-1]
-            elapsed = int((last_stopped.timestamp - starts[-1].timestamp).total_seconds())
-            started_at = to_utc_iso(first_started.timestamp)
-            ended_at = to_utc_iso(last_stopped.timestamp)
+            elapsed = int((log_time(last_stopped) - log_time(starts[-1])).total_seconds())
+            started_at = ist_to_iso(log_time(first_started))
+            ended_at = ist_to_iso(log_time(last_stopped))
         else:
             item_status = "Pending"
             elapsed = None
@@ -93,7 +98,7 @@ def execution_flow(db: Session, conference: Conference) -> list[ExecutionFlowIte
     # forward one manual Start at a time.
     # `canRestart`: a finished module can be re-run, but only while no other
     # module is currently live.
-    session_idle = conference.conferenceStatus == "Ongoing" and conference.activeModuleId is None
+    session_idle = is_running(conference) and active_module(conference) is None
     for index, item in enumerate(items):
         item.canStart = (
             session_idle
@@ -117,7 +122,7 @@ def _suite_for_module(conference: Conference, module_key: str) -> Optional[str]:
 def active_module_question_count(db: Session, conference: Conference) -> Optional[int]:
     """Question count of the currently-live module's suite - drives the
     "Targeted N QPs" pill on the Active Module card."""
-    suite_uid = _suite_for_module(conference, conference.activeModuleId or "")
+    suite_uid = _suite_for_module(conference, active_module(conference) or "")
     if not suite_uid:
         return None
     return assessment_repository.count_questions_for_suite(db, suite_uid)
@@ -173,11 +178,11 @@ def _pair_runs(
     runs: list[tuple[ConferenceActivityLog, Optional[ConferenceActivityLog]]] = []
     open_start: Optional[ConferenceActivityLog] = None
     for log in module_logs:
-        if log.action == "STARTED":
+        if log_action(log) == "STARTED":
             if open_start is not None:
                 runs.append((open_start, None))
             open_start = log
-        elif log.action == "STOPPED" and open_start is not None:
+        elif log_action(log) == "STOPPED" and open_start is not None:
             runs.append((open_start, log))
             open_start = None
     if open_start is not None:
@@ -202,18 +207,19 @@ def module_active_seconds(db: Session, conference: Conference) -> Optional[int]:
 
     logs_by_module = _by_module(activity_log_list(db, conference.conferenceUid))
 
-    now = utc_now()
+    now = ist_now()
     total_seconds = 0
     for module_key in modules:
         for started, stopped in _pair_runs(logs_by_module.get(module_key, [])):
-            end_point = stopped.timestamp if stopped else now
-            total_seconds += int((end_point - started.timestamp).total_seconds())
+            end_point = log_time(stopped) if stopped else now
+            total_seconds += int((end_point - log_time(started)).total_seconds())
     return total_seconds
 
 
 def _resolve_performer_names(db: Session, usernames: set[str]) -> dict[str, str]:
-    """`performedBy` values can be either an `Admin` username (Common DB) or
-    an `AgencyTeam` username (this tenant's DB). This function is called
+    """`performedBy` values written before 2026-10-17 are either an `Admin` username (Common DB) or
+    an `AgencyTeam` username (this tenant's DB); since then it is the person's name (the other
+    system's way), which no lookup matches and is shown as stored. This function is called
     several layers deep from many endpoints (audit log / execution flow
     attribution), so rather than threading a `common_db` session through
     every one of those call chains, it opens its own short-lived Common DB
@@ -248,14 +254,14 @@ def audit_log(db: Session, conference: Conference) -> list[AuditLogEntry]:
 
     performer_names = _resolve_performer_names(db, {log.performedBy for log in logs if log.performedBy})
 
-    now = utc_now()
+    now = ist_now()
     entries: list[AuditLogEntry] = []
 
     # Schedule overrides (recorded by start_training when a trainer starts a
     # session earlier or later than its scheduled time) sit at the top of the
     # log - they happen before any module runs.
     for log in logs:
-        if log.action != "SCHEDULE_OVERRIDE":
+        if log_action(log) != "SCHEDULE_OVERRIDE":
             continue
         who = performer_names.get(log.performedBy, log.performedBy) if log.performedBy else None
         entries.append(
@@ -263,8 +269,8 @@ def audit_log(db: Session, conference: Conference) -> list[AuditLogEntry]:
                 moduleKey="SCHEDULE_OVERRIDE",
                 label="Schedule override",
                 runNumber=1,
-                startedAt=to_utc_iso(log.timestamp),
-                endedAt=to_utc_iso(log.timestamp),
+                startedAt=ist_to_iso(log_time(log)),
+                endedAt=ist_to_iso(log_time(log)),
                 elapsedSeconds=None,
                 isRunning=False,
                 startedBy=who,
@@ -275,15 +281,15 @@ def audit_log(db: Session, conference: Conference) -> list[AuditLogEntry]:
     for module_key in modules:
         runs = _pair_runs(logs_by_module.get(module_key, []))
         for run_number, (started, stopped) in enumerate(runs, start=1):
-            end_point = stopped.timestamp if stopped else now
-            elapsed = int((end_point - started.timestamp).total_seconds())
+            end_point = log_time(stopped) if stopped else now
+            elapsed = int((end_point - log_time(started)).total_seconds())
             entries.append(
                 AuditLogEntry(
                     moduleKey=module_key,
                     label=MODULE_LABELS.get(module_key, module_key.title()),
                     runNumber=run_number,
-                    startedAt=to_utc_iso(started.timestamp),
-                    endedAt=to_utc_iso(stopped.timestamp) if stopped else None,
+                    startedAt=ist_to_iso(log_time(started)),
+                    endedAt=ist_to_iso(log_time(stopped)) if stopped else None,
                     elapsedSeconds=elapsed,
                     isRunning=stopped is None,
                     startedBy=performer_names.get(started.performedBy, started.performedBy) if started.performedBy else None,

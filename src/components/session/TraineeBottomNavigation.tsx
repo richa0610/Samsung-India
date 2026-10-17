@@ -15,6 +15,7 @@ import { Shadows } from "@/theme/shadows";
 export type TraineeBottomNavigationProps = {
   activeTab: TraineeTab;
   onSelectTab: (tab: TraineeTab) => void;
+  isTrainingLive?: boolean;
 };
 
 // All four tabs render identically (icon in a circular badge + label below) -
@@ -61,13 +62,15 @@ const TABS: {
 export default function TraineeBottomNavigation({
   activeTab = "home",
   onSelectTab,
+  isTrainingLive = false,
 }: TraineeBottomNavigationProps) {
   const insets = useSafeAreaInsets();
+  const visibleTabs = isTrainingLive ? TABS : TABS.filter((tab) => tab.key !== "rank");
 
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 12) }]}>
       <View style={styles.container}>
-        {TABS.map((tab) => {
+        {visibleTabs.map((tab) => {
           const active = activeTab === tab.key;
           return (
             <Pressable

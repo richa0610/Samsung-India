@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 
 import { SelectOption } from "@/components/ui/SearchableSelect";
 import { useAuth } from "@/hooks/useAuth";
+import { useStateDistricts } from "@/hooks/useStateDistricts";
 import { subscribe } from "@/services/liveEvents";
 import {
   ApiError,
@@ -17,7 +18,6 @@ import {
   fetchChecklistItems,
   fetchRequestedByOptions,
   fetchSessionTypes,
-  fetchStates,
   fetchTrainers,
   fetchTrainingDetail,
   fetchTrainingHubs,
@@ -65,10 +65,8 @@ const LIVE_REFRESH_MS = 8000;
 const asOptions = (names: string[]): SelectOption[] => names.map((name) => ({ label: name, value: name }));
 
 // How a saved value is matched to the master list: names ignore case and spaces; a zone also
-// ignores " Zone" ("North Zone" = "North"); a district also reads "_" as a space ("new_delhi",
-// the code older builds saved, = "New Delhi").
+// ignores " Zone" ("North Zone" = "North"). State / District are matched by useStateDistricts.
 const nameKey = (value: string) => value.trim().toLowerCase();
-const districtKey = (value: string) => nameKey(value).replace(/_/g, " ");
 
 function findBy<T>(items: T[], value: string, key: (value: string) => string, nameOf: (item: T) => string): T | undefined {
   const wanted = key(value);
@@ -173,13 +171,12 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
   const [trainerOptions, setTrainerOptions] = useState<SelectOption[]>([]);
   const [checklistOptions, setChecklistOptions] = useState<SelectOption[]>([]);
   const [venueOptions, setVenueOptions] = useState<SelectOption[]>([]);
-  // Zone / Region, State / District, Audience, Session Type and Training Type come from the
-  // master list (a category's approved options - the zones and states each with their own
-  // regions / districts); Training Hub and Requested By, which have none, from the values this
-  // tenant already used on past trainings. All served by the /admin catalog endpoints and
-  // empty until the first fetch resolves.
+  // Zone / Region, Audience, Session Type and Training Type come from the master list (a
+  // category's approved options - the zones each with their own regions); Training Hub and
+  // Requested By, which have none, from the values this tenant already used on past trainings.
+  // All served by the /admin catalog endpoints and empty until the first fetch resolves.
+  // State / District come from the pincode directory (useStateDistricts, below).
   const [zoneGroups, setZoneGroups] = useState<MasterGroup[]>([]);
-  const [stateGroups, setStateGroups] = useState<MasterGroup[]>([]);
   const [trainingHubOptions, setTrainingHubOptions] = useState<SelectOption[]>([]);
   const [audienceOptions, setAudienceOptions] = useState<SelectOption[]>([]);
   const [sessionTypeOptions, setSessionTypeOptions] = useState<SelectOption[]>([]);
@@ -199,9 +196,6 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
     fetchZones(adminToken)
       .then(setZoneGroups)
       .catch(() => setZoneGroups([]));
-    fetchStates(adminToken)
-      .then(setStateGroups)
-      .catch(() => setStateGroups([]));
     fetchChecklistItems(adminToken)
       .then(setChecklistOptions)
       .catch(() => setChecklistOptions([]));
@@ -222,25 +216,21 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
       .catch(() => setRequestedByOptions([]));
   }, [adminToken]);
 
-  // Venue is gated on District, so its options are re-fetched (scoped
-  // server-side) each time the trainer picks a different district.
+  // Venue is gated on District (and its State - a district name two states share never mixes
+  // their venues), so its options are re-fetched, scoped server-side, whenever either changes.
   useEffect(() => {
-    const load = adminToken && district ? fetchVenues(adminToken, district) : Promise.resolve([]);
+    const load = adminToken && district ? fetchVenues(adminToken, district, stateName) : Promise.resolve([]);
     load.then(setVenueOptions).catch(() => setVenueOptions([]));
-  }, [adminToken, district]);
+  }, [adminToken, district, stateName]);
 
   // A value an older training saved ("North Zone", "new_delhi") is shown - and re-saved - as the
   // master spells it ("North", "New Delhi"); one the master doesn't have is kept as it is.
   const zoneGroup = findBy(zoneGroups, zone, zoneKey, groupName);
-  const stateGroup = findBy(stateGroups, stateName, nameKey, groupName);
   const shownZone = zoneGroup?.name ?? zone;
   const shownRegion = findBy(zoneGroup?.options ?? [], region, nameKey, itself) ?? region;
-  const shownState = stateGroup?.name ?? stateName;
-  const shownDistrict = findBy(stateGroup?.options ?? [], district, districtKey, itself) ?? district;
   const zoneOptions = useMemo(() => asOptions(zoneGroups.map((group) => group.name)), [zoneGroups]);
   const regionOptions = useMemo(() => asOptions(zoneGroup?.options ?? []), [zoneGroup]);
-  const stateOptions = useMemo(() => asOptions(stateGroups.map((group) => group.name)), [stateGroups]);
-  const districtOptions = useMemo(() => asOptions(stateGroup?.options ?? []), [stateGroup]);
+  const { stateOptions, districtOptions, shownState, shownDistrict } = useStateDistricts(stateName, district);
 
   useEffect(() => {
     if (!editing || !adminToken) return;

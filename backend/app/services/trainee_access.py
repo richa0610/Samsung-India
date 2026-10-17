@@ -21,6 +21,7 @@ from app.models.attendance import Attendance
 from app.models.conference import Conference
 from app.models.trainee import Trainee
 from app.repositories import assessment_repository, attendance_repository, conference_repository
+from app.utils.conference_format import active_module
 
 NOT_PRESENT = "You must be marked present by the trainer to take part in this session."
 PROCTORING_LOCKED = "You're locked out of this test for proctoring violations. Ask your trainer to unlock you."
@@ -78,7 +79,7 @@ def open_assessment(db: Session, trainee: Trainee, conference_uid: str, suite_ui
     module_key = module_of_suite(conference, suite_uid)
     if module_key is None:
         raise not_found("Assessment not found")
-    if not session_is_running(conference) or conference.activeModuleId != module_key:
+    if not session_is_running(conference) or active_module(conference) != module_key:
         raise conflict("This module isn't open right now")
     if module_key == "STANDARD_TEST" and attendance.isTheftLocked:
         raise forbidden(PROCTORING_LOCKED)

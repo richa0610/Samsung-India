@@ -106,10 +106,20 @@ class Conference(Base):
     # (`attendanceSheet`). Both are pre-existing real columns - no ALTER.
     conferenceImage = Column(String(300))
     attendanceSheet = Column(String(300))
+    # The other system's hotel-bill upload - this app never takes one, but fills it the way that
+    # system does until one is uploaded ("defaultfile.png", conference_format.NO_FILE).
+    hotelBill = Column(String(300))
 
     updatedBy = Column(String(100))
     updationOn = Column(DateTime)
+    # Stamped on every insert / real update with the login token's fingerprint and the request
+    # (models/audit_stamp_events.py) - as on `attendance`.
+    token = Column(String(100))
+    logPath = Column(String(200))
     status = Column(String(100), nullable=False, server_default=text("'Pending'"))
     auditStatus = Column(String(50), server_default=text("'Pending'"))
+    # The approval note, stored as HTML (conference_format.stored_remark / remark_text).
     remarks = Column(Text)
+    # "New Non Residential Conference added by <name> (<account ID>) | UID: <conferenceUid>".
+    masterRemarks = Column(Text)
     timestamp = Column(DateTime, server_default=func.now(), nullable=False)

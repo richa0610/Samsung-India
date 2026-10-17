@@ -22,7 +22,9 @@ class TraineeAdminIn(BaseModel):
     """Payload for POST /admin/trainees - the trainer/admin-side "register a
     new trainee" form. Mirrors NewTraineeInput on the frontend."""
 
-    traineeUid: IdStr
+    # Ignored - the server makes the trainee's ID from their zone (models/uid_events.py, user
+    # 2026-10-16); an older app build still sends the ID it had typed in.
+    traineeUid: OptIdStr = None
     profilePhoto: OptShortStr = None
     agencyId: OptIdStr = None
     fullName: NameStr
@@ -50,7 +52,8 @@ class TraineeAdminIn(BaseModel):
     jobCity: OptShortStr = None
     jobPincode: OptDigitStr = None
     resignedOn: Optional[date] = None
-    username: IdStr
+    # The trainee's login name: their new ID when not sent (an older app build sends the ID it typed).
+    username: OptIdStr = None
     password: Annotated[str, Field(min_length=1, max_length=128)]
 
 

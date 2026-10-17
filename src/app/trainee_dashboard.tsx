@@ -18,6 +18,7 @@ import LogoutConfirmModal from "@/components/ui/LogoutConfirmModal";
 import { TraineeTab } from "@/hooks/useTraineeHome";
 import { useTraineeDashboard } from "@/hooks/useTraineeDashboard";
 import { Colors } from "@/theme/colors";
+import { formatDisplayDate } from "@/utils/formatDisplayDate";
 import { canNavigate } from "@/utils/navigationGuard";
 
 const rankLabel = (rank: number | null) => (rank != null ? `# ${rank.toLocaleString()}` : "Unranked");
@@ -34,6 +35,7 @@ export default function TraineeDashboardScreen() {
   const {
     trainee,
     session,
+    isTrainingLive,
     dashboard,
     refreshing,
     handleRefresh,
@@ -89,11 +91,12 @@ export default function TraineeDashboardScreen() {
           userName={trainee?.name ?? undefined}
           gender={trainee?.gender}
           profilePhoto={trainee?.profilePhoto}
-          confirmationStatus={session?.confirmationStatus ?? "Not Confirmed"}
-          sessionType={session?.sessionType ?? undefined}
+          sessionType={session?.sessionType ?? "Trainings"}
           title={session?.title ?? undefined}
-          date={session?.date ?? undefined}
-          location={session?.location ?? undefined}
+          showSessionPill={true}
+          showSessionDetails={true}
+          isTrainingLive={isTrainingLive}
+          userSubtitle={trainee?.designation ?? undefined}
           isOnline
           onLogout={requestLogout}
         />
@@ -130,7 +133,11 @@ export default function TraineeDashboardScreen() {
         />
       </ScrollView>
 
-      <TraineeBottomNavigation activeTab={ACTIVE_TAB} onSelectTab={handleTabSelect} />
+      <TraineeBottomNavigation
+        activeTab={ACTIVE_TAB}
+        onSelectTab={handleTabSelect}
+        isTrainingLive={isTrainingLive}
+      />
       <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </SafeAreaView>
   );

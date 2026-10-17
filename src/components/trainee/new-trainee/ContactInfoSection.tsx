@@ -4,7 +4,6 @@ import AppCard from "@/components/ui/AppCard";
 import AppInput from "@/components/ui/AppInput";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
 import { SectionTitle } from "@/components/training/add-training/SectionTitle";
-import { STATES } from "@/data/states";
 import { digitsOnly } from "@/utils/validation";
 import { NewTraineeForm } from "./useNewTraineeForm";
 
@@ -62,7 +61,7 @@ export function ContactInfoSection({ form }: { form: NewTraineeForm }) {
         placeholder="Select State"
         icon="map-outline"
         value={form.stateValue}
-        options={STATES.map((s) => ({ label: s.label, value: s.value }))}
+        options={form.stateOptions}
         onSelect={(option) => {
           form.setStateValue(option.value);
           form.setDistrict("");
@@ -74,7 +73,7 @@ export function ContactInfoSection({ form }: { form: NewTraineeForm }) {
         placeholder={form.stateValue ? "Select District" : "Select State First"}
         icon="location-outline"
         value={form.district}
-        options={form.selectedState?.cities ?? []}
+        options={form.districtOptions}
         onSelect={(option) => form.setDistrict(option.value)}
         disabled={!form.stateValue}
       />

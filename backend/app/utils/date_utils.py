@@ -6,10 +6,13 @@ from datetime import date, datetime, time, timedelta, timezone
 # exact and needs no tz database.
 IST = timezone(timedelta(hours=5, minutes=30))
 
-# How the admin panel writes `conferenceTime` and every per-module start/end
-# time (e.g. "10:00 AM"). Parse and format venue times with this, never a
-# literal, so a change to the admin panel's format is a one-line change here.
+# How this app's forms write a venue time (e.g. "10:00 AM") - what the app sends and is sent back.
+# Parse and format venue times with this, never a literal.
 VENUE_TIME_FORMAT = "%I:%M %p"
+# How the other system stores a venue time in `conference` (user, 2026-10-17): "14:00". Every parser
+# below reads both, so rows written either way work.
+STORED_TIME_FORMAT = "%H:%M"
+_TIME_FORMATS = (VENUE_TIME_FORMAT, STORED_TIME_FORMAT)
 
 
 def ist_now() -> datetime:
@@ -76,43 +79,65 @@ def to_utc_iso(dt: datetime | None) -> str | None:
     return dt.replace(tzinfo=timezone.utc).isoformat()
 
 
+def _parse_time(raw: str | None) -> datetime | None:
+    """A venue time written either way ("10:00 AM" or "14:30"), or None when missing or unreadable."""
+    if not raw:
+        return None
+    for fmt in _TIME_FORMATS:
+        try:
+            return datetime.strptime(raw.strip(), fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def to_stored_time(raw: str | None) -> str:
+    """A venue time as `conference` stores it: "02:00 PM" -> "14:00"; "" when there is none. Text
+    that isn't a time is kept as written."""
+    parsed = _parse_time(raw)
+    if parsed is not None:
+        return parsed.strftime(STORED_TIME_FORMAT)
+    return (raw or "").strip()
+
+
+def to_venue_time(raw: str | None) -> str | None:
+    """A venue time as this app shows and sends it: "14:00" -> "02:00 PM"; None when there is none.
+    Text that isn't a time is kept as written."""
+    parsed = _parse_time(raw)
+    if parsed is not None:
+        return parsed.strftime(VENUE_TIME_FORMAT)
+    return (raw or "").strip() or None
+
+
 def parse_module_start(conference_date: str | None, time_str: str | None) -> datetime | None:
     """`conferenceDate`/`conferenceTime` (and each module's own configured
     start/end time) are free-text columns filled in by whoever schedules the
-    training (e.g. "2026-07-25" / "10:00 AM"). This is the one place that
-    combines and parses them - change the format string here if the admin
-    panel that writes those columns ever changes its format."""
-    if not conference_date or not time_str:
+    training (e.g. "2026-07-25" with "10:00 AM" or "10:00"). This is the one place that
+    combines and parses them."""
+    if not conference_date:
+        return None
+    clock = _parse_time(time_str)
+    if clock is None:
         return None
     try:
-        return datetime.strptime(f"{conference_date} {time_str}", f"%Y-%m-%d {VENUE_TIME_FORMAT}")
+        day = datetime.strptime(conference_date.strip(), "%Y-%m-%d")
     except ValueError:
         return None
+    return day.replace(hour=clock.hour, minute=clock.minute)
 
 
 def time_to_minutes(raw: str | None) -> int | None:
     """"10:00 AM" / "14:30" -> minutes since midnight, for ordering a session's
     modules by their planned start time. Returns None for a missing/unparseable
     value so callers can sort those last."""
-    if not raw:
-        return None
-    for fmt in (VENUE_TIME_FORMAT, "%H:%M"):
-        try:
-            parsed = datetime.strptime(raw.strip(), fmt)
-            return parsed.hour * 60 + parsed.minute
-        except ValueError:
-            continue
-    return None
+    parsed = _parse_time(raw)
+    return parsed.hour * 60 + parsed.minute if parsed is not None else None
 
 
 def duration(start: str | None, end: str | None) -> str | None:
-    """Formats a "10:00 AM" -> "11:30 AM" pair as "1h 30m" for display."""
-    if not start or not end:
-        return None
-    try:
-        started = datetime.strptime(start, VENUE_TIME_FORMAT)
-        ended = datetime.strptime(end, VENUE_TIME_FORMAT)
-    except ValueError:
+    """Formats a "10:00 AM" -> "11:30 AM" (or "10:00" -> "11:30") pair as "1h 30m" for display."""
+    started, ended = _parse_time(start), _parse_time(end)
+    if started is None or ended is None:
         return None
 
     minutes = int((ended - started).total_seconds() // 60)

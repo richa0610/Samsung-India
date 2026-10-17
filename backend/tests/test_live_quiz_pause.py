@@ -114,7 +114,7 @@ class AnswersAreLockedWhileStopped(LiveQuizPauseTestCase):
         self.trainer("stop-timer")
         result = self.answer("a")
         self.assertEqual((result["accepted"], result["paused"], result["correct"]), (True, False, True))
-        self.assertEqual(self.stored_answer().selectedOption, "a")
+        self.assertEqual(self.stored_answer().selectedOption, "1")  # option "a" - the first - saved as its number
 
     def test_the_answer_cannot_be_peeked_while_stopped(self):
         self.broadcast()

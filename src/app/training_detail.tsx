@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ModuleDetailCard } from "@/components/trainee/training-detail";
+import { ModuleDetailCard, StatusNoticeCard } from "@/components/trainee/training-detail";
 import { statusMetaFor } from "@/components/trainee/training-detail/statusMeta";
 import AppText from "@/components/ui/AppText";
 import ScreenBanner from "@/components/ui/ScreenBanner";
@@ -15,6 +16,7 @@ import { trainingStatusLabel } from "@/utils/trainingStatusLabel";
 
 export default function TrainingDetailScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { onBack, detail, loading, error, reload, expandedKeys, toggleModule } = useTrainingDetail();
   const overallMeta = detail ? statusMetaFor(detail.status) : null;
 
@@ -22,7 +24,7 @@ export default function TrainingDetailScreen() {
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScreenBanner backgroundColor={Colors.mainColour1} statusBarStyle="light" style={[styles.banner, { paddingTop: insets.top + 12 }]}>
         <View style={styles.bannerRow}>
-          <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back">
+          <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="Back" style={styles.backBtnWrap}>
             <Ionicons name="arrow-back" size={18} color={Colors.white} />
           </Pressable>
           <View style={styles.bannerTextColumn}>
@@ -54,26 +56,40 @@ export default function TrainingDetailScreen() {
           </Pressable>
         </View>
       ) : detail.status === "Missed" ? (
-        // A missed training has nothing to review - no attendance, no
-        // attempted modules - so skip straight to the outcome instead of an
-        // empty-looking module list, same idea as the Home screen's "Session
-        // Completed" card once a session closes.
-        <StatusNotice
-          icon="close-circle"
-          color={Colors.danger}
-          bg={Colors.dangerBgSoft}
+        <StatusNoticeCard
+          status="Missed"
           title="Session Missed"
           message="You missed this training. Try to join your next scheduled session on time."
+          sessionTitle={detail.title}
+          date={detail.date}
+          location={detail.location}
+          trainerName={detail.trainerName}
+          onBack={onBack}
+          onGoDashboard={() => router.replace("/trainee_dashboard")}
+        />
+      ) : detail.status === "Absent" ? (
+        <StatusNoticeCard
+          status="Absent"
+          title="Marked Absent"
+          message="You were marked absent for this training, so its details aren't available. Try to attend your next scheduled session."
+          sessionTitle={detail.title}
+          date={detail.date}
+          location={detail.location}
+          trainerName={detail.trainerName}
+          onBack={onBack}
+          onGoDashboard={() => router.replace("/trainee_dashboard")}
         />
       ) : detail.status === "Ongoing" ? (
-        // Still running: its full breakdown (modules, scores, answer review)
-        // is shown once the trainer has completed it.
-        <StatusNotice
-          icon="time"
-          color={Colors.blueAccent}
-          bg={Colors.blue50}
+        <StatusNoticeCard
+          status="Ongoing"
           title="Training In Progress"
           message="This training is still going on. Its full details will be available here once it's completed."
+          sessionTitle={detail.title}
+          date={detail.date}
+          location={detail.location}
+          trainerName={detail.trainerName}
+          onBack={onBack}
+          onGoDashboard={() => router.replace("/trainee_dashboard")}
         />
       ) : (
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
@@ -141,51 +157,26 @@ export default function TrainingDetailScreen() {
   );
 }
 
-/** A whole-screen outcome in place of the module list (a missed or still-running training). */
-function StatusNotice({
-  icon,
-  color,
-  bg,
-  title,
-  message,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-  bg: string;
-  title: string;
-  message: string;
-}) {
-  return (
-    <View style={styles.centered}>
-      <View style={[styles.noticeIconWrap, { backgroundColor: bg }]}>
-        <Ionicons name={icon} size={40} color={color} />
-      </View>
-      <AppText variant="body" weight={FontWeight.bold} color={Colors.black} align="center">
-        {title}
-      </AppText>
-      <AppText variant="caption" color={Colors.gray600} align="center">
-        {message}
-      </AppText>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  banner: { paddingBottom: 20 },
+  banner: {
+    paddingBottom: 22,
+    borderBottomLeftRadius: Radius.header,
+    borderBottomRightRadius: Radius.header,
+  },
   bannerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  bannerTextColumn: { flex: 1 },
-  bannerTitle: { fontSize: 17 },
-  bannerSubtitle: { fontSize: 12, opacity: 0.9, marginTop: 2 },
-  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 24 },
-  noticeIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+  backBtnWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255, 255, 255, 0.16)",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 4,
   },
+  bannerTextColumn: { flex: 1 },
+  bannerTitle: { fontSize: 18, letterSpacing: -0.2 },
+  bannerSubtitle: { fontSize: 12, opacity: 0.9, marginTop: 2 },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingHorizontal: 24 },
   retryButton: {
     backgroundColor: Colors.mainColour1,
     paddingHorizontal: 22,

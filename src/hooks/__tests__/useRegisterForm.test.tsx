@@ -25,7 +25,7 @@ beforeEach(() => {
   mockJoin.mockResolvedValue(undefined as never);
 });
 
-async function submit(joinCode?: string) {
+async function submit(joinCode?: string, place: { zone?: string; region?: string } = {}) {
   const onSuccess = jest.fn();
   const { result } = await renderHook(() => useRegisterForm({ joinCode, onSuccess }));
   await act(async () => {
@@ -33,6 +33,8 @@ async function submit(joinCode?: string) {
     result.current.setValue("phone", "9876543210");
     result.current.setValue("email", "new.person@example.com");
     result.current.setValue("state", "Delhi");
+    if (place.zone) result.current.setValue("zone", place.zone);
+    if (place.region) result.current.setValue("region", place.region);
   });
   await act(async () => {
     await result.current.onSubmit();
@@ -47,6 +49,12 @@ test("a QR sign-up is signed in by the registration itself and joins the scanned
   expect(mockJoin).toHaveBeenCalledWith("CONF2610010001.abc", "new-trainee-token", true);
   expect(loginTrainee).not.toHaveBeenCalled();   // no password to log in with
   expect(onSuccess).toHaveBeenCalled();
+});
+
+test("the zone and region picked are sent - the zone starts the trainee's ID", async () => {
+  await submit(undefined, { zone: "South", region: "South 1" });
+
+  expect(mockRegister).toHaveBeenCalledWith(expect.objectContaining({ zone: "South", region: "South 1" }));
 });
 
 test("a sign-up without a QR is signed in too, and joins nothing", async () => {

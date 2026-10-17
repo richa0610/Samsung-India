@@ -84,14 +84,12 @@ def register_trainee_admin(
     )
 
     phone_int = int(payload.primaryPhone)
-    existing = trainee_repository.get_admin_registration_conflict(
-        db, phone_int, payload.primaryEmail, payload.username, payload.traineeUid
-    )
+    existing = trainee_repository.get_admin_registration_conflict(db, phone_int, payload.primaryEmail, payload.username)
     if existing:
-        raise bad_request("A trainee with this UID, phone, email or username already exists")
+        raise bad_request("A trainee with this phone, email or username already exists")
 
+    # The ID is made by the server from the zone (models/uid_events.py) - one the form sent is ignored.
     trainee = Trainee(
-        traineeUid=payload.traineeUid,
         name=payload.fullName,
         email=payload.primaryEmail,
         phone=phone_int,
@@ -127,7 +125,11 @@ def register_trainee_admin(
         updatedBy=admin.username,
         status="Pending",
     )
-    trainee = trainee_repository.create(db, trainee)
+    db.add(trainee)
+    db.flush()  # the ID hook names the trainee
+    if not trainee.username:
+        trainee.username = trainee.traineeUid  # they sign in with the ID the app made
+    trainee = trainee_repository.save(db, trainee)
 
     background_tasks.add_task(ws_manager.broadcast, tenant_id, {"type": "trainee_created", "traineeUid": trainee.traineeUid})
 

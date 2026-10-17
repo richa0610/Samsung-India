@@ -217,13 +217,6 @@ class TrainingDetailOut(BaseModel):
     scheduleEditable: bool = True
 
 
-class TrainerLocation(BaseModel):
-    """Where the trainer is when they start / stop / restart a module - recorded on the session's
-    activity log. Optional: an action is never refused for a missing location."""
-    latitude: float = Field(ge=-90, le=90)
-    longitude: float = Field(ge=-180, le=180)
-
-
 class AttendanceMarkRequest(BaseModel):
     status: Literal["Present", "Absent", "Joined", "Pending"]
     # The trainer must give a reason for a manual Present/Absent mark - it's
@@ -339,6 +332,7 @@ class TrainerSummaryOut(BaseModel):
     pending: int
     missed: int = 0
     ongoing: int = 0
+    pendingApproval: int = 0
     executedPercentage: int
     pendingPercentage: int
     recentCompleted: list[TrainingAgendaItem] = []

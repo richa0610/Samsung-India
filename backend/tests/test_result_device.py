@@ -69,6 +69,6 @@ class LiveQuizSubmission(ResultDeviceTestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         result = self.result()
-        self.assertEqual(result.status, "Submitted")
+        self.assertEqual(result.status, "Completed")
         # The device of the trainee's own answer (recorded with their start) - never the trainer's.
         self.assertEqual((result.ipAddress, result.deviceInfo), (TRAINEE_IP, PHONE))

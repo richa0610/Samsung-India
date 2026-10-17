@@ -1,4 +1,5 @@
 from sqlalchemy import BigInteger, Column, DateTime, Integer, String, Text, text
+from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.sql import func
 
 from app.database.connection import CommonBase
@@ -79,4 +80,8 @@ class Admin(CommonBase):
     # services/token_revocation.py); a token carries the value it was issued with as `ver`.
     tokenVersion = Column(Integer, nullable=False, server_default=text("0"))
     remarks = Column(Text)
+    # Who last changed this account and from where, in the other system's wording
+    # (services/admin_change_audit.py). Existing LONGTEXT columns of the real table.
+    securityDetails = Column(Text().with_variant(LONGTEXT(), "mysql"))
+    masterRemarks = Column(Text().with_variant(LONGTEXT(), "mysql"))
     timestamp = Column(DateTime, server_default=func.now(), nullable=False)

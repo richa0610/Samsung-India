@@ -262,7 +262,7 @@ class TraineeRanking(unittest.TestCase):
                         self.db.add(AssessmentResult(
                             resultUid=f"RES-RK-{c}-{trainee_uid}-{suite}", conferenceUid=f"CONF-RK-{c}", traineeUid=trainee_uid,
                             assessmentSuiteUid=suite, attemptNumber=1, totalScore=rng.randint(0, maximum), maxScore=maximum,
-                            percentage=rng.randint(0, 100), status=rng.choice(["Submitted", "Submitted", "InProgress"])))
+                            percentage=rng.randint(0, 100), status=rng.choice(["Completed", "Submitted", "InProgress"])))
         self.db.commit()
 
     def reset(self):

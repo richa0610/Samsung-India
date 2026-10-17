@@ -26,7 +26,7 @@ type TrainerDashboardScrollContentProps = {
   onOpenProfile: () => void;
   onLogout: () => void;
   onSelectSession: (conferenceUid: string) => void;
-  onPressStatCard?: (cardKey: "total" | "completed" | "planned" | "missed" | "ongoing") => void;
+  onPressStatCard?: (cardKey: "total" | "completed" | "planned" | "pending" | "missed" | "ongoing") => void;
 };
 
 export default function TrainerDashboardScrollContent({

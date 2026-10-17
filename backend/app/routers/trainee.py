@@ -1,7 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.core.rate_limit import rate_limit
 from app.dependencies.auth import get_current_trainee
 from app.dependencies.database import get_db, get_tenant_id_from_request
 from app.models.trainee import Trainee
@@ -19,12 +18,7 @@ router = APIRouter(prefix="/trainees", tags=["trainees"])
 
 
 # Signs the new trainee in too (a self-registered trainee has no password to log in with later).
-@router.post(
-    "/register",
-    response_model=TokenResponse,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(rate_limit(max_attempts=5, window_seconds=300))],
-)
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register_trainee(
     payload: TraineeRegister, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)
 ):
@@ -33,8 +27,8 @@ def register_trainee(
     )
 
 
-# Company ID / phone + password. Limited by failed logins only (per caller IP and per account) inside
-# trainee_service.login - not by every request, which would lock out a classroom on one venue Wi-Fi.
+# Company ID / phone + password. Limited by failed logins per account only (trainee_service.login) -
+# never per caller IP, which would lock out a classroom on one venue Wi-Fi.
 @router.post("/login", response_model=TokenResponse)
 def login_trainee(payload: TraineeLogin, request: Request, db: Session = Depends(get_db)):
     tenant_id = get_tenant_id_from_request(request)

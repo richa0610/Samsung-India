@@ -19,6 +19,7 @@ jest.mock("@/hooks/useAdminFilters", () => ({
 jest.mock("@/api/session", () => ({
   getCurrentSession: jest.fn(() => Promise.reject(new Error("no session"))),
   getTraineeDashboard: jest.fn(() => Promise.resolve(null)),
+  isSessionLive: jest.fn(() => false),
 }));
 
 beforeEach(() => {

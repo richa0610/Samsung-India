@@ -6,23 +6,27 @@ from app.core.constants import (
     AUDIENCE_CATEGORY,
     CHECKLIST_CATEGORY,
     SESSION_TYPE_CATEGORY,
-    STATE_CATEGORY_GROUP,
     TRAINING_TYPE_CATEGORY,
     ZONE_CATEGORY_GROUP,
 )
+from app.core.exceptions import bad_request
 from app.models.conference import Conference
 from app.repositories import catalog_repository
 from app.schemas.catalog import MasterGroupOut, SelectOptionOut
+from app.services import location_service
+from app.utils.zones import zone_key
 
 
-def list_venues(db: Session, district: Optional[str]) -> list[SelectOptionOut]:
-    """Powers the Add Training form's Venue picker, gated on District."""
-    venues = catalog_repository.list_venues(db, district)
+def list_venues(
+    db: Session, common_db: Session, district: Optional[str], state: Optional[str] = None
+) -> list[SelectOptionOut]:
+    """Powers the Add Training form's Venue picker, gated on District and its State (both from the
+    pincode directory - location_service): the venues the venue table puts there, plus any whose
+    pincode belongs to that district. An older app build sends no state: its district's venues by
+    name only, as before."""
+    pincodes = location_service.district_pincodes(common_db, state, district) if state and district else frozenset()
+    venues = catalog_repository.list_venues(db, district, state, pincodes)
     return [SelectOptionOut(label=v.name, value=v.venueUid) for v in venues]
-
-
-def _groups(db: Session, group: str) -> list[MasterGroupOut]:
-    return [MasterGroupOut(name=name, options=options) for name, options in catalog_repository.list_category_groups(db, group)]
 
 
 def list_zones(db: Session) -> list[MasterGroupOut]:
@@ -30,13 +34,29 @@ def list_zones(db: Session) -> list[MasterGroupOut]:
     North, ...), each with its regions (its subcategories), saved as the master spells them
     ("North"). A training saved earlier as "North Zone" is the same zone everywhere zones are
     compared (utils/zones.py)."""
-    return _groups(db, ZONE_CATEGORY_GROUP)
+    return [
+        MasterGroupOut(name=name, options=options)
+        for name, options in catalog_repository.list_category_groups(db, ZONE_CATEGORY_GROUP)
+    ]
 
 
-def list_states(db: Session) -> list[MasterGroupOut]:
-    """Powers the Add Training form's State and District pickers: the state categories, each
-    with its districts (its subcategories)."""
-    return _groups(db, STATE_CATEGORY_GROUP)
+def master_zone_region(db: Session, zone: Optional[str], region: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    """A zone and region a self-registering trainee picked, as the master list names them - or 400
+    when either isn't on it (the zone names the trainee's ID: SOUTH2610001). No zone = none picked
+    (an older app build): (None, None)."""
+    if not (zone or "").strip():
+        return None, None
+    groups = catalog_repository.list_category_groups(db, ZONE_CATEGORY_GROUP)
+    match = next(((name, regions) for name, regions in groups if zone_key(name) == zone_key(zone)), None)
+    if match is None:
+        raise bad_request("Pick your zone from the list")
+    zone_name, regions = match
+    if not (region or "").strip():
+        return zone_name, None
+    region_name = next((r for r in regions if r.strip().lower() == region.strip().lower()), None)
+    if region_name is None:
+        raise bad_request("Pick a region of your zone from the list")
+    return zone_name, region_name
 
 
 def list_checklist_items(db: Session) -> list[SelectOptionOut]:

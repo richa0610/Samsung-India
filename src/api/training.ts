@@ -100,6 +100,7 @@ export type TrainerSummary = {
   pending: number;
   missed: number;
   ongoing: number;
+  pendingApproval?: number;
   executedPercentage: number;
   pendingPercentage: number;
   recentCompleted: TrainingAgendaItem[];
@@ -657,27 +658,25 @@ export function fetchTrainers(token: string, company?: string) {
   });
 }
 
-export function fetchVenues(token: string, district?: string) {
-  const query = district ? `?district=${encodeURIComponent(district)}` : "";
-  return apiRequest<SelectOption[]>(`/admin/venues${query}`, {
+/** The approved venues of a district - and of its state, so a district name two states share
+ *  never mixes their venues (the server also matches a venue by its pincode). */
+export function fetchVenues(token: string, district?: string, state?: string) {
+  const params = new URLSearchParams();
+  if (district) params.set("district", district);
+  if (district && state) params.set("state", state);
+  const query = params.toString();
+  return apiRequest<SelectOption[]>(`/admin/venues${query ? `?${query}` : ""}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
-/** A master-list option and the options that depend on it - a zone and its regions, a state and
- *  its districts. A training saves both as these names. */
+/** An option and the options that depend on it - a zone and its regions (master list), a state
+ *  and its districts (pincode directory, src/api/locations.ts). A training saves both as these names. */
 export type MasterGroup = { name: string; options: string[] };
 
 /** The master list's zones (East, North, ...), each with its regions. */
 export function fetchZones(token: string) {
   return apiRequest<MasterGroup[]>("/admin/zones", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
-
-/** The master list's states, each with its districts. */
-export function fetchStates(token: string) {
-  return apiRequest<MasterGroup[]>("/admin/states", {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

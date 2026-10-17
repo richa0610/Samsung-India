@@ -6,6 +6,7 @@ from app.core.security import hash_password
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.repositories import admin_repository
+from app.services import admin_change_audit
 from app.services.access_service import AccessScope, granted_companies, norm, resolve_scope
 from app.schemas.catalog import SelectOptionOut
 from app.schemas.trainer_profile import TrainerProfileOut, TrainerProfileUpdate
@@ -257,6 +258,20 @@ def _apply_profile_update(target: Admin | AgencyTeam, updates: dict, field_map: 
         # applied, rather than erroring the whole PATCH.
 
 
+def _save_account(
+    common_db: Session, db: Session, account: Admin | AgencyTeam, *, password_changed: bool = False
+) -> None:
+    """Saves a changed profile through the session its row was loaded from: an admin-table account
+    lives in the Common DB (see get_current_admin), an agency trainer in the tenant DB. An admin row
+    is first stamped with who changed it and from where (admin_change_audit) - agencyteam has no
+    such columns."""
+    if isinstance(account, Admin):
+        admin_change_audit.record_profile_change(account, password_changed=password_changed)
+        admin_repository.save(common_db, account)
+    else:
+        admin_repository.save(db, account)
+
+
 def get_profile(admin: Admin | AgencyTeam) -> TrainerProfileOut:
     if isinstance(admin, Admin):
         return _profile(admin, _ADMIN_FIELD_MAP)
@@ -277,15 +292,8 @@ def update_profile(
     for field in _OFFICIAL_FIELDS:
         updates.pop(field, None)
 
-    if isinstance(admin, Admin):
-        _apply_profile_update(admin, updates, _ADMIN_FIELD_MAP)
-        # `admin` was loaded from the Common DB (see get_current_admin) -
-        # must be saved through that same session, not the tenant one.
-        admin_repository.save(common_db, admin)
-    else:
-        _apply_profile_update(admin, updates, _AGENCY_FIELD_MAP)
-        admin_repository.save(db, admin)
-
+    _apply_profile_update(admin, updates, _ADMIN_FIELD_MAP if isinstance(admin, Admin) else _AGENCY_FIELD_MAP)
+    _save_account(common_db, db, admin, password_changed=bool(updates.get("password")))
     return get_profile(admin)
 
 
@@ -308,11 +316,7 @@ async def upload_profile_photo(
     (photo_dir / filename).write_bytes(contents)
 
     admin.profilePhoto = f"{folder}/{filename}"
-    if is_admin:
-        admin_repository.save(common_db, admin)
-    else:
-        admin_repository.save(db, admin)
-
+    _save_account(common_db, db, admin)
     return get_profile(admin)
 
 
@@ -331,9 +335,5 @@ async def upload_aadhar_document(
     (doc_dir / filename).write_bytes(contents)
 
     admin.aadharImage = f"trainer_documents/aadhar/{filename}"
-    if is_admin:
-        admin_repository.save(common_db, admin)
-    else:
-        admin_repository.save(db, admin)
-
+    _save_account(common_db, db, admin)
     return get_profile(admin)

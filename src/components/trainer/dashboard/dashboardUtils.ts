@@ -36,6 +36,7 @@ export type DashboardStats = {
   pending: number;
   missed: number;
   ongoing: number;
+  pendingApproval: number;
   executedPercentage: number;
   pendingPercentage: number;
 };

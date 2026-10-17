@@ -61,7 +61,7 @@ class StartedThenSubmitted(ResultLifecycleTestCase):
             response = self.submit(self.answers("a", "b", "x"))
         self.assertEqual(response.status_code, 200, response.text)
         [row] = self.rows()
-        self.assertEqual((row.status, row.startedAt, row.submittedAt), ("Submitted", OPENED, SUBMITTED))
+        self.assertEqual((row.status, row.startedAt, row.submittedAt), ("Completed", OPENED, SUBMITTED))
         self.assertEqual(row.durationSeconds, 15 * 60 + 30)
         self.assertEqual((float(row.totalScore), float(row.maxScore), row.attemptNumber), (2, 3, started_attempt))
 
@@ -78,14 +78,14 @@ class StartedThenSubmitted(ResultLifecycleTestCase):
         self.open_questions()
         self.submit(self.answers("a", "b", "c"))
         self.open_questions()
-        self.assertEqual([row.status for row in self.rows()], ["Submitted"])
+        self.assertEqual([row.status for row in self.rows()], ["Completed"])
 
     def test_a_submit_with_no_recorded_start_leaves_the_start_unknown(self):
         self.open_module()
         with self.at(SUBMITTED):
             self.assertEqual(self.submit(self.answers("a", "b", "c")).status_code, 200)
         [row] = self.rows()
-        self.assertEqual((row.status, row.startedAt, row.submittedAt, row.durationSeconds), ("Submitted", None, SUBMITTED, 0))
+        self.assertEqual((row.status, row.startedAt, row.submittedAt, row.durationSeconds), ("Completed", None, SUBMITTED, 0))
 
 
 class LiveQuizStartedThenSubmitted(ResultLifecycleTestCase):
@@ -132,7 +132,7 @@ class LiveQuizStartedThenSubmitted(ResultLifecycleTestCase):
         self.answer_two_questions()
         self.assertEqual(self.as_trainee(PRESENT, "POST", f"/sessions/live-quiz/submit?conferenceUid={S_N1}").status_code, 200)
         [row] = self.rows()
-        self.assertEqual((row.status, row.startedAt), ("Submitted", utc_from_epoch_ms(self.first_live_ms)))
+        self.assertEqual((row.status, row.startedAt), ("Completed", utc_from_epoch_ms(self.first_live_ms)))
         self.assertIsNotNone(row.submittedAt)
         self.assertEqual((float(row.totalScore), float(row.maxScore)), (1, 3))   # q0 "a" right, q1 "a" wrong
 
@@ -141,7 +141,7 @@ class LiveQuizStartedThenSubmitted(ResultLifecycleTestCase):
         response = self.w.client.post(f"/admin/trainings/{S_N1}/live-quiz/finish", headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 200, response.text)
         [row] = self.rows()
-        self.assertEqual((row.status, row.startedAt), ("Submitted", utc_from_epoch_ms(self.first_live_ms)))
+        self.assertEqual((row.status, row.startedAt), ("Completed", utc_from_epoch_ms(self.first_live_ms)))
 
 
 class SurveysAreNeverScored(ResultLifecycleTestCase):
@@ -173,7 +173,7 @@ class SurveysAreNeverScored(ResultLifecycleTestCase):
             {"totalScore": 0, "maxScore": 0, "percentage": 0, "correctCount": 0},
         )
         [row] = self.rows("SURVEY-1")
-        self.assertEqual((row.status, float(row.maxScore)), ("Submitted", 0))
+        self.assertEqual((row.status, float(row.maxScore)), ("Completed", 0))
 
     def test_the_survey_card_and_detail_show_no_score(self):
         self.take_test_then_survey()

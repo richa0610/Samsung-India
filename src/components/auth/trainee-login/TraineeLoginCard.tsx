@@ -19,6 +19,9 @@ const cardShadow = createShadow({
   elevation: 4,
 });
 
+// A phone number is 10 digits and a Company ID (Trainee UID, e.g. TRN2610001) 10 characters.
+const LOGIN_ID_MAX_LENGTH = 10;
+
 type TraineeLoginCardProps = {
   phone: string;
   setPhone: (phone: string) => void;
@@ -72,7 +75,7 @@ export default function TraineeLoginCard({
           }}
           autoCapitalize="none"
           autoCorrect={false}
-          maxLength={100}
+          maxLength={LOGIN_ID_MAX_LENGTH}
           placeholderTextColor={Colors.authPlaceholder}
           labelColor={Colors.authLabel}
           containerStyle={styles.field}

@@ -11,14 +11,14 @@ export type Trainee = {
   designation: string | null;
   employee_id: string | null;
   supervisorName: string | null;
+  // Optional: a session saved on the phone before these were sent has none until the next sign-in.
+  supervisorDesignation?: string | null;
   state: string | null;
   district: string | null;
+  zone?: string | null;
+  region?: string | null;
   profilePhoto: string | null;
   status: string;
-  workZone?: string | null;
-  departmentSupport?: string | null;
-  department?: string | null;
-  sessionCode?: string | null;
 };
 
 export type AuthSession = {
@@ -37,6 +37,9 @@ export type RegisterPayload = {
   supervisorName?: string;
   state: string;
   district?: string;
+  // From the master list; the zone starts the trainee's ID (e.g. SOUTH2610001).
+  zone?: string;
+  region?: string;
 };
 
 /** Self-registration (no password) also signs the new trainee in - it returns their session. */

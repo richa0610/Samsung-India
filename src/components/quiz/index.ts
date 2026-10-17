@@ -33,6 +33,4 @@ export * from "./PerformanceSummary";
 export { default as LeaderboardRow } from "./LeaderboardRow";
 export * from "./LeaderboardRow";
 
-export { default as LeaderboardFilter } from "./LeaderboardFilter";
-export * from "./LeaderboardFilter";
 

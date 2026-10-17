@@ -8,13 +8,14 @@ from app.core.exceptions import bad_request, conflict, forbidden
 from app.core.media import media_subdir
 from app.models.admin import Admin
 from app.models.conference import Conference
-from app.models.conference_activity_log import ConferenceActivityLog
-from app.repositories import activity_log_repository, conference_repository
+from app.repositories import conference_repository
 from app.schemas.training import TrainingOut
+from app.services.account_ids import account_name
 from app.services.activity_log_service import log_activity
-from app.services.module_flow import log_module_action, trainer_position, venue_override_remark
+from app.services.module_flow import log_module_action
+from app.utils.conference_format import SESSION_STARTED, STORED_RUNNING, gps_override_remark, is_cancelled, is_completed
 from app.services.training.common import nudge_session_room, owned_conference, training_out
-from app.utils.date_utils import VENUE_TIME_FORMAT, ist_now, ist_to_iso, parse_module_start, utc_now
+from app.utils.date_utils import ist_now, ist_to_iso, parse_module_start, to_venue_time
 from app.utils.helpers import geofence_enabled, within_geofence
 from app.utils.status import title_status
 from app.utils.validators import read_photo_upload
@@ -140,7 +141,7 @@ def _resolve_schedule_override(conference: Conference, reason: str | None) -> bo
         return False
 
     if not override_reason:
-        scheduled_label = conference.conferenceTime or scheduled_start.strftime(VENUE_TIME_FORMAT)
+        scheduled_label = to_venue_time(conference.conferenceTime)
         early = ist_now() < scheduled_start
         raise HTTPException(
             status_code=http_status.HTTP_409_CONFLICT,
@@ -190,9 +191,9 @@ async def start_training(
     tenant_id: str = None,
 ) -> TrainingOut:
     conference = owned_conference(db, admin, conference_uid, common_db, tenant_id)
-    if conference.conferenceEndsOn is not None:
+    if is_completed(conference):
         raise conflict("This session has already ended")
-    if title_status(conference.conferenceStatus) == "Cancelled":
+    if is_cancelled(conference):
         raise conflict("This session was cancelled by an admin")
     if title_status(conference.status) != "Approved":
         raise forbidden("This session hasn't been approved by an admin yet")
@@ -203,8 +204,6 @@ async def start_training(
     if conference.conferenceDate and conference.conferenceDate > ist_now().date().isoformat():
         raise bad_request("This session can only be started on its scheduled date")
 
-    # Kept for the activity log: where this session's venue was before a trainer's override.
-    original_venue = (conference.geoLatitude, conference.geoLongitude)
     _resolve_start_geofence(conference, latitude, longitude, venue_latitude, venue_longitude)
     venue_overridden = venue_latitude is not None and venue_longitude is not None
 
@@ -218,38 +217,32 @@ async def start_training(
     # The trainer must capture a check-in photo to start the session - same
     # identity-verification idea as the trainee's secure attendance check-in.
     contents, extension = await read_photo_upload(photo, size_error_detail="Photo must be 5MB or smaller")
-    photo_dir = media_subdir("trainer_checkin_photos", tenant_id)
-    filename = f"{conference.conferenceUid}.{extension}"
-    (photo_dir / filename).write_bytes(contents)
-    conference.startConferenceImage = f"trainer_checkin_photos/{filename}"
+    # Stored the other system's way (user, 2026-10-17): the training's own folder, named by when.
+    started_at = ist_now()
+    filename = f"Host_CHECKIN_START_{started_at:%Y%m%d%H%M%S}.{extension}"
+    (media_subdir(conference.conferenceUid, tenant_id) / filename).write_bytes(contents)
+    conference.startConferenceImage = f"{conference.conferenceUid}/{filename}"
 
-    conference.conferenceStatus = "Ongoing"
+    conference.conferenceStatus = STORED_RUNNING
     if conference.actualStartedAt is None:
-        conference.actualStartedAt = utc_now()
+        conference.actualStartedAt = started_at
+    # A training with no venue location takes the trainer's, from where they start it - as the
+    # other system does (user, 2026-10-17). A venue's own location is never replaced here.
+    if conference.geoLatitude is None and latitude is not None and longitude is not None:
+        conference.geoLatitude, conference.geoLongitude = latitude, longitude
 
-    # Where the trainer started it from; a venue-location override is spelled out in the remark.
-    position = trainer_position(conference, latitude, longitude)
-    if venue_overridden:
-        position["location_remark"] = venue_override_remark(original_venue, conference, latitude, longitude)
-    log_module_action(db, conference.conferenceUid, None, "SESSION_STARTED", admin.username, **position)
+    # The session-start entry is the only one that says where the trainer was (user, 2026-10-17);
+    # a venue-location override is written the other system's way: "GPS_OVERRIDE: <new location>".
+    performer = account_name(admin)
+    log_module_action(
+        db, conference, None, SESSION_STARTED, performer, latitude=latitude, longitude=longitude,
+        location_remark=gps_override_remark(venue_latitude, venue_longitude) if venue_overridden else None,
+    )
 
     if off_schedule:
-        # Mirrored onto the activity log (who/when, alongside the trainer's
-        # location) so it also shows up in the Execution Flow audit log - the
-        # conference row (set by _resolve_schedule_override) is the source
-        # of truth.
-        activity_log_repository.add(
-            db,
-            ConferenceActivityLog(
-                conferenceUid=conference.conferenceUid,
-                moduleId=None,
-                action="SCHEDULE_OVERRIDE",
-                performedBy=admin.username,
-                trainerLat=latitude,
-                trainerLng=longitude,
-                locationRemark=conference.scheduleOverrideReason,
-            ),
-        )
+        # Mirrored onto the activity log (who / when / why) so it also shows up in the Execution Flow
+        # audit log - the conference row (set by _resolve_schedule_override) is the source of truth.
+        log_module_action(db, conference, None, "SCHEDULE_OVERRIDE", performer, location_remark=conference.scheduleOverrideReason)
 
     # Starting the session no longer auto-activates a module - the trainer
     # runs the flow forward one manual Start at a time (session_control.start_module), so

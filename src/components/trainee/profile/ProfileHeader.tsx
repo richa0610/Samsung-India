@@ -56,12 +56,14 @@ export default function ProfileHeader({ trainee, uploading, sessionPillLabel, on
         </Pressable>
       </View>
 
-      <View style={styles.sessionPill}>
-        <Calendar width={13} height={13} color={Colors.brandBlue} />
-        <AppText style={styles.sessionPillText} color={Colors.brandBlue} weight={FontWeight.bold}>
-          {sessionPillLabel}
-        </AppText>
-      </View>
+      {sessionPillLabel ? (
+        <View style={styles.sessionPill}>
+          <Calendar width={13} height={13} color={Colors.brandBlue} />
+          <AppText style={styles.sessionPillText} color={Colors.brandBlue} weight={FontWeight.bold}>
+            {sessionPillLabel}
+          </AppText>
+        </View>
+      ) : null}
     </View>
   );
 }

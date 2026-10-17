@@ -1,8 +1,9 @@
 """scripts/end_running_trainings.py on a synthetic in-memory database (never a real one).
 
-It lists trainings left "Ongoing" / "Live", and ends exactly the ones named - and only while they
-are still running: the live module is stopped (a Live Quiz scored first), the training is marked
-Completed with its end time, the Execution Flow and activity log say it was an admin data fix."""
+It lists trainings left "Ongoing" / "Live" (or "Started"), and ends exactly the ones named - and only
+while they are still running: the live module is stopped (a Live Quiz scored first), the training is
+stored ended the other system's way ("Session Completed", no module, quiz CLOSED - user 2026-10-17)
+with its end time, the Execution Flow and activity log say it was an admin data fix."""
 
 import json
 import unittest
@@ -81,14 +82,14 @@ class Ending(EndRunningTrainingsTestCase):
         before, skipped = script.end_named(self.db, ["CONF-QUIZ"])
         conference = self.conference("CONF-QUIZ")
         self.assertEqual((conference.conferenceStatus, conference.activeModuleId, conference.liveQuizState),
-                         ("Completed", None, "FINISHED"))
-        self.assertIsNotNone(conference.conferenceEndsOn)
+                         ("Session Completed", "", "CLOSED"))
+        self.assertIsNone(conference.conferenceEndsOn)                   # its planned last day - not an end time
         self.assertIsNotNone(conference.actualEndedAt)
         result = self.db.query(AssessmentResult).filter_by(conferenceUid="CONF-QUIZ", traineeUid="TRN1").one()
-        self.assertEqual((result.status, float(result.totalScore)), ("Submitted", 1))
-        self.assertEqual(self.flow("CONF-QUIZ"), [
-            ("LIVE_QUIZ", "STOPPED", script.PERFORMED_BY, script.REMARK),
-            (None, "SESSION_ENDED", script.PERFORMED_BY, script.REMARK),
+        self.assertEqual((result.status, float(result.totalScore)), ("Completed", 1))
+        self.assertEqual(self.flow("CONF-QUIZ"), [                         # the other system's log format
+            ("Quiz_SUITE-Q", "STOPPED", script.PERFORMED_BY, None),
+            ("", "STOPPED", script.PERFORMED_BY, None),
         ])
         self.assertEqual(before, [{"conferenceUid": "CONF-QUIZ", "conferenceStatus": "Ongoing", "conferenceEndsOn": None,
                                    "actualEndedAt": None, "activeModuleId": "LIVE_QUIZ", "liveQuizState": "QUESTION_LIVE"}])
@@ -96,13 +97,13 @@ class Ending(EndRunningTrainingsTestCase):
 
     def test_a_training_with_nothing_live_just_ends(self):
         script.end_named(self.db, ["CONF-IDLE"])
-        self.assertEqual(self.conference("CONF-IDLE").conferenceStatus, "Completed")
-        self.assertEqual(self.flow("CONF-IDLE"), [(None, "SESSION_ENDED", script.PERFORMED_BY, script.REMARK)])
+        self.assertEqual(self.conference("CONF-IDLE").conferenceStatus, "Session Completed")
+        self.assertEqual(self.flow("CONF-IDLE"), [("", "STOPPED", script.PERFORMED_BY, None)])
 
     def test_one_already_stamped_as_ended_keeps_its_end_time(self):
         script.end_named(self.db, ["CONF-STUCK"])
         conference = self.conference("CONF-STUCK")
-        self.assertEqual((conference.conferenceStatus, conference.conferenceEndsOn), ("Completed", "2026-09-15 06:00:00"))
+        self.assertEqual((conference.conferenceStatus, conference.conferenceEndsOn), ("Session Completed", "2026-09-15 06:00:00"))
 
     def test_only_the_named_ones_and_only_while_still_running(self):
         _, skipped = script.end_named(self.db, ["CONF-IDLE", "CONF-DONE", "CONF-LATER", "CONF-NOPE"])

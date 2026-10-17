@@ -24,6 +24,9 @@ export function useEditProfileForm({ onSuccess }: UseEditProfileFormOptions = {}
     supervisorName: trainee?.supervisorName ?? "",
     state: trainee?.state ?? "",
     district: trainee?.district ?? "",
+    // Not shown or sent: the zone started the trainee's ID, so Edit Profile leaves it alone.
+    zone: trainee?.zone ?? "",
+    region: trainee?.region ?? "",
   };
 
   // The trainee may only fill in blanks - any field that already came back

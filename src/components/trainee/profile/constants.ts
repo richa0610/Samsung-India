@@ -1,7 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
 
-import { STATES } from "@/data/states";
-
 export const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 
 export type DetailItem = {
@@ -10,9 +8,21 @@ export type DetailItem = {
   value: string;
 };
 
-export function locationLabel(state: string | null, district: string | null) {
-  const stateEntry = STATES.find((item) => item.value === state);
-  const districtEntry = stateEntry?.cities.find((city) => city.value === district);
-  const parts = [districtEntry?.label, stateEntry?.label].filter(Boolean);
-  return parts.length ? parts.join(", ") : "--";
+/** A profile value as shown: the saved value, or "--" when there is none - never a made-up one. */
+export function shownValue(value: string | number | null | undefined): string {
+  const text = value === null || value === undefined ? "" : String(value).trim();
+  return text || "--";
+}
+
+/** A saved state / district as words. Older records hold the old built-in list's codes
+ *  ("new_delhi", "up"); those read "New Delhi", "UP". A saved name is kept as it is. */
+export function placeName(value: string | null | undefined): string {
+  const text = (value ?? "").trim();
+  if (!/^[a-z_]+$/.test(text)) return text;
+  if (text.length <= 3) return text.toUpperCase();
+  return text
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(" ");
 }

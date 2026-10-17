@@ -19,11 +19,11 @@ export function SystemAccessSection({ form }: { form: NewTraineeForm }) {
       <View style={styles.noticeRow}>
         <Ionicons name="information-circle-outline" size={16} color={Colors.gray600} />
         <AppText style={styles.noticeText} color={Colors.gray600}>
-          Login credentials are automatically generated based on the trainee UID.
+          The Trainee ID is created from the zone when you save (e.g. SOUTH2610001) - it is the trainee&apos;s login ID.
         </AppText>
       </View>
 
-      <AppInput label="Username (Same as UID)" value={form.traineeUid} editable={false} />
+      <AppInput label="Username (Trainee ID)" value="Created when you save" editable={false} />
       <AppInput
         label="System Generated Password"
         value={form.password}

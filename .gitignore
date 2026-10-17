@@ -65,5 +65,10 @@ backend/media/trainer_photos/*
 
 coverage.xml
 backend/coverage.xml
+.coverage
+*/.coverage
+*.zip
 *.log
+.scannerwork/
+*/.scannerwork/
 

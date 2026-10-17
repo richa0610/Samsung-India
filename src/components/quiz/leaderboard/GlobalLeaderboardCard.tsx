@@ -1,7 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 
-import LeaderboardFilter, { LeaderboardFilterValues } from "@/components/quiz/LeaderboardFilter";
 import LeaderboardRow, { LeaderboardUser } from "@/components/quiz/LeaderboardRow";
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
@@ -9,22 +8,10 @@ import { FontWeight } from "@/theme/fontWeight";
 import { createShadow } from "@/theme/shadows";
 
 type GlobalLeaderboardCardProps = {
-  filterOpen: boolean;
-  setFilterOpen: (open: boolean) => void;
-  filterValues: LeaderboardFilterValues;
-  setFilterValues: (values: LeaderboardFilterValues) => void;
-  onApplyFilter: () => void;
   leaderboardUsers: LeaderboardUser[];
 };
 
-export default function GlobalLeaderboardCard({
-  filterOpen,
-  setFilterOpen,
-  filterValues,
-  setFilterValues,
-  onApplyFilter,
-  leaderboardUsers,
-}: GlobalLeaderboardCardProps) {
+export default function GlobalLeaderboardCard({ leaderboardUsers }: GlobalLeaderboardCardProps) {
   return (
     <View style={styles.leaderboardCard}>
       <View style={styles.cardHeader}>
@@ -34,24 +21,7 @@ export default function GlobalLeaderboardCard({
             Global Top 100
           </AppText>
         </View>
-
-        <Pressable
-          style={styles.filterBtn}
-          onPress={() => setFilterOpen(!filterOpen)}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="Toggle Leaderboard Filter"
-        >
-          <AppText style={styles.filterBtnText} color={Colors.headerBlue} weight={FontWeight.semiBold}>
-            {filterOpen ? "Close" : "Filter"}
-          </AppText>
-          <Ionicons name={filterOpen ? "chevron-down" : "chevron-forward"} size={13} color={Colors.headerBlue} />
-        </Pressable>
       </View>
-
-      {filterOpen && (
-        <LeaderboardFilter values={filterValues} onChangeValues={setFilterValues} onApply={onApplyFilter} />
-      )}
 
       <View style={styles.rowsList}>
         {leaderboardUsers.map((user, index) => (
@@ -84,16 +54,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: Colors.black,
     letterSpacing: 0.4,
-  },
-  filterBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-    paddingVertical: 2,
-    paddingHorizontal: 4,
-  },
-  filterBtnText: {
-    fontSize: 12,
   },
   rowsList: {
     gap: 0,

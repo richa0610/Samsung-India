@@ -16,6 +16,7 @@ export default function QuizLeaderboardScreen() {
   const {
     insets,
     screenWidth,
+    isTrainingLive,
     liveState,
     showResults,
     quizEnded,
@@ -24,12 +25,7 @@ export default function QuizLeaderboardScreen() {
     accuracy,
     incorrect,
     timeTakenFormatted,
-    filterOpen,
-    setFilterOpen,
-    filterValues,
-    setFilterValues,
     leaderboardUsers,
-    handleApplyFilter,
     handleContinue,
     handleTabSelect,
     confirmLogoutOpen,
@@ -91,14 +87,7 @@ export default function QuizLeaderboardScreen() {
           timeTaken={timeTakenFormatted}
         />
 
-        <GlobalLeaderboardCard
-          filterOpen={filterOpen}
-          setFilterOpen={setFilterOpen}
-          filterValues={filterValues}
-          setFilterValues={setFilterValues}
-          onApplyFilter={handleApplyFilter}
-          leaderboardUsers={leaderboardUsers}
-        />
+        <GlobalLeaderboardCard leaderboardUsers={leaderboardUsers} />
 
         <Pressable
           style={styles.continueButton}
@@ -113,7 +102,11 @@ export default function QuizLeaderboardScreen() {
       </ScrollView>
       )}
 
-      <TraineeBottomNavigation activeTab="rank" onSelectTab={handleTabSelect} />
+      <TraineeBottomNavigation
+        activeTab="rank"
+        onSelectTab={handleTabSelect}
+        isTrainingLive={isTrainingLive}
+      />
 
       <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </SafeAreaView>

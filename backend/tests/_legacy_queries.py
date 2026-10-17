@@ -4,6 +4,7 @@ The app no longer has, or needs, any of them (Phase 7 removed them from app/repo
 
 from sqlalchemy.orm import Session
 
+from app.core.constants import FINISHED_RESULT_STATUSES
 from app.models.attendance import Attendance
 from app.models.conference import Conference
 from app.models.quiz import AssessmentResult
@@ -44,14 +45,14 @@ def list_submitted_pairs(db: Session, conference_uids: list[str]) -> list[tuple[
         return []
     rows = (
         db.query(AssessmentResult.conferenceUid, AssessmentResult.traineeUid)
-        .filter(AssessmentResult.conferenceUid.in_(conference_uids), AssessmentResult.status == "Submitted")
+        .filter(AssessmentResult.conferenceUid.in_(conference_uids), AssessmentResult.status.in_(FINISHED_RESULT_STATUSES))
         .all()
     )
     return [(row.conferenceUid, row.traineeUid) for row in rows]
 
 
 def list_all_submitted_results(db: Session) -> list[AssessmentResult]:
-    return db.query(AssessmentResult).filter(AssessmentResult.status == "Submitted").all()
+    return db.query(AssessmentResult).filter(AssessmentResult.status.in_(FINISHED_RESULT_STATUSES)).all()
 
 
 def list_attended_trainee_uids(db: Session) -> set[str]:

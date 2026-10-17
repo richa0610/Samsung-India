@@ -1,4 +1,3 @@
-import json
 from collections import defaultdict
 from datetime import timedelta
 
@@ -14,8 +13,22 @@ from app.core.constants import (
 from app.models.conference import Conference
 from app.models.conference_activity_log import ConferenceActivityLog
 from app.repositories import activity_log_repository, attendance_repository, conference_repository
+from app.utils.conference_format import (
+    AUTOMATIC_UNLOCK,
+    active_module,
+    has_attendance,
+    is_running,
+    live_quiz_suite_uid,
+    log_action,
+    log_columns,
+    log_module,
+    module_id,
+    module_suite_uid,
+    quiz_suite_uids,
+    read_session_config,
+    set_quiz_state,
+)
 from app.utils.date_utils import ist_now, parse_module_start, time_to_minutes, utc_now
-from app.utils.helpers import distance_meters, geofence_enabled
 
 # sessionConfig key + planned-start-time field for each module, used to order
 # the flow by time.
@@ -52,28 +65,9 @@ __all__ = [
 ]
 
 
-def live_quiz_suite_uid(conference: Conference) -> str | None:
-    """The assessment suite the Live Quiz module runs against. Unlike the
-    other modules it has no dedicated Conference column - it only ever lives
-    in `sessionConfig.liveQuiz.assessmentSuiteUid`."""
-    if not conference.sessionConfig:
-        return None
-    try:
-        return json.loads(conference.sessionConfig).get("liveQuiz", {}).get("assessmentSuiteUid")
-    except (ValueError, AttributeError):
-        return None
-
-
-def module_suite_uid(conference: Conference, module_key: str) -> str | None:
-    """The question set a trainee answers in this module: the Standard Test, Live Quiz or Survey
-    suite. None for ATTENDANCE, or a module whose suite isn't set."""
-    if module_key == "STANDARD_TEST":
-        return conference.postAssessmentUid
-    if module_key == "LIVE_QUIZ":
-        return live_quiz_suite_uid(conference)
-    if module_key == "SURVEY":
-        return conference.surveyUid
-    return None
+# live_quiz_suite_uid / module_suite_uid live in conference_format (the Live Quiz's question set is
+# only in `sessionConfig`, in either stored shape); they're re-exported here, where the rest of the
+# app has always looked for them.
 
 
 def scored_suite_uids(conference: Conference) -> set[str]:
@@ -81,7 +75,7 @@ def scored_suite_uids(conference: Conference) -> set[str]:
     Survey has no right answers, so its result only records that it was submitted - it never
     counts toward a score, pass / fail, average or rank (dashboard_repository.scored_suite_condition
     is the same rule in SQL)."""
-    return {suite for suite in (conference.postAssessmentUid, live_quiz_suite_uid(conference)) if suite}
+    return {suite for suite in (conference.postAssessmentUid, *quiz_suite_uids(conference)) if suite}
 
 
 def _module_start_minutes(module_key: str, config: dict, conference: Conference) -> int | None:
@@ -96,15 +90,11 @@ def configured_modules(conference: Conference) -> list[str]:
     """Which modules this session's flow includes, in run order - sorted by
     each module's planned start time (from `sessionConfig`). Modules without a
     planned time keep the canonical order and sort last."""
-    config = {}
-    if conference.sessionConfig:
-        try:
-            config = json.loads(conference.sessionConfig)
-        except ValueError:
-            config = {}
+    config = read_session_config(conference.sessionConfig)
 
     modules = []
-    if conference.enableCheckIn:
+    # The other system lists Attendance as a module and keeps enableCheckIn 0 (user, 2026-10-17).
+    if has_attendance(conference):
         modules.append("ATTENDANCE")
     if conference.postAssessmentUid:
         modules.append("STANDARD_TEST")
@@ -126,12 +116,7 @@ def module_planned_minutes(conference: Conference) -> dict[str, int]:
     "10:00 AM" values). Modules with no usable start/end pair - or an end
     that isn't after the start - are left out. Drives the "Assigned" time
     budget and the "Total Time Used" gauge on the Session Dashboard."""
-    config = {}
-    if conference.sessionConfig:
-        try:
-            config = json.loads(conference.sessionConfig)
-        except ValueError:
-            config = {}
+    config = read_session_config(conference.sessionConfig)
 
     planned: dict[str, int] = {}
     for module_key in configured_modules(conference):
@@ -151,70 +136,30 @@ def module_planned_minutes(conference: Conference) -> dict[str, int]:
 
 def log_module_action(
     db: Session,
-    conference_uid: str,
-    module_id: str | None,
+    conference: Conference,
+    module: str | None,
     action: str,
     performed_by: str,
     latitude: float | None = None,
     longitude: float | None = None,
     location_remark: str | None = None,
 ) -> None:
-    """One Execution Flow event, with where the trainer was when they triggered it (none for a
-    module the server auto-started)."""
+    """One Execution Flow event about `module` (this app's key; None = the whole session), stored
+    the other system's way (user, 2026-10-17 - conference_format.log_columns): its module ID, the
+    session's start / end as STARTED / STOPPED with no module, India time, `performed_by` the
+    person's name. Only the session-start entry carries where the trainer was (session_start)."""
     activity_log_repository.add(
         db,
         ConferenceActivityLog(
-            conferenceUid=conference_uid,
-            moduleId=module_id,
-            action=action,
+            conferenceUid=conference.conferenceUid,
+            **log_columns(conference, module, action),
+            timestamp=ist_now(),
             performedBy=performed_by,
             trainerLat=latitude,
             trainerLng=longitude,
             locationRemark=location_remark,
         ),
     )
-
-
-def trainer_position(conference: Conference, latitude: float | None, longitude: float | None) -> dict:
-    """log_module_action's location arguments for a trainer action: the trainer's coordinates and a
-    remark on how far they were from this session's venue."""
-    return {
-        "latitude": latitude,
-        "longitude": longitude,
-        "location_remark": _distance_remark(conference, latitude, longitude),
-    }
-
-
-def venue_override_remark(
-    original: tuple[float | None, float | None], conference: Conference, latitude: float | None, longitude: float | None
-) -> str:
-    """The location remark when the trainer moves this session's venue location (the "you're not at
-    the venue" prompt at session start): from where, to where, and how far they were from the old one."""
-    def point(lat, lng) -> str:
-        return f"{float(lat):.6f}, {float(lng):.6f}" if lat is not None and lng is not None else "not set"
-
-    remark = (
-        f"Venue location overridden by the trainer: from {point(*original)} "
-        f"to {point(conference.geoLatitude, conference.geoLongitude)}"
-    )
-    # The stored coordinates are Decimals (Numeric columns) - as floats to measure against.
-    away = distance_meters(latitude, longitude, float(original[0]), float(original[1])) if None not in original else None
-    if away is not None:
-        remark += f" - the trainer was {away:.0f} m from the original venue (allowed {conference.geoRadius or 100} m)"
-    return remark
-
-
-def _distance_remark(conference: Conference, latitude: float | None, longitude: float | None) -> str:
-    if latitude is None or longitude is None:
-        return "Trainer location not shared"
-    if conference.geoLatitude is None or conference.geoLongitude is None:
-        return "No venue location set for this session"
-    away = distance_meters(latitude, longitude, float(conference.geoLatitude), float(conference.geoLongitude))
-    if not geofence_enabled(conference):
-        return f"{away:.0f} m from the venue (no geofence)"
-    radius = conference.geoRadius or 100
-    where = "At the venue" if away <= radius else "Outside the venue"
-    return f"{where} - {away:.0f} m from it (allowed {radius} m)"
 
 
 def auto_advance_if_due(db: Session, conference: Conference) -> bool:
@@ -233,7 +178,7 @@ def auto_advance_if_due(db: Session, conference: Conference) -> bool:
 
     Returns True if it started something.
     """
-    if conference.conferenceStatus != "Ongoing" or conference.activeModuleId:
+    if not is_running(conference) or active_module(conference):
         return False
 
     modules = configured_modules(conference)
@@ -242,7 +187,7 @@ def auto_advance_if_due(db: Session, conference: Conference) -> bool:
 
     logs_by_module: dict[str, set[str]] = defaultdict(set)
     for log in activity_log_repository.list_for_conference(db, conference.conferenceUid):
-        logs_by_module[log.moduleId].add(log.action)
+        logs_by_module[log_module(log)].add(log_action(log))
 
     # First module in flow order that hasn't run yet - the same one
     # start_module would let the trainer start right now.
@@ -254,12 +199,8 @@ def auto_advance_if_due(db: Session, conference: Conference) -> bool:
     if not config_key:
         return False  # ATTENDANCE - no unlockCondition, always manual
 
-    try:
-        module_config = json.loads(conference.sessionConfig or "{}").get(config_key) or {}
-    except ValueError:
-        return False
-
-    if module_config.get("unlockCondition") != "Automatic":
+    module_config = read_session_config(conference.sessionConfig).get(config_key) or {}
+    if module_config.get("unlockCondition") != AUTOMATIC_UNLOCK:
         return False
 
     start_at = parse_module_start(conference.conferenceDate, module_config.get("startTime"))
@@ -289,13 +230,14 @@ def auto_advance_if_due(db: Session, conference: Conference) -> bool:
     # UPDATE only succeeds for whichever request's transaction gets there
     # first (MySQL row-locks it until commit); the loser matches 0 rows and
     # backs off without logging anything.
-    if not conference_repository.claim_active_module(db, conference.conferenceUid, None, next_module):
+    stored_module = module_id(conference, next_module)
+    if not conference_repository.claim_active_module(db, conference.conferenceUid, None, stored_module):
         return False
 
-    conference.activeModuleId = next_module
+    conference.activeModuleId = stored_module
     if next_module == "LIVE_QUIZ":
-        conference.liveQuizState = LIVE_QUIZ_STATE_IDLE
-    log_module_action(db, conference.conferenceUid, next_module, "STARTED", AUTO_ADVANCE_PERFORMER)
+        set_quiz_state(conference, LIVE_QUIZ_STATE_IDLE)
+    log_module_action(db, conference, next_module, "STARTED", AUTO_ADVANCE_PERFORMER)
     conference_repository.save(db, conference)
     return True
 

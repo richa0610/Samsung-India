@@ -21,6 +21,7 @@ const EMPTY_STATS: DashboardStats = {
   pending: 0,
   missed: 0,
   ongoing: 0,
+  pendingApproval: 0,
   executedPercentage: 0,
   pendingPercentage: 0,
 };
@@ -74,6 +75,7 @@ export function useTrainerDashboardScreen() {
           pending: data.pending,
           missed: data.missed,
           ongoing: data.ongoing,
+          pendingApproval: data.pendingApproval ?? 0,
           executedPercentage: data.executedPercentage,
           pendingPercentage: data.pendingPercentage,
         });
@@ -139,7 +141,7 @@ export function useTrainerDashboardScreen() {
     }
   };
 
-  const handleStatCardPress = (cardKey: "total" | "completed" | "planned" | "missed" | "ongoing") => {
+  const handleStatCardPress = (cardKey: "total" | "completed" | "planned" | "pending" | "missed" | "ongoing") => {
     const dateParams = {
       start: toApiDate(dateRange.start),
       end: toApiDate(dateRange.end),

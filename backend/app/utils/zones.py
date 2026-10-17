@@ -16,6 +16,12 @@ def zone_key(value: Optional[str]) -> str:
     return key
 
 
+def zone_code(value: Optional[str]) -> str:
+    """The zone as an ID prefix: its letters in capitals - "South" -> "SOUTH", "North East Zone" ->
+    "NORTHEAST" - at most 10 (the width of the ID counter, models/uid_sequence.py). "" for no zone."""
+    return "".join(ch for ch in zone_key(value).upper() if "A" <= ch <= "Z")[:10]
+
+
 def zone_spellings(value: Optional[str]) -> tuple[str, str]:
     """Both stored forms (trimmed, lower-cased) of a zone, for a SQL `IN`: ("north", "north zone")."""
     key = zone_key(value)

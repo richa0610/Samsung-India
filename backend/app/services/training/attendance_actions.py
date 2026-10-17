@@ -23,7 +23,7 @@ from app.services.training.common import nudge_session_room, owned_conference
 from app.services.training.session_dashboard import build_dashboard, latest_post_test_results
 from app.utils.date_utils import utc_now
 from app.utils.helpers import geofence_enabled
-from app.utils.status import title_status
+from app.utils.conference_format import is_running
 
 
 def _append_remark_line(existing: str | None, line: str) -> str:
@@ -60,7 +60,7 @@ def mark_attendance(
     `updatedBy`, appends a timestamped line to `attendance.remarks`, and
     upserts the `attendance_logs` snapshot for the ATTENDANCE module."""
     conference = owned_conference(db, admin, conference_uid, common_db, tenant_id)
-    if title_status(conference.conferenceStatus) != "Ongoing":
+    if not is_running(conference):
         raise conflict("Attendance can only be changed while the session is running")
 
     now_str = utc_now().strftime("%Y-%m-%d %H:%M:%S")
@@ -177,7 +177,7 @@ def reset_attendance(
     List. Same rules as a manual mark (mark_attendance): only while the session is running, and
     with a reason, which goes into the audit trail."""
     conference = owned_conference(db, admin, conference_uid, common_db, tenant_id)
-    if title_status(conference.conferenceStatus) != "Ongoing":
+    if not is_running(conference):
         raise conflict("Attendance can only be changed while the session is running")
     if attendance_repository.delete_for_conference_and_trainee(db, conference_uid, trainee_uid):
         # Same audit trail as a manual mark or a proctoring unlock: who cleared whose record, where, why.

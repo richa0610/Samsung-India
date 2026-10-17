@@ -31,6 +31,8 @@ from app.schemas.admin import (
 )
 from app.services.activity_log_service import log_activity
 from app.services.training.session_dashboard import audience_class
+from app.services.account_ids import account_keys, with_trainer_ids
+from app.utils.conference_format import session_status
 from app.utils.status import title_status
 
 
@@ -44,7 +46,7 @@ def login(
     """`Admin` (superadmin/internal accounts) lives in the shared Common
     Database; `AgencyTeam` (partner-agency trainers) lives in the caller's
     own tenant database - see the DB-per-tenant split in app/database/."""
-    # Per-account failure limit on top of the per-IP one (routers/admin.py): wrong passwords for
+    # Per-account failure limit (the only login limit - none per caller IP): wrong passwords for
     # one username, from however many addresses, lock only that username in this tenant for a while.
     account = f"{tenant_id}:{payload.username}"
     rate_limit.ensure_account_not_locked("admin-login", account)
@@ -127,7 +129,7 @@ def build_admin_dashboard_stats(
     possible from a direct internal call, never through the router) skips the scope condition
     entirely, the same convention list_trainings_page/list_attendance_page use."""
     scope = None if admin is None else resolve_scope(common_db, admin, tenant_id)
-    conditions = dashboard_repository.conference_conditions(filters)
+    conditions = dashboard_repository.conference_conditions(with_trainer_ids(db, common_db, filters))
     if scope is not None:
         conditions += dashboard_repository.access_scope_conditions(scope)
     trainer_companies = _trainer_companies(scope, filters)
@@ -171,7 +173,7 @@ def _training_stats(snapshot: DashboardSnapshot) -> tuple[TrainingStatsOut, dict
     breakdown_map: dict[str, dict[str, int]] = {}
     counted_by_type: dict[str, int] = {}
     for raw_type, raw_conf_status, raw_approval, count in snapshot.status_groups:
-        conf_status = title_status(raw_conf_status)
+        conf_status = session_status(raw_conf_status)
         is_completed = conf_status == "Completed"
         is_pending = title_status(raw_approval) == "Approved" and conf_status in ("Scheduled", "Ongoing")
         if not (is_completed or is_pending):
@@ -205,7 +207,7 @@ def _training_stats(snapshot: DashboardSnapshot) -> tuple[TrainingStatsOut, dict
 
 def _display_status(raw_conf_status: Optional[str]) -> str:
     raw_status = (raw_conf_status or "").strip()
-    status_title = title_status(raw_status)
+    status_title = session_status(raw_status)
     if status_title == "Ongoing":
         return "Session Started"
     if status_title == "Completed":
@@ -348,13 +350,16 @@ def _trainer_stats(
         # A direct internal call: `trainer_companies` is at most the one explicit `filters.company`.
         filter_company = next(iter(trainer_companies)) if trainer_companies else None
         admin_trainers = admin_repository.list_admin_trainers(common_db, company=filter_company)
-    trainer_usernames = {t.username for t in admin_trainers if t.username}
-    trainer_usernames |= snapshot.agency_trainers
-    pool = len(trainer_usernames)
+    # Each trainer in the pool, by login name -> every value a training may name them by (their ID
+    # since 2026-10-17, their login name before - account_ids.account_keys).
+    trainer_keys: dict[str, set[str]] = {t.username: set(account_keys(t)) for t in admin_trainers if t.username}
+    for username, uid in snapshot.agency_trainers.items():
+        trainer_keys.setdefault(username, {username}).update({uid} if uid else set())
+    pool = len(trainer_keys)
     # Trainers with at least one counted training (same list the Training
     # card uses) are "in training"; everyone else in the pool is idle, so
     # In Training + Idle always equals the pool.
-    in_training = len(snapshot.busy_trainers & trainer_usernames)
+    in_training = sum(1 for keys in trainer_keys.values() if keys & snapshot.busy_trainers)
 
     # Status Analysis: the same counted trainings, broken down by training
     # type, so these numbers always add up to the Training card's Planned

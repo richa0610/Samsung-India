@@ -26,6 +26,7 @@ beforeEach(() => {
     totalSessions: 0,
     completed: 0,
     pending: 0,
+    pendingApproval: 0,
     missed: 0,
     ongoing: 1,
     executedPercentage: 0,
@@ -56,5 +57,16 @@ test("the other cards open their list for the dashboard's date range", async () 
   expect(mockPush).toHaveBeenLastCalledWith({
     pathname: "/sessions",
     params: { tab: "all", status: "planned", start: expect.any(String), end: expect.any(String) },
+  });
+});
+
+test("the pending card opens the pending sessions list for the date range", async () => {
+  const result = await renderDashboard();
+
+  await act(() => result.current.handleStatCardPress("pending"));
+
+  expect(mockPush).toHaveBeenLastCalledWith({
+    pathname: "/sessions",
+    params: { tab: "all", status: "pending", start: expect.any(String), end: expect.any(String) },
   });
 });

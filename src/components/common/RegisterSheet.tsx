@@ -5,6 +5,7 @@ import { Fonts } from "@/theme/fonts";
 import PersonalDetails from "@/components/registration/PersonalDetails";
 import ProfessionalDetails from "@/components/registration/ProfessionalDetails";
 import RegisterButton from "@/components/registration/RegisterButton";
+import ZoneRegionFields from "@/components/registration/ZoneRegionFields";
 import SecurityFooter from "@/components/common/SecurityFooter";
 import AppModal from "@/components/ui/AppModal";
 import AppText from "@/components/ui/AppText";
@@ -56,6 +57,7 @@ export default function RegisterSheet({
             >
                 <PersonalDetails control={control} errors={errors} />
                 <ProfessionalDetails control={control} setValue={setValue} errors={errors} />
+                <ZoneRegionFields control={control} setValue={setValue} errors={errors} />
 
                 {error && (
                     <AppText style={styles.error}>{error}</AppText>

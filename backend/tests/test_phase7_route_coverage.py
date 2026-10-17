@@ -32,6 +32,8 @@ ROUTES = {
     ("POST", "/trainees/login"): PUBLIC,
     ("POST", "/trainees/register"): PUBLIC,
     ("GET", "/sessions/join/{code}"): PUBLIC,  # QR preview - needs a signed join code (tests/test_join_codes.py)
+    ("GET", "/locations/states"): PUBLIC,  # place names for the registration form, before sign-in (tests/test_locations.py)
+    ("GET", "/locations/zones"): PUBLIC,  # zone / region names for the registration form (tests/test_trainee_ids.py)
     ("GET", "/admin/access/scope"): ADMIN,
     ("GET", "/admin/assessment-suites"): STAFF,
     ("POST", "/admin/assessment-suites"): ADMIN,

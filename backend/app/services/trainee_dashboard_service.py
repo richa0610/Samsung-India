@@ -12,7 +12,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.constants import DEFAULT_SESSION_TITLE
+from app.core.constants import DEFAULT_SESSION_TITLE, FINISHED_RESULT_STATUSES
+from app.utils.conference_format import is_cancelled, is_completed, is_running
 from app.models.trainee import Trainee
 from app.repositories import (
     assessment_repository,
@@ -32,7 +33,6 @@ from app.schemas.session import (
 from app.services import session_service
 from app.services.module_flow import live_quiz_suite_uid, scored_suite_uids
 from app.utils.date_utils import ist_now, utc_now
-from app.utils.status import title_status
 
 _PERIOD_DAYS = 30
 
@@ -76,20 +76,20 @@ def _trainee_status_for(conference, attendance) -> str:
     if over:
         return "Missed"
     # Not over yet: Present or unmarked, the row follows the session's own state.
-    if title_status(conference.conferenceStatus) in ("Ongoing", "Live"):
+    if is_running(conference):
         return "Ongoing"
     return "Scheduled"
 
 
 def _session_ended(conference) -> bool:
-    """The trainer ended the session (Completed, or an end time is recorded)."""
-    return title_status(conference.conferenceStatus) == "Completed" or conference.conferenceEndsOn is not None
+    """The trainer ended the session. (`conferenceEndsOn` is its planned last day, not an end.)"""
+    return is_completed(conference)
 
 
 def _never_started(conference) -> bool:
     """The trainer never started this session and its scheduled date (IST) has
     already passed - it just didn't happen, so it isn't the trainee's absence."""
-    if title_status(conference.conferenceStatus) in ("Ongoing", "Live", "Completed", "Cancelled"):
+    if is_running(conference) or is_completed(conference) or is_cancelled(conference):
         return False
     scheduled_day = (conference.conferenceDate or "").strip()
     return bool(scheduled_day) and scheduled_day < ist_now().date().isoformat()
@@ -108,7 +108,7 @@ def _metric_card_for(conference, attendance) -> TraineeMetricCard:
         return "present"
     if _session_ended(conference):
         return "absent"
-    if title_status(conference.conferenceStatus) in ("Ongoing", "Live"):
+    if is_running(conference):
         return "ongoing"
     if _never_started(conference):
         return "notStarted"
@@ -126,7 +126,7 @@ class _OwnTrainings:
         result_rows = assessment_repository.list_results_for_trainee(db, trainee.traineeUid)
         all_uids = {row.conferenceUid for row in attendance_rows} | {row.conferenceUid for row in result_rows}
         conferences = {c.conferenceUid: c for c in conference_repository.list_by_uids(db, all_uids)}
-        dropped = {uid for uid, c in conferences.items() if title_status(c.conferenceStatus) == "Cancelled"}
+        dropped = {uid for uid, c in conferences.items() if is_cancelled(c)}
         if start or end:
             dropped |= {
                 uid
@@ -207,7 +207,7 @@ def build_trainee_dashboard(
 
     def _counts_as_mark(row) -> bool:
         return (
-            row.status == "Submitted"
+            row.status in FINISHED_RESULT_STATUSES
             and row.conferenceUid in present_conf_uids
             and row.assessmentSuiteUid in my_suites.get(row.conferenceUid, set())
         )

@@ -99,7 +99,7 @@ class DashboardEquivalenceTests(unittest.TestCase):
                     traineeUid=f"tr{rng.randint(0, 400)}",
                     assessmentSuiteUid=rng.choice(["s1", "s2", "s3"]),
                     percentage=rng.choice([0, 20, 49.5, 50, 75.25, 100]),
-                    status=rng.choice(["Submitted", "Submitted", "Started"]),
+                    status=rng.choice(["Completed", "Submitted", "Started"]),
                 )
             )
         self.db.commit()

@@ -72,6 +72,10 @@ export type CurrentSession = {
   modules: SessionModule[];
 };
 
+export function isSessionLive(session: CurrentSession | null | undefined): boolean {
+  return Boolean(session && session.started && !session.sessionClosed);
+}
+
 export function getCurrentSession(token: string, conferenceUid?: string) {
   const query = conferenceUid ? `?conference_uid=${encodeURIComponent(conferenceUid)}` : "";
   return apiRequest<CurrentSession>(`/sessions/current${query}`, {

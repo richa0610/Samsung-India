@@ -9,6 +9,7 @@ from app.models.trainee import Trainee
 from app.repositories import trainee_repository
 from app.routers.ws import manager as ws_manager
 from app.schemas.trainee import TokenResponse, TraineeLogin, TraineeRegister, TraineeUpdate
+from app.services import catalog_service
 from app.services.activity_log_service import log_activity
 from app.utils.validators import read_photo_upload
 
@@ -28,7 +29,9 @@ def register(
     if existing:
         raise bad_request("Trainee with this phone or email already exists")
 
-    trainee = trainee_repository.create(db, Trainee(**payload.model_dump()))
+    # Saved as the master list names them; the zone starts the trainee's ID (models/uid_events.py).
+    zone, region = catalog_service.master_zone_region(db, payload.zone, payload.region)
+    trainee = trainee_repository.create(db, Trainee(**payload.model_dump(exclude={"zone", "region"}), zone=zone, region=region))
 
     background_tasks.add_task(ws_manager.broadcast, tenant_id, {"type": "trainee_created", "traineeUid": trainee.traineeUid})
 
@@ -48,17 +51,15 @@ def register(
 def login(db: Session, payload: TraineeLogin, tenant_id: str, ip_address: str | None = None) -> TokenResponse:
     """Company ID (Trainee UID / username) or phone number, plus password. Only a trainee who has a
     password can sign in here; a self-registered one (no password) is signed in once, by `register`."""
-    # Only FAILED logins are limited - per caller IP (a whole classroom shares the venue Wi-Fi's one
-    # address, so successes must not count) and per account, keyed by tenant so one tenant's failures
-    # never lock the same account elsewhere.
-    rate_limit.ensure_caller_not_locked(LOGIN_SCOPE, ip_address)
+    # Only FAILED logins are limited, and only per account (keyed by tenant so one tenant's failures
+    # never lock the same account elsewhere) - never per caller IP: a whole classroom shares the
+    # venue Wi-Fi's one address.
     trainee = trainee_repository.get_by_login_identifier(db, payload.identifier)
     # The account lock follows the trainee, not the words typed - switching between their UID and phone
     # number buys no extra guesses. An identifier that names nobody is counted under its own text.
     account = f"{tenant_id}:trainee-{trainee.id}" if trainee else f"{tenant_id}:typed-{payload.identifier}"
     rate_limit.ensure_account_not_locked(LOGIN_SCOPE, account)
     if not (trainee and trainee.password and verify_password(payload.password, trainee.password)):
-        rate_limit.record_caller_failure(LOGIN_SCOPE, ip_address)
         rate_limit.record_account_failure(LOGIN_SCOPE, account)
         # The same words for every failure - unknown ID, no password set, or a wrong one.
         raise unauthorized("Couldn't sign in. Check your Company ID or Phone No and password.")

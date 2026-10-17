@@ -5,6 +5,14 @@
 # routers/training.py and routers/session.py.
 PASS_THRESHOLD_PERCENT = 50
 
+# An assessment result's status. A finished one is saved as "Completed" - the other system's word
+# (user, 2026-10-16); results this app finished before then say "Submitted", so every reader counts
+# both as finished. "Started" is a test opened but not yet submitted (assessment_service.record_start).
+RESULT_STARTED = "Started"
+RESULT_COMPLETED = "Completed"
+RESULT_SUBMITTED_BEFORE = "Submitted"
+FINISHED_RESULT_STATUSES = (RESULT_COMPLETED, RESULT_SUBMITTED_BEFORE)
+
 # How many times a trainer may lift one trainee's proctoring lockout in one training. Once they're
 # all used, the trainee stays locked out of that training's test.
 MAX_PROCTORING_UNLOCKS = 2
@@ -21,11 +29,6 @@ PROCTORING_VIOLATIONS = (
     "EXCESSIVE HEAD TILT",
     "TAB SWITCH DETECTED",
 )
-
-# Trainees can't yet pick which trainer's session to join - that'll come
-# from scanning a QR code or entering a trainer ID. Until then, the trainee
-# app only ever shows this trainer's session.
-DEMO_TRAINER_EMPLOYEE_ID = "demotrainer"
 
 # The order modules run in within a session. LIVE_QUIZ has no dedicated
 # Conference column (unlike the other three) so it's detected from
@@ -85,10 +88,9 @@ AUDIENCE_CATEGORY = "Audience"
 SESSION_TYPE_CATEGORY = "Session Type"
 TRAINING_TYPE_CATEGORY = "Training Type"
 CHECKLIST_CATEGORY = "Training Checklist"
-# Pickers that depend on another (user, 2026-10-13): the parent options are the approved
-# categories with this `visibleOnWeb` value, and each one's own options are its approved
-# subcategories - the zones (East, North, ... marked "Zone") and their regions (East 1, ...),
-# the states (marked "State", entered by the admin) and their districts.
+# The Zone / Region pickers, which depend on one another (user, 2026-10-13): the zones are the
+# approved categories with this `visibleOnWeb` value (East, North, ...), and each zone's regions
+# are its approved subcategories (East 1, ...). State / District come from the pincode directory
+# instead (services/location_service.py, user 2026-10-14).
 ZONE_CATEGORY_GROUP = "Zone"
-STATE_CATEGORY_GROUP = "State"
 

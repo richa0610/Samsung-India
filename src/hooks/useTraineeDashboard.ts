@@ -2,7 +2,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { BackHandler } from "react-native";
 
-import { CurrentSession, TraineeDashboard, getCurrentSession, getTraineeDashboard } from "@/api/session";
+import { CurrentSession, TraineeDashboard, getCurrentSession, getTraineeDashboard, isSessionLive } from "@/api/session";
 import { TraineeMetricCardKey } from "@/components/trainee/dashboard/TraineeMetricsGrid";
 import { useAdminFilters } from "@/hooks/useAdminFilters";
 import { useAuth } from "@/hooks/useAuth";
@@ -85,9 +85,12 @@ export function useTraineeDashboard() {
     if (canNavigate()) router.replace("/");
   };
 
+  const isTrainingLive = isSessionLive(session);
+
   return {
     trainee,
     session,
+    isTrainingLive,
     dashboard,
     loading,
     refreshing,

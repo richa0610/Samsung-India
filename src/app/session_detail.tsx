@@ -25,6 +25,7 @@ export default function SessionDetailScreen() {
     error,
     notAssigned,
     notStarted,
+    isTrainingLive,
     ejected,
     sessionClosed,
     activeTab,
@@ -59,8 +60,9 @@ export default function SessionDetailScreen() {
           confirmationStatus={session?.confirmationStatus ?? "Not Confirmed"}
           sessionType={session?.sessionType ?? "Training"}
           title={session?.title ?? "Training Session"}
-          date={session?.date ? formatDisplayDate(session.date) : "--"}
-          location={session?.location ?? "--"}
+          date={session?.date ? formatDisplayDate(session.date) : undefined}
+          location={session?.location ?? undefined}
+          isTrainingLive={isTrainingLive}
           sessionClosed={sessionClosed}
         />
 
@@ -84,7 +86,11 @@ export default function SessionDetailScreen() {
           />
         </View>
 
-        <TraineeBottomNavigation activeTab={activeTab} onSelectTab={handleTabSelect} />
+        <TraineeBottomNavigation
+          activeTab={activeTab}
+          onSelectTab={handleTabSelect}
+          isTrainingLive={isTrainingLive}
+        />
       </SafeAreaView>
 
       <RecentSessionsModal visible={historyVisible} onClose={() => setHistoryVisible(false)} token={token} />

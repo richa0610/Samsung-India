@@ -58,7 +58,7 @@ export default function SessionBody({
   if (notAssigned) {
     return (
       <View style={styles.centered}>
-        <WaitingCard title="No Session Assigned" subtitle="No session is assigned yet" />
+        <WaitingCard title="No Session" subtitle="You have no active training right now. Scan your trainer's QR code to join one." />
       </View>
     );
   }

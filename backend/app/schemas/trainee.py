@@ -13,6 +13,10 @@ class TraineeRegister(BaseModel):
     supervisorName: Optional[str] = Field(default=None, max_length=100)
     state: str = Field(min_length=1, max_length=100)
     district: Optional[str] = Field(default=None, max_length=100)
+    # From the master list (checked on the server); the zone starts the trainee's ID. Optional: an
+    # older app build sends neither - that trainee's ID starts TRN.
+    zone: Optional[str] = Field(default=None, max_length=120)
+    region: Optional[str] = Field(default=None, max_length=150)
 
     @field_validator("state")
     @classmethod
@@ -67,8 +71,11 @@ class TraineeOut(BaseModel):
     designation: Optional[str] = None
     employee_id: Optional[str] = None
     supervisorName: Optional[str] = None
+    supervisorDesignation: Optional[str] = None
     state: Optional[str] = None
     district: Optional[str] = None
+    zone: Optional[str] = None
+    region: Optional[str] = None
     profilePhoto: Optional[str] = None
     status: str
 

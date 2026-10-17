@@ -231,8 +231,9 @@ class TrainerStateChangesAreAtomic(Phase4TestCase):
         self.assertTrue(conference_repository.claim_active_module(self.alpha, S_N1, None, "ATTENDANCE"))
         self.assertFalse(conference_repository.claim_active_module(self.alpha, S_N1, None, "STANDARD_TEST"))
         self.assertTrue(conference_repository.claim_active_module(self.alpha, S_N1, "ATTENDANCE", None))
-        self.assertTrue(conference_repository.claim_end(self.alpha, S_N1, "2026-10-01 10:00:00"))
-        self.assertFalse(conference_repository.claim_end(self.alpha, S_N1, "2026-10-01 10:05:00"))
+        self.alpha.query(Conference).filter(Conference.conferenceUid == S_N1).update({"conferenceStatus": "Ongoing"})
+        self.assertTrue(conference_repository.claim_end(self.alpha, S_N1))           # only a running session is claimed
+        self.assertFalse(conference_repository.claim_end(self.alpha, S_N1))
         self.alpha.rollback()
 
     def test_a_losing_advance_changes_and_logs_nothing(self):
@@ -283,8 +284,10 @@ class NoMassAssignment(Phase4TestCase):
                 "region": "North 1", "company": "Samsung India", "requestedBy": "Quess", "trainerId": "trainer1",
                 "trainerName": "Trainer One", "supervisorId": "s", "supervisorName": "S", "jobStatus": "Active",
                 "username": "masspath", "password": "Correct-Horse-9", "profilePhoto": "trainee_photos/TR-S_S1-0.jpg"}
-        self.assertEqual(self.w.client.post("/admin/trainees", json=body, headers=self.w.headers("trainer1")).status_code, 201)
-        self.assertIsNone(self.alpha.query(Trainee).filter_by(traineeUid="TR-MA").one().profilePhoto)
+        response = self.w.client.post("/admin/trainees", json=body, headers=self.w.headers("trainer1"))
+        self.assertEqual(response.status_code, 201, response.text)
+        # The server makes the trainee's ID (the sent "TR-MA" is ignored) - looked up by the one it returned.
+        self.assertIsNone(self.alpha.query(Trainee).filter_by(traineeUid=response.json()["traineeUid"]).one().profilePhoto)
 
 
 class StatusRules(Phase4TestCase):

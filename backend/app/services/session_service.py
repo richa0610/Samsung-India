@@ -3,11 +3,11 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from fastapi import BackgroundTasks
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.constants import (
     DEFAULT_SESSION_TITLE,
-    DEMO_TRAINER_EMPLOYEE_ID,
     MODULE_NAMES,
     PASS_THRESHOLD_PERCENT,
 )
@@ -34,23 +34,26 @@ from app.schemas.session import (
     SessionJoinInfo,
     SessionModule,
 )
-from app.services.module_flow import auto_advance_if_due, configured_modules, scored_suite_uids
+from app.utils.conference_format import (
+    COMPLETED,
+    RUNNING,
+    active_module,
+    is_completed,
+    is_running,
+    location_label,
+    log_action,
+    log_module,
+    log_time,
+    read_session_config,
+    session_status,
+)
+from app.services.account_ids import same_trainer
+from app.services.module_flow import auto_advance_if_due, configured_modules, live_quiz_suite_uid, scored_suite_uids
 from app.services.proctoring_settings_service import get_proctoring_settings
 from app.services import proctoring_strikes, trainee_access
 from app.utils import join_code
-from app.utils.date_utils import duration, ist_now, parse_module_start, utc_now
+from app.utils.date_utils import duration, ist_now, parse_module_start, to_venue_time, utc_now
 from app.utils.status import title_status
-
-_LIVE_STATUSES = ("Ongoing", "Live")
-
-
-def _parse_session_config(raw: str | None) -> dict:
-    if not raw:
-        return {}
-    try:
-        return json.loads(raw)
-    except ValueError:
-        return {}
 
 
 def _conference_start(conference: Conference) -> datetime | None:
@@ -60,18 +63,20 @@ def _conference_start(conference: Conference) -> datetime | None:
 def _session_is_over(conference: Conference) -> bool:
     """True once a session should stop counting as active for a trainee.
 
-    A session that has been started (`Ongoing`/`Live`) stays active until the
-    trainer explicitly ends it - it is never timed out by the date, so a
-    session running past midnight isn't cut off. It is over only when:
+    A session that has been started stays active until the trainer explicitly
+    ends it - it is never timed out by the date, so a session running past
+    midnight isn't cut off. It is over only when:
 
-      1. The trainer ended it (`Completed`, or `conferenceEndsOn` is set) or an
-         admin cancelled it.
+      1. The trainer ended it (Completed) or an admin cancelled it.
       2. It was never started and its scheduled date is already before today
-         (IST), i.e. it was missed."""
-    status = title_status(conference.conferenceStatus)
-    if status in ("Completed", "Cancelled") or conference.conferenceEndsOn is not None:
+         (IST), i.e. it was missed.
+
+    `conferenceEndsOn` is the training's planned last day (the other system fills it when the
+    training is created - user, 2026-10-17), so it never means "ended" here."""
+    status = session_status(conference.conferenceStatus)
+    if status in (COMPLETED, "Cancelled"):
         return True
-    if status in _LIVE_STATUSES:
+    if status == RUNNING:
         return False
     scheduled_day = (conference.conferenceDate or "").strip()
     return bool(scheduled_day) and scheduled_day < ist_now().date().isoformat()
@@ -80,23 +85,21 @@ def _session_is_over(conference: Conference) -> bool:
 def _select_current_conference(
     db: Session, trainee: Trainee | None = None, requested_conference_uid: str | None = None
 ) -> tuple[Conference | None, bool, datetime | None]:
-    """Picks which conference is "current" for the trainee app.
+    """Picks which conference is "current" for the trainee app - only ever one the trainee is on
+    (user, 2026-10-13). A trainee who signs in without a QR and has no training of their own gets
+    none, and the home screen shows "No Session" - never another trainer's live training or an
+    unrelated / old one (which used to be shown, and the home screen then joined them to it).
 
     Priority:
-      0. An explicitly requested conference UID (if valid).
-      1. A session the trainee actively attended or joined today (if completed,
-         we show it as completed so they see their final results).
-      2. A live (`Ongoing`/`Live`) conference - the trainee's own trainer
-         first, then the demo trainer, then any live one.
-      3. Otherwise an Approved scheduled conference.
-      4. Otherwise the newest conference on record.
+      0. The requested conference - the QR / share link - if the trainee is on it.
+      1. The trainee's own session: running now, else today's (waiting for its start, or ended -
+         shown completed so they see their final results).
     """
     # Each step runs only if every step before it found nothing.
     return (
         _requested_conference(db, trainee, requested_conference_uid)
-        or _attended_conference(db, trainee)
-        or _live_conference(db, trainee)
-        or _scheduled_conference(db, trainee)
+        or _own_conference(db, trainee)
+        or (None, False, None)
     )
 
 
@@ -104,7 +107,7 @@ _Selection = tuple[Conference | None, bool, datetime | None]
 
 
 def _is_running(conference: Conference) -> bool:
-    return conference.conferenceStatus in _LIVE_STATUSES and not _session_is_over(conference)
+    return is_running(conference) and not _session_is_over(conference)
 
 
 def _requested_conference(db: Session, trainee: Trainee | None, requested_conference_uid: str | None) -> _Selection | None:
@@ -118,43 +121,32 @@ def _requested_conference(db: Session, trainee: Trainee | None, requested_confer
     return None
 
 
-def _attended_conference(db: Session, trainee: Trainee | None) -> _Selection | None:
-    """1. The session the trainee actively took part in: still live (always theirs), or attended
-    today - shown even once Completed so they see their final results, unless their own trainer
-    is running a session right now."""
+def _own_conference(db: Session, trainee: Trainee | None) -> _Selection | None:
+    """1. The trainee's own session - one they joined (by QR) or were marked at, never a roster row
+    an admin pre-assigned that they haven't activated ("Pending") nor a cancelled training: the
+    newest running one, else the newest of today's (waiting for its start, or ended today - shown
+    completed so they see their final results). Every such row counts, not only the latest one, so
+    an older training they were Present at never hides today's."""
     if not trainee:
         return None
-    latest_attendance = _latest_attendance(db, trainee)
-    if not (latest_attendance and latest_attendance.conferenceUid):
-        return None
-    attended_conf = db.query(Conference).filter(Conference.conferenceUid == latest_attendance.conferenceUid).first()
-    if not attended_conf:
-        return None
-    if _is_running(attended_conf):
-        return attended_conf, True, _conference_start(attended_conf)
-    if _attended_today(attended_conf, latest_attendance) and not _trainer_running_session(db, trainee):
-        return attended_conf, False, _conference_start(attended_conf)
-    return None
-
-
-def _latest_attendance(db: Session, trainee: Trainee) -> Attendance | None:
-    """The trainee's newest attendance showing real participation (Present, or checked in), else
-    their newest attendance row of any kind."""
-    participated = (
-        db.query(Attendance)
+    rows = (
+        db.query(Attendance, Conference)
+        .join(Conference, Conference.conferenceUid == Attendance.conferenceUid)
         .filter(
             Attendance.traineeUid == trainee.traineeUid,
-            (Attendance.status == "Present") | Attendance.markedOn.isnot(None),
+            func.coalesce(Attendance.status, "") != "Pending",
+            func.lower(func.coalesce(Conference.conferenceStatus, "")) != "cancelled",
         )
         .order_by(Attendance.id.desc())
-        .first()
+        .all()
     )
-    return participated or (
-        db.query(Attendance)
-        .filter(Attendance.traineeUid == trainee.traineeUid)
-        .order_by(Attendance.id.desc())
-        .first()
-    )
+    running = next((conference for _, conference in rows if _is_running(conference)), None)
+    if running is not None:
+        return running, True, _conference_start(running)
+    today = next((conference for attendance, conference in rows if _attended_today(conference, attendance)), None)
+    if today is not None:
+        return today, False, _conference_start(today)
+    return None
 
 
 def _attended_today(conference: Conference, attendance: Attendance) -> bool:
@@ -166,85 +158,6 @@ def _attended_today(conference: Conference, attendance: Attendance) -> bool:
     )
 
 
-def _trainer_running_session(db: Session, trainee: Trainee) -> bool:
-    """Whether the trainee's own trainer has a live session right now."""
-    if not trainee.trainerEmployeeId:
-        return False
-    live = (
-        db.query(Conference)
-        .filter(
-            Conference.trainerEmployeeId == trainee.trainerEmployeeId,
-            Conference.conferenceStatus.in_(_LIVE_STATUSES),
-        )
-        .all()
-    )
-    return any(not _session_is_over(c) for c in live)
-
-
-def _live_conference(db: Session, trainee: Trainee | None) -> _Selection | None:
-    """2. A live (`Ongoing`/`Live`) conference - the trainee's own trainer first, then the demo
-    trainer, then any live one; the newest of them."""
-    ongoing_query = db.query(Conference).filter(Conference.conferenceStatus.in_(_LIVE_STATUSES))
-
-    if trainee and trainee.trainerEmployeeId:
-        trainer_ongoing = [
-            c
-            for c in ongoing_query.filter(Conference.trainerEmployeeId == trainee.trainerEmployeeId).all()
-            if not _session_is_over(c)
-        ]
-        if trainer_ongoing:
-            conf = max(trainer_ongoing, key=lambda c: c.id)
-            return conf, True, _conference_start(conf)
-
-    all_ongoing = [c for c in ongoing_query.all() if not _session_is_over(c)]
-    if not all_ongoing:
-        return None
-    demo_ongoing = [c for c in all_ongoing if c.trainerEmployeeId == DEMO_TRAINER_EMPLOYEE_ID]
-    conf = max(demo_ongoing or all_ongoing, key=lambda c: c.id)
-    return conf, True, _conference_start(conf)
-
-
-def _scheduled_conference(db: Session, trainee: Trainee | None) -> _Selection:
-    """3. An Approved conference (else 4. any on record), the trainee's own trainer's when they
-    have one: the next to start, else the latest started, else the newest undated one."""
-    conferences = db.query(Conference).filter(Conference.status == "Approved").all() or db.query(Conference).all()
-    if not conferences:
-        return None, False, None
-
-    if trainee and trainee.trainerEmployeeId:
-        trainer_confs = [c for c in conferences if c.trainerEmployeeId == trainee.trainerEmployeeId]
-        if trainer_confs:
-            conferences = trainer_confs
-    return _nearest_by_start(conferences)
-
-
-def _nearest_by_start(conferences: list[Conference]) -> _Selection:
-    now = ist_now()
-    timed: list[tuple[datetime, Conference]] = []
-    undated: list[Conference] = []
-    for conference in conferences:
-        start_at = _conference_start(conference)
-        if start_at is None:
-            undated.append(conference)
-        else:
-            timed.append((start_at, conference))
-
-    if timed:
-        upcoming = [item for item in timed if item[0] > now]
-        start_at, conference = (
-            min(upcoming, key=lambda item: item[0])
-            if upcoming
-            else max(timed, key=lambda item: item[0])
-        )
-        return conference, conference.conferenceStatus in _LIVE_STATUSES, start_at
-
-    if undated:
-        conf = max(undated, key=lambda c: c.id)
-        return conf, conf.conferenceStatus in _LIVE_STATUSES, None
-
-    return None, False, None
-
-
 def _join_info(conference: Conference) -> SessionJoinInfo:
     start_at = _conference_start(conference)
     return SessionJoinInfo(
@@ -252,9 +165,9 @@ def _join_info(conference: Conference) -> SessionJoinInfo:
         title=conference.suiteTitle or conference.trainingType or DEFAULT_SESSION_TITLE,
         sessionType=conference.sessionType,
         date=conference.conferenceDate,
-        location=", ".join(filter(None, [conference.district, conference.state])) or None,
+        location=location_label(conference),
         trainerName=conference.trainerName,
-        started=conference.conferenceStatus in _LIVE_STATUSES,
+        started=is_running(conference),
         startsAt=start_at.strftime("%d %b %Y, %I:%M %p") if start_at else None,
     )
 
@@ -268,7 +181,7 @@ def _conference_for_code(db: Session, code: str, tenant_id: str) -> Conference:
     if not conference:
         raise not_found("That training session code isn't valid")
     approved = title_status(conference.status) == "Approved"
-    if not approved and conference.conferenceStatus not in (*_LIVE_STATUSES, "Completed"):
+    if not approved and session_status(conference.conferenceStatus) not in (RUNNING, COMPLETED):
         raise bad_request("This training isn't open to join yet")
     if _session_is_over(conference):
         raise bad_request("This training session has already ended")
@@ -414,9 +327,9 @@ def get_current_session(
 
     live_proctoring_enabled, proctoring_max_warnings = get_proctoring_settings(tenant_id)
 
-    location = ", ".join(filter(None, [conference.district, conference.state])) or None
+    location = location_label(conference)
     is_over = _session_is_over(conference)
-    config = _parse_session_config(conference.sessionConfig)
+    config = read_session_config(conference.sessionConfig)
     timeline = _ModuleTimeline.load(db, conference, is_over)
     attendance = _session_attendance(db, conference, trainee)
 
@@ -495,7 +408,7 @@ def _session_attendance(db: Session, conference: Conference, trainee: Trainee) -
         phone=trainee.phone,
         status="Joined",
     )
-    audience = "ASSIGNED" if trainee.trainerEmployeeId == conference.trainerEmployeeId else "UNASSIGNED"
+    audience = "ASSIGNED" if same_trainer(db, None, trainee.trainerEmployeeId, conference.trainerEmployeeId) else "UNASSIGNED"
     _set_attendance_audience(attendance, audience)
     return attendance_repository.create(db, attendance)
 
@@ -517,24 +430,25 @@ class _ModuleTimeline:
         # window / the whole session has closed) without the trainee completing
         # it - as opposed to just not-yet-live, which still shows "please wait".
         module_order = configured_modules(conference)
-        active_index = module_order.index(conference.activeModuleId) if conference.activeModuleId in module_order else None
+        running = active_module(conference)
+        active_index = module_order.index(running) if running in module_order else None
         # Per-module run history from the trainer's Start/End actions. A module
         # the trainer has already Started and Ended - `ran_seconds` set - is over:
         # a trainee who never completed it (didn't check in / joined after it
         # ended) has missed it, and we can show how long it actually ran.
         runs: dict[str, list[ConferenceActivityLog]] = {}
         for log in activity_log_repository.list_for_conference(db, conference.conferenceUid):
-            runs.setdefault(log.moduleId, []).append(log)
+            runs.setdefault(log_module(log), []).append(log)
         return cls(conference, is_over, module_order, active_index, runs)
 
     def ran_seconds(self, key: str) -> int | None:
         entries = self.runs.get(key, [])
-        starts = [e for e in entries if e.action == "STARTED"]
-        stops = [e for e in entries if e.action == "STOPPED"]
+        starts = [e for e in entries if log_action(e) == "STARTED"]
+        stops = [e for e in entries if log_action(e) == "STOPPED"]
         if not stops or not starts:
             return None
         start = starts[min(len(stops), len(starts)) - 1]
-        return max(0, int((stops[-1].timestamp - start.timestamp).total_seconds()))
+        return max(0, int((log_time(stops[-1]) - log_time(start)).total_seconds()))
 
     def ran_label(self, key: str) -> str | None:
         """How long the module actually ran, e.g. "45m 3s" - for the
@@ -559,11 +473,7 @@ class _ModuleTimeline:
         return self.ran_seconds(key) is not None or self._session_ended() or self._advanced_past(key)
 
     def _session_ended(self) -> bool:
-        conference = self.conference
-        if self.is_over or conference.conferenceStatus == "Completed":
-            return True
-        now_date_str = utc_now().strftime("%Y-%m-%d")
-        return bool(conference.conferenceEndsOn and str(conference.conferenceEndsOn) < now_date_str)
+        return self.is_over or is_completed(self.conference)
 
     def _advanced_past(self, key: str) -> bool:
         return key in self.module_order and self.active_index is not None and self.module_order.index(key) < self.active_index
@@ -587,11 +497,11 @@ def _attendance_module(
     # here; routers/attendance.py accepts a self check-in from any of them
     # the same way, only a trainer's already-final Present/Absent decision
     # blocks it) - so this card is never locked waiting for the trainer.
-    live = conference.activeModuleId == "ATTENDANCE" and not completed
+    live = active_module(conference) == "ATTENDANCE" and not completed
     # Sessions imported without a Session Flow config have no per-module
     # times - fall back to the conference's own start time so the trainee
     # sees a real value instead of a hardcoded placeholder.
-    opens = attendance_cfg.get("checkInOpens") or conference.conferenceTime
+    opens = attendance_cfg.get("checkInOpens") or to_venue_time(conference.conferenceTime)
     closes = attendance_cfg.get("checkOutCloses")
     return SessionModule(
         key="ATTENDANCE",
@@ -620,7 +530,7 @@ def _assessment_modules(conference: Conference, config: dict) -> tuple[tuple[str
         # sessionConfig. For now it's answered the same way a Standard Test
         # is (fetch questions, submit answers) - the trainer picking a
         # question live for trainees to answer is a future iteration.
-        ("LIVE_QUIZ", config.get("liveQuiz", {}).get("assessmentSuiteUid"), "liveQuiz"),
+        ("LIVE_QUIZ", live_quiz_suite_uid(conference), "liveQuiz"),
         ("SURVEY", conference.surveyUid, "survey"),
     )
 
@@ -636,11 +546,11 @@ def _assessment_module(
     checked_in: bool,
 ) -> SessionModule:
     """A Test / Live Quiz / Survey card - locked until the trainee has checked in."""
-    start_time_str = module_cfg.get("startTime") or conference.conferenceTime
+    start_time_str = module_cfg.get("startTime") or to_venue_time(conference.conferenceTime)
     end_time_str = module_cfg.get("endTime")
     result = assessment_repository.get_latest_result(db, conference.conferenceUid, trainee.traineeUid, suite_uid)
     completed = result is not None
-    live = not timeline.is_over and not completed and conference.activeModuleId == key
+    live = not timeline.is_over and not completed and active_module(conference) == key
     suite = assessment_repository.get_suite_by_uid(db, suite_uid)
     question_count = module_cfg.get("questionCount") or (suite.noOfQuestion if suite else None)
     return SessionModule(
@@ -710,6 +620,6 @@ def session_is_over(conference: Conference) -> bool:
 
 
 def session_is_running(conference: Conference) -> bool:
-    """Started and not over - the same rule the session screen uses: `Ongoing` or `Live`, in any
-    letter case (the status column isn't only written by this app)."""
-    return title_status(conference.conferenceStatus) in _LIVE_STATUSES and not _session_is_over(conference)
+    """Started and not over - the same rule the session screen uses (conference_format.is_running:
+    "Started", or "Ongoing" / "Live" from before, in any letter case)."""
+    return _is_running(conference)

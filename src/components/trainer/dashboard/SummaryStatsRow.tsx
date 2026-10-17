@@ -5,7 +5,7 @@ import StatCard from "./StatCard";
 import { DashboardStats } from "./dashboardUtils";
 import { Colors } from "@/theme/colors";
 
-export type SummaryCardKey = "total" | "completed" | "planned" | "missed" | "ongoing";
+export type SummaryCardKey = "total" | "completed" | "planned" | "pending" | "missed" | "ongoing";
 
 type SummaryStatsRowProps = {
   stats: DashboardStats;
@@ -43,6 +43,15 @@ export default function SummaryStatsRow({ stats, onPressCard }: SummaryStatsRowP
       />
 
       <StatCard
+        icon={<Ionicons name="hourglass-outline" size={16} color={Colors.brandBlue} />}
+        iconBg="#EFF6FF"
+        title="Pending"
+        value={stats.pendingApproval}
+        valueColor={Colors.brandBlue}
+        onPress={onPressCard ? () => onPressCard("pending") : undefined}
+      />
+
+      <StatCard
         icon={<Ionicons name="alert-circle-outline" size={16} color="#7C3AED" />}
         iconBg="#F5F3FF"
         title="Missed"
@@ -66,8 +75,8 @@ export default function SummaryStatsRow({ stats, onPressCard }: SummaryStatsRowP
 const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 10,
+    gap: 6,
+    paddingHorizontal: 8,
     marginTop: 10,
   },
 });

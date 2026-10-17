@@ -24,6 +24,7 @@ from app.routers.admin import router as admin_router
 from app.routers.assessment import router as assessment_router
 from app.routers.attendance import router as attendance_router
 from app.routers.catalog import router as catalog_router
+from app.routers.locations import router as locations_router
 from app.routers.media import router as media_router
 from app.routers.session import router as session_router
 from app.routers.trainee import router as trainee_router
@@ -204,6 +205,7 @@ app.include_router(assessment_router)
 app.include_router(admin_router)
 app.include_router(trainer_router)
 app.include_router(catalog_router)
+app.include_router(locations_router)
 app.include_router(training_router)
 app.include_router(ws_router)
 app.include_router(media_router)

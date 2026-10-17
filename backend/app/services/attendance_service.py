@@ -8,6 +8,8 @@ from app.models.conference import Conference
 from app.models.trainee import Trainee
 from app.repositories import attendance_repository, conference_repository
 from app.schemas.attendance import VerifyLocationOut, VerifyLocationRequest
+from app.services.account_ids import same_trainer
+from app.utils.conference_format import active_module, location_label
 from app.utils.date_utils import utc_now
 from app.utils.helpers import distance_meters, geofence_enabled, within_geofence
 
@@ -27,7 +29,7 @@ def open_check_in(db: Session, conference_uid: str) -> Conference:
     conference = conference_repository.lock_for_roster_change(db, conference_uid)
     if conference is None:
         raise not_found("Session not found")
-    if not session_is_running(conference) or conference.activeModuleId != "ATTENDANCE":
+    if not session_is_running(conference) or active_module(conference) != "ATTENDANCE":
         raise conflict("Check-in isn't open for this session right now")
     return conference
 
@@ -66,7 +68,7 @@ def joined_attendance(db: Session, conference: Conference, conference_uid: str, 
     may self-admit; only a trainer's already-final Absent refuses the check-in."""
     attendance = attendance_repository.get_for_conference_and_trainee(db, conference_uid, trainee.traineeUid)
     if not attendance:
-        audience = "ASSIGNED" if trainee.trainerEmployeeId == conference.trainerEmployeeId else "UNASSIGNED"
+        audience = "ASSIGNED" if same_trainer(db, None, trainee.trainerEmployeeId, conference.trainerEmployeeId) else "UNASSIGNED"
         attendance = Attendance(
             conferenceUid=conference_uid,
             trainerUid=conference.trainerEmployeeId,
@@ -98,7 +100,7 @@ def record_check_in_log(
     """This check-in's attendance_logs row under the live module (ATTENDANCE - see open_check_in),
     replacing any earlier one. `details`: ipAddress / deviceInfo / locationData, when known."""
     attendance_repository.replace_attendance_log(
-        db, conference_uid, trainee_uid, conference.activeModuleId or "ATTENDANCE",
+        db, conference_uid, trainee_uid, active_module(conference) or "ATTENDANCE",
         markedAt=utc_now(), status="Present", **details,
     )
 
@@ -114,6 +116,7 @@ def retake_check_in(
 ) -> Attendance:
     """ALLOW_ATTENDANCE_RETEST only: a trainee who is already Present checks in again - their row is
     replaced by a fresh Present one (attempt 1), and the module's log with it."""
+    session_meta = previous.sessionMeta  # how they reached the session doesn't change with a retake
     db.delete(previous)
     db.flush()  # the old row goes before its replacement is inserted
     attendance = Attendance(
@@ -124,6 +127,7 @@ def retake_check_in(
         markedOn=_now_stamp(),
         status="Present",
         attemptCount=1,
+        sessionMeta=session_meta,
     )
     db.add(attendance)
     record_check_in_log(db, conference, conference_uid, trainee.traineeUid, ipAddress=caller_ip, deviceInfo=user_agent)
@@ -149,6 +153,6 @@ def verify_location(db: Session, payload: VerifyLocationRequest, *, face_detecti
         distanceMeters=distance,
         withinRadius=(distance <= radius) if distance is not None else None,
         radiusMeters=radius,
-        venueLabel=", ".join(filter(None, [conference.district, conference.state])) or None,
+        venueLabel=location_label(conference),
         faceDetectionRequired=face_detection_required,
     )

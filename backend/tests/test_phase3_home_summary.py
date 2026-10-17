@@ -60,7 +60,8 @@ class HomeSummaryMatchesTheOldCounting(unittest.TestCase):
         )
         total = counts["totalSessions"]
         counts["executedPercentage"] = round(counts["completed"] / total * 100) if total else 0
-        counts["pendingPercentage"] = round(counts["pending"] / total * 100) if total else 0
+        pending_total = counts["pending"] + counts.get("pendingApproval", 0)
+        counts["pendingPercentage"] = round(pending_total / total * 100) if total else 0
         return counts
 
     def test_same_numbers_for_every_trainer_and_range(self):

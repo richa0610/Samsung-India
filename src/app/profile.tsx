@@ -13,6 +13,7 @@ export default function ProfileScreen() {
   const {
     trainee,
     uploading,
+    isTrainingLive,
     editVisible,
     setEditVisible,
     confirmLogoutOpen,
@@ -47,7 +48,11 @@ export default function ProfileScreen() {
 
       <EditProfileSheet visible={editVisible} onClose={() => setEditVisible(false)} />
 
-      <TraineeBottomNavigation activeTab="profile" onSelectTab={handleTabSelect} />
+      <TraineeBottomNavigation
+        activeTab="profile"
+        onSelectTab={handleTabSelect}
+        isTrainingLive={isTrainingLive}
+      />
 
       <LogoutConfirmModal visible={confirmLogoutOpen} onCancel={cancelLogout} onConfirm={confirmLogout} />
     </SafeAreaView>

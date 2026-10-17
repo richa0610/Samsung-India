@@ -20,6 +20,7 @@ export default function TrainingEfficiencyCard({
 
   const executedPercent = stats.executedPercentage;
   const pendingPercent = stats.pendingPercentage;
+  const pendingCount = (stats.pendingApproval ?? 0) + (stats.pending ?? 0);
 
   const blueDash = (circumference * pendingPercent) / 100;
   const greenDash = (circumference * executedPercent) / 100;
@@ -118,7 +119,7 @@ export default function TrainingEfficiencyCard({
             </View>
             <View style={styles.valueRow}>
               <AppText style={styles.pendingValue}>
-                {stats.pending}{" "}
+                {pendingCount}{" "}
                 <AppText style={styles.pendingPercentText}>
                   ({pendingPercent}%)
                 </AppText>

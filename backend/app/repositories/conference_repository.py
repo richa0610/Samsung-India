@@ -1,3 +1,4 @@
+from collections.abc import Collection
 from typing import Optional
 
 from sqlalchemy import Integer, and_, case, cast, false, func, or_, select
@@ -5,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.models.conference import Conference
 from app.repositories import keyset
+from app.utils.conference_format import STORED_COMPLETED, not_assigned_sql, session_status, status_sql
 
 
 def get_by_uid(db: Session, conference_uid: str) -> Optional[Conference]:
@@ -12,11 +14,16 @@ def get_by_uid(db: Session, conference_uid: str) -> Optional[Conference]:
 
 
 def claim_active_module(db: Session, conference_uid: str, expected: Optional[str], new: Optional[str]) -> bool:
-    """Atomically moves the session's active module from `expected` to `new` - True only for the
-    one request whose UPDATE matched. Two concurrent starts/advances can both have read the same
-    activeModuleId; only one may act on it (the other matches 0 rows and backs off), so the
-    Execution Flow never logs a module as started twice. The UPDATE row-locks until commit."""
-    current = Conference.activeModuleId.is_(None) if expected is None else Conference.activeModuleId == expected
+    """Atomically moves the session's active module from `expected` to `new` - stored values
+    (conference_format.module_id); None = no module running (NULL, or "" as the other system
+    leaves it). True only for the one request whose UPDATE matched. Two concurrent starts/advances
+    can both have read the same activeModuleId; only one may act on it (the other matches 0 rows
+    and backs off), so the Execution Flow never logs a module as started twice. The UPDATE
+    row-locks until commit."""
+    if expected is None:
+        current = or_(Conference.activeModuleId.is_(None), Conference.activeModuleId == "")
+    else:
+        current = Conference.activeModuleId == expected
     matched = (
         db.query(Conference)
         .filter(Conference.conferenceUid == conference_uid, current)
@@ -25,12 +32,12 @@ def claim_active_module(db: Session, conference_uid: str, expected: Optional[str
     return bool(matched)
 
 
-def claim_end(db: Session, conference_uid: str, ends_on: str) -> bool:
-    """Atomically marks the session ended - True only for the one request that did it."""
+def claim_end(db: Session, conference_uid: str) -> bool:
+    """Atomically marks a running session completed - True only for the one request that did it."""
     matched = (
         db.query(Conference)
-        .filter(Conference.conferenceUid == conference_uid, Conference.conferenceEndsOn.is_(None))
-        .update({"conferenceEndsOn": ends_on}, synchronize_session=False)
+        .filter(Conference.conferenceUid == conference_uid, status_sql(Conference.conferenceStatus) == "ongoing")
+        .update({"conferenceStatus": STORED_COMPLETED}, synchronize_session=False)
     )
     return bool(matched)
 
@@ -42,13 +49,22 @@ def lock_for_roster_change(db: Session, conference_uid: str) -> Optional[Confere
     return db.query(Conference).filter(Conference.conferenceUid == conference_uid).with_for_update().first()
 
 
-def trainer_condition(trainer_employee_id: Optional[str]):
+def trainer_keys(trainer: Optional[str | Collection[str]]) -> list[str]:
+    """The non-blank values naming one trainer: their keys (ID and login name -
+    account_ids.account_keys), or a single value. A lone string is one value, never its letters."""
+    values = [trainer] if isinstance(trainer, str) or trainer is None else list(trainer)
+    return sorted({value.strip() for value in values if value and value.strip()})
+
+
+def trainer_condition(trainer: Optional[str | Collection[str]]):
     """SQL condition for "this conference is assigned to this trainer" - the one trainer-ownership
-    rule every trainer query below uses. A blank/None username matches nothing (never
-    `trainerEmployeeId IS NULL`), so an unresolved identity can't claim unassigned trainings."""
-    if not (trainer_employee_id or "").strip():
+    rule every trainer query below uses. `trainer` is every value a training may name them by: their
+    ID (stored since 2026-10-17) and login name (before). Nothing blank matches - never
+    `trainerEmployeeId IS NULL` - so an unresolved identity can't claim unassigned trainings."""
+    keys = trainer_keys(trainer)
+    if not keys:
         return false()
-    return Conference.trainerEmployeeId == trainer_employee_id
+    return Conference.trainerEmployeeId.in_(keys)
 
 
 def get_authorized(db: Session, conference_uid: str, authorization_conditions: list) -> Optional[Conference]:
@@ -89,10 +105,10 @@ def approval_conditions(approval: Optional[str]) -> list:
     return []
 
 
-def list_recent_completed_for_trainer(db: Session, trainer_employee_id: str, limit: int) -> list[Conference]:
+def list_recent_completed_for_trainer(db: Session, trainer: Collection[str], limit: int) -> list[Conference]:
     return (
         db.query(Conference)
-        .filter(trainer_condition(trainer_employee_id), Conference.conferenceStatus == "Completed")
+        .filter(trainer_condition(trainer), status_sql(Conference.conferenceStatus) == "completed")
         .order_by(Conference.timestamp.desc())
         .limit(limit)
         .all()
@@ -117,30 +133,40 @@ def create(db: Session, conference: Conference) -> Conference:
     return conference
 
 
+def add(db: Session, conference: Conference) -> None:
+    """Adds a new training without committing - flushed, so its ID (models/uid_events) is already set."""
+    db.add(conference)
+    db.flush()
+
+
 def save(db: Session, conference: Conference) -> Conference:
     db.commit()
     db.refresh(conference)
     return conference
 
 
+# Run status in this app's words, lower-cased ("ongoing" for a stored "Started" too - see
+# conference_format.status_sql).
+_CONFERENCE_STATUS = status_sql(Conference.conferenceStatus)
+
 # What the user sees in the UI:
 # - If approval status is 'Rejected' -> 'Rejected'
 # - If approval status is NOT 'Approved' (e.g. 'Pending') -> 'Pending'
-# - If approved and conferenceStatus is 'Ongoing' -> 'Started'
-# - Otherwise -> conferenceStatus ('Scheduled', 'Completed', 'Cancelled')
+# - If approved and the session is running -> 'Started'
+# - Otherwise -> the run status ('Scheduled', 'Completed', 'Cancelled')
 EFFECTIVE_STATUS = case(
     (func.lower(func.coalesce(Conference.status, "")) == "rejected", "rejected"),
     (func.lower(func.coalesce(Conference.status, "")) != "approved", "pending"),
-    (func.lower(func.coalesce(Conference.conferenceStatus, "")) == "ongoing", "started"),
-    else_=func.lower(func.coalesce(Conference.conferenceStatus, "")),
+    (_CONFERENCE_STATUS == "ongoing", "started"),
+    else_=_CONFERENCE_STATUS,
 )
 
-# For searching: also match "ongoing" when the session is Ongoing/Started
+# For searching: also match "ongoing" when the session is running
 EFFECTIVE_STATUS_ONGOING = case(
     (
         and_(
             func.lower(func.coalesce(Conference.status, "")) == "approved",
-            func.lower(func.coalesce(Conference.conferenceStatus, "")) == "ongoing",
+            _CONFERENCE_STATUS == "ongoing",
         ),
         "ongoing",
     ),
@@ -186,8 +212,6 @@ MAX_PAGE_SIZE = keyset.MAX_PAGE_SIZE
 
 # --- the trainer Sessions screen ---------------------------------------------------------------
 
-_CONFERENCE_STATUS = func.lower(func.coalesce(Conference.conferenceStatus, ""))
-
 
 def session_conditions(
     on_date: Optional[str],
@@ -210,7 +234,7 @@ def session_conditions(
             conditions.append(_CONFERENCE_STATUS == "completed")
         elif norm_status in ("ongoing", "live"):
             conditions.append(_CONFERENCE_STATUS.in_(("ongoing", "live")))
-        elif norm_status in ("planned", "pending"):
+        elif norm_status == "planned":
             conds = [
                 approval_status == "approved",
                 _CONFERENCE_STATUS.notin_(("ongoing", "live", "completed", "cancelled")),
@@ -218,6 +242,8 @@ def session_conditions(
             if today:
                 conds.append(or_(Conference.conferenceDate >= today, func.coalesce(Conference.conferenceDate, "") == ""))
             conditions.append(and_(*conds))
+        elif norm_status == "pending":
+            conditions.append(and_(approval_status == "pending", _CONFERENCE_STATUS != "cancelled"))
         elif norm_status == "missed":
             conds = [
                 approval_status == "approved",
@@ -227,20 +253,22 @@ def session_conditions(
                 conds.append(and_(Conference.conferenceDate < today, func.coalesce(Conference.conferenceDate, "") != ""))
             conditions.append(and_(*conds))
     if location:
-        shown_location = func.coalesce(func.nullif(Conference.trainingHub, ""), Conference.state)
+        shown_location = func.coalesce(not_assigned_sql(Conference.trainingHub), Conference.state)
         conditions.append(shown_location == location)
     return conditions
 
 
 def _minutes_of_day(time_column):
-    """"hh:mm AM" / "hh:mm PM" -> minutes after midnight; anything without a colon -> 0
-    (midnight), the same fallback the app used. Portable SQL (MySQL and SQLite)."""
+    """"hh:mm AM" / "hh:mm PM" (this app's rows) or "HH:MM" (the other system's) -> minutes after
+    midnight; anything without a colon -> 0 (midnight), the same fallback the app used. Portable
+    SQL (MySQL and SQLite)."""
     time = func.coalesce(time_column, "")
     colon = func.instr(time, ":")
-    hours = cast(func.substr(time, 1, colon - 1), Integer) % 12
-    pm = case((func.upper(func.substr(time, -2)) == "PM", 12), else_=0)
+    clock_hours = cast(func.substr(time, 1, colon - 1), Integer)
+    suffix = func.upper(func.substr(time, -2))
+    hours = case((suffix == "PM", clock_hours % 12 + 12), (suffix == "AM", clock_hours % 12), else_=clock_hours)
     minutes = cast(func.substr(time, colon + 1, 2), Integer)
-    return case((colon > 1, (hours + pm) * 60 + minutes), else_=0)
+    return case((colon > 1, hours * 60 + minutes), else_=0)
 
 
 # Live sessions first, then upcoming ones soonest first, then completed ones most recent first;
@@ -282,8 +310,9 @@ def _sort_order(sort: str, descending: bool) -> keyset.SortOrder:
 def _cursor_value(sort: str, row: Conference):
     """The row's value for `sort`, as stored in the next-page cursor."""
     if sort == "conferenceStatus":
+        # Python twin of EFFECTIVE_STATUS.
         status = (row.status or "").lower()
-        conf_status = (row.conferenceStatus or "").lower()
+        conf_status = (session_status(row.conferenceStatus) or "").lower()
         if status == "rejected":
             return "rejected"
         if status != "approved":

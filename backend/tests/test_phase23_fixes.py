@@ -1,6 +1,7 @@
 """Phase 2.2 follow-up fixes (approved decisions - see the memory note "security decisions"):
 
-- rate limiting trusts only the IP Render appends, plus per-account failed-login limits;
+- the recorded caller IP trusts only the IP Render appends; failed logins are limited per account
+  only - no login or sign-up is limited per caller IP (user, 2026-10-17);
 - the trainee login failure message reveals nothing;
 - WebSocket tokens travel in the first message (URL tokens still accepted until retired);
 - tokens can be revoked (logout) through a per-account version;
@@ -50,26 +51,37 @@ class FixesTestCase(TrainerWorldTestCase):
         )
 
 
-class RateLimitTrustsOnlyTheProxyHop(FixesTestCase):
-    def test_forged_forwarding_headers_do_not_create_new_callers(self):
+class RecordedCallerIpTrustsOnlyTheProxyHop(FixesTestCase):
+    def recorded_login_ip(self, **login_kwargs):
+        self.assertEqual(self.login("trainer1", **login_kwargs).status_code, 200)
+        self.alpha.expire_all()
+        return self.alpha.query(LogsMaster).filter(LogsMaster.action == "LOGIN").order_by(LogsMaster.id.desc()).first().login_IP
+
+    def test_forged_forwarding_headers_are_not_recorded(self):
         # Render appends the real caller last; everything the client adds in front is ignored,
         # and CF-Connecting-IP (no Cloudflare in front) is never trusted.
-        codes = [
-            self.login("nobody", "wrong", forwarded=f"10.0.0.{i}, 198.51.100.7", **{"CF-Connecting-IP": f"10.1.1.{i}"}).status_code
-            for i in range(6)
-        ]
-        self.assertEqual(codes[:5], [401] * 5)
-        self.assertEqual(codes[5], 429)
+        ip = self.recorded_login_ip(forwarded="10.0.0.1, 198.51.100.7", **{"CF-Connecting-IP": "10.1.1.1"})
+        self.assertEqual(ip, "198.51.100.7")
 
-    def test_different_real_callers_have_their_own_limit(self):
-        for i in range(5):
-            self.login("nobody", "wrong", forwarded=f"198.51.100.{i}")
-        self.assertEqual(self.login("trainer1", forwarded="198.51.100.200").status_code, 200)
-
-    def test_without_a_proxy_the_socket_peer_is_used(self):
+    def test_without_a_proxy_the_socket_peer_is_recorded(self):
         with patch.object(settings, "TRUSTED_PROXY_HOPS", 0):
-            codes = [self.login("nobody", "wrong", forwarded=f"198.51.100.{i}").status_code for i in range(6)]
-        self.assertEqual(codes[5], 429)
+            ip = self.recorded_login_ip(forwarded="198.51.100.7")
+        self.assertEqual(ip, "testclient")
+
+
+class StaffLoginHasNoPerAddressLimit(FixesTestCase):
+    OFFICE_WIFI = "198.51.100.66"
+    MANY = 25   # more than any per-address limit this login ever had (5 requests / 5 min)
+
+    def test_many_logins_from_one_address_all_succeed(self):
+        for i in range(self.MANY):
+            with self.subTest(login=i):
+                self.assertEqual(self.login("trainer1", forwarded=self.OFFICE_WIFI).status_code, 200)
+
+    def test_failures_for_other_accounts_from_one_address_never_block_that_address(self):
+        for i in range(self.MANY):
+            self.assertEqual(self.login(f"nobody{i}", "wrong", forwarded=self.OFFICE_WIFI).status_code, 401)
+        self.assertEqual(self.login("trainer1", forwarded=self.OFFICE_WIFI).status_code, 200)
 
 
 class AccountFailureLimit(FixesTestCase):
@@ -108,6 +120,13 @@ class TraineeLoginWithCompanyIdOrPhoneAndPassword(TraineeLoginTestCase):
                 response = self.trainee_login(identifier)
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["trainee"]["traineeUid"], "TR-S_N1-0")
+
+    def test_the_signed_in_trainee_carries_the_profile_pages_zone_region_and_managers_designation(self):
+        t = self.trainee()
+        t.supervisorDesignation = "Store Manager"
+        self.alpha.commit()
+        trainee = self.trainee_login(t.traineeUid).json()["trainee"]
+        self.assertEqual((trainee["zone"], trainee["region"], trainee["supervisorDesignation"]), ("North Zone", "North 1", "Store Manager"))
 
     def test_every_failure_gets_the_same_generic_401(self):
         self.set_stored_password("TR-S_N1-1", None)       # e.g. self-registered: no password
@@ -155,41 +174,40 @@ class TraineeLoginWithCompanyIdOrPhoneAndPassword(TraineeLoginTestCase):
         self.assertEqual(self.trainee_login(9_999_999_999, "198.51.100.200").status_code, 429)
 
 
-class TraineeLoginLimitsOnlyFailuresPerAddress(TraineeLoginTestCase):
+class TraineeLoginHasNoPerAddressLimit(TraineeLoginTestCase):
     VENUE_WIFI = "198.51.100.77"
+    CLASSROOM = 25   # more than any per-address limit this login ever had (20 failures / 5 min)
 
     def unknown_phone(self, i):
         return 6_000_000_000 + i   # no fixture trainee has a 6... number; one try each, so no account lock
 
     def test_a_classroom_on_one_address_is_never_blocked_by_its_own_successes(self):
         phones = [phone for (phone,) in self.alpha.query(Trainee.phone)]
-        for i in range(rate_limit.CALLER_MAX_FAILURES + 5):
+        for i in range(self.CLASSROOM):
             with self.subTest(login=i):
                 self.assertEqual(self.trainee_login(phones[i % len(phones)], self.VENUE_WIFI).status_code, 200)
 
-    def test_failures_from_one_address_are_limited_and_other_addresses_are_not(self):
-        for i in range(rate_limit.CALLER_MAX_FAILURES):
+    def test_failures_for_other_accounts_from_one_address_never_block_that_address(self):
+        for i in range(self.CLASSROOM):
             self.assertEqual(self.trainee_login(self.unknown_phone(i), self.VENUE_WIFI).status_code, 401)
-        known = self.trainee().phone
-        self.assertEqual(self.trainee_login(known, self.VENUE_WIFI).status_code, 429)   # even a real login
-        self.assertEqual(self.trainee_login(known, "198.51.100.78").status_code, 200)
-
-    def test_a_success_does_not_clear_the_address_failures(self):
-        known = self.trainee().phone
-        for i in range(rate_limit.CALLER_MAX_FAILURES - 1):
-            self.trainee_login(self.unknown_phone(i), self.VENUE_WIFI)
-        self.assertEqual(self.trainee_login(known, self.VENUE_WIFI).status_code, 200)
-        self.assertEqual(self.trainee_login(self.unknown_phone(99), self.VENUE_WIFI).status_code, 401)
-        self.assertEqual(self.trainee_login(known, self.VENUE_WIFI).status_code, 429)
+        self.assertEqual(self.trainee_login(self.trainee().phone, self.VENUE_WIFI).status_code, 200)
 
 
 class SelfRegistrationSignsInWithoutAPassword(TraineeLoginTestCase):
     NEW = {"name": "New Person", "phone": 9_876_543_210, "email": "new.person@example.com", "state": "Delhi"}
 
-    def register(self):
+    def register(self, person=None):
+        person = person or self.NEW
         # The synthetic world switches UID generation off (tenant_fixtures); a self-registration needs one.
-        with patch("app.models.uid_events.next_uid", lambda connection, prefix: f"{prefix}-SELF-1"):
-            return self.w.client.post("/trainees/register", json=self.NEW, headers={"X-Tenant-ID": ALPHA, "X-Forwarded-For": "198.51.100.5"})
+        with patch("app.models.uid_events.next_uid", lambda connection, prefix: f"{prefix}-SELF-{person['phone']}"):
+            return self.w.client.post("/trainees/register", json=person, headers={"X-Tenant-ID": ALPHA, "X-Forwarded-For": "198.51.100.5"})
+
+    def test_a_classroom_can_sign_up_from_one_address(self):
+        # No per-address limit on sign-up (user, 2026-10-17): it used to refuse the 6th within 5 minutes.
+        for i in range(8):
+            person = {**self.NEW, "phone": 9_876_543_300 + i, "email": f"new.person.{i}@example.com"}
+            with self.subTest(sign_up=i):
+                self.assertEqual(self.register(person).status_code, 201)
 
     def test_registering_returns_a_working_session_for_that_trainee(self):
         response = self.register()
@@ -430,7 +448,7 @@ class PartialTrainingPatch(FixesTestCase):
         place = (before.company, before.zone, before.region, before.trainerEmployeeId, before.conferenceDate)
         self.assertEqual(self.patch("coadmin", "S_S1", {"conferenceTime": "12:30 PM"}).status_code, 200)
         after = self.row("S_S1")
-        self.assertEqual(after.conferenceTime, "12:30 PM")
+        self.assertEqual(after.conferenceTime, "12:30")                              # stored the other system's way (24-hour)
         self.assertEqual((after.company, after.zone, after.region, after.trainerEmployeeId, after.conferenceDate), place)
 
     def test_the_merged_result_must_stay_inside_the_grant(self):

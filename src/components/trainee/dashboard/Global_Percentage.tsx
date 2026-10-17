@@ -94,7 +94,7 @@ export default function Global_Percentage({
               weight={FontWeight.bold}
               style={styles.footerGain}
             >
-              {periodGain > 0 ? "▲" : "▼"} {Math.abs(periodGain)} points this period
+             
             </AppText>
           )}
         </View>

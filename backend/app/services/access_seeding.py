@@ -23,11 +23,14 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.dependencies.filters import ConferenceFilters
 from app.models.admin import Admin
 from app.models.admin_access import AccessBase, AdminAccess
+from app.models.agency import Agency, AgencyBase
 from app.models.common.tenant_registry import Tenant
 from app.models.conference import Conference
 from app.models.data_scope import DataScope
 from app.models.logs_master import LogsMaster
+from app.repositories import agency_repository
 from app.services.access_service import AccessRole, company_admin_key, norm, resolve_scope
+from app.services.account_ids import account_keys
 from app.services.data_scope_service import apply_identity_scope
 from app.utils.zones import zone_key
 
@@ -163,7 +166,7 @@ def build_plan(
     _check_every_account_decided(plan, admins, existing_by_admin)
 
     plan.accounts = [_account_row(a, [g for g in plan.grants if g.admin_id == a.id]) for a in admins.values()]
-    _simulate(plan, tenant_db, admins)
+    _simulate(plan, common_db, tenant_db, admins)
     _warn_unscoped_trainings(plan, tenant_db)
     return plan
 
@@ -344,10 +347,11 @@ def _account_row(admin: Admin, grants: list[PlannedGrant]) -> dict:
     }
 
 
-def _simulate(plan: Plan, tenant_db: Session, admins: dict[int, Admin]) -> None:
+def _simulate(plan: Plan, common_db: Session, tenant_db: Session, admins: dict[int, Admin]) -> None:
     """Who would see what BEFORE (today's rules) and AFTER (the planned grants). The planned
-    grants go into a throw-away in-memory database; nothing is written anywhere real."""
-    sim = _planned_grants_db(plan)
+    grants - with a copy of the real company registry, so a training stored by agency ID counts -
+    go into a throw-away in-memory database; nothing is written anywhere real."""
+    sim = _planned_grants_db(plan, agency_repository.list_companies(common_db))
     confs = [SimpleNamespace(conferenceDate=c[0], trainerEmployeeId=c[1], zone=c[2], region=c[3], sessionType=c[4], trainingType=c[5], company=c[6])
              for c in tenant_db.query(Conference.conferenceDate, Conference.trainerEmployeeId, Conference.zone, Conference.region,
                                       Conference.sessionType, Conference.trainingType, Conference.company)]
@@ -359,10 +363,12 @@ def _simulate(plan: Plan, tenant_db: Session, admins: dict[int, Admin]) -> None:
             plan.visibility.append(_admin_visibility(admin, scope, confs, tenant_db))
 
 
-def _planned_grants_db(plan: Plan) -> Session:
+def _planned_grants_db(plan: Plan, companies: list[tuple[str, str]]) -> Session:
     sim_engine = create_engine("sqlite://")
     AccessBase.metadata.create_all(sim_engine)
+    AgencyBase.metadata.create_all(sim_engine)
     sim = sessionmaker(bind=sim_engine)()
+    sim.add_all(Agency(agencyUid=uid, companyName=name) for uid, name in companies)
     for g in plan.grants:
         if g.status == "planned":
             sim.add(AdminAccess(admin_id=g.admin_id, role=g.role, tenant_uid=g.tenant_uid, company=g.company, zone=g.zone, region=g.region,
@@ -373,7 +379,7 @@ def _planned_grants_db(plan: Plan) -> Session:
 
 def _trainer_visibility(admin: Admin, scope, confs: list) -> dict:
     """A trainer keeps seeing their own trainings - unless the plan denies the account."""
-    own = sum(1 for c in confs if c.trainerEmployeeId == admin.username)
+    own = sum(1 for c in confs if c.trainerEmployeeId in account_keys(admin))
     after, verdict = (f"{own} own trainings", "unchanged") if scope.allowed else ("DENIED", "LOSES ACCESS")
     return {"id": admin.id, "role": admin.role, "before": f"{own} own trainings", "after": after, "verdict": verdict}
 

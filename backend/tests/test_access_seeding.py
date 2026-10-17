@@ -16,6 +16,7 @@ from app.database.connection import CommonBase, TenantBase
 from app.models import *  # noqa: F401,F403
 from app.models.admin import Admin
 from app.models.admin_access import AccessBase, AdminAccess
+from app.models.agency import AgencyBase
 from app.models.common.tenant_registry import Tenant
 from app.models.conference import Conference
 from app.models.data_scope import DataScope
@@ -43,6 +44,7 @@ class SeedingWorld(unittest.TestCase):
         self.addCleanup(stub.stop)
         self.common_engine, self.tenant_engine = self.make_engines()
         CommonBase.metadata.create_all(self.common_engine)
+        AgencyBase.metadata.create_all(self.common_engine)  # the shared company registry (agency IDs)
         TenantBase.metadata.create_all(self.tenant_engine)
         self.common = sessionmaker(bind=self.common_engine)()
         self.tenant = sessionmaker(bind=self.tenant_engine)()

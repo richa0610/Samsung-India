@@ -31,8 +31,11 @@ from app.models.attendance import Attendance
 from app.models.conference import Conference
 from app.models.quiz import AssessmentResult
 from app.models.trainee import Trainee
-from app.repositories import conference_repository, trainee_repository
+from app.repositories import assessment_repository, conference_repository, trainee_repository
+from app.repositories.location_repository import place_key_sql
 from app.services.access_service import AccessScope
+from app.utils.conference_format import status_sql
+from app.utils.places import place_key, place_spellings
 from app.utils.zones import zone_spellings
 
 
@@ -108,7 +111,7 @@ def access_scope_conditions(
         return [false()]
 
     def rule_condition(rule):
-        condition = _norm(company_column) == rule.company
+        condition = _norm(company_column).in_(sorted(rule.keys))
         if rule.zone is not None:
             condition = and_(condition, _zone_in(zone_column, (rule.zone,)))
         if rule.region is not None:
@@ -126,7 +129,7 @@ def conference_authorization_conditions(scope: AccessScope) -> list:
     if scope.is_admin_panel:
         return access_scope_conditions(scope)
     if scope.is_trainer:
-        return [conference_repository.trainer_condition(scope.trainer_username)]
+        return [conference_repository.trainer_condition(scope.trainer_keys)]
     return [false()]
 
 
@@ -140,12 +143,12 @@ def trainee_authorization_conditions(scope: AccessScope, *, listing: bool = Fals
         return access_scope_conditions(scope, Trainee.company, Trainee.zone, Trainee.region)
     if scope.is_trainer:
         owned = trainee_repository.trainer_owned_list_condition if listing else trainee_repository.trainer_owned_condition
-        return [owned(scope.trainer_username)]
+        return [owned(scope.trainer_keys)]
     return [false()]
 
 
 def trainer_summary_counts(
-    db: Session, trainer_username: str, start: Optional[str], end: Optional[str], today: str, today_ist: str
+    db: Session, trainer: Collection[str], start: Optional[str], end: Optional[str], today: str, today_ist: str
 ) -> dict:
     """The trainer Home dashboard's numbers, counted in SQL (two statements) instead of loading the
     trainer's trainings into Python. Same definitions as before (tests/_legacy_trainer_agenda.py
@@ -160,7 +163,7 @@ def trainer_summary_counts(
                     Ongoing card ignores the date filter and opens every running training
       totalTrainees distinct trainees marked Present or with a submitted test - every training on
                     the default view, else the listed ones"""
-    owned = conference_repository.trainer_condition(trainer_username)
+    owned = conference_repository.trainer_condition(trainer)
     default_view = start is None and end is None
     date_bounds = [Conference.conferenceDate == today] if default_view else [
         condition for condition in (
@@ -170,7 +173,7 @@ def trainer_summary_counts(
     ]
     listed = and_(*date_bounds) if date_bounds else true()
 
-    status = func.lower(func.coalesce(Conference.conferenceStatus, ""))
+    status = status_sql(Conference.conferenceStatus)
     approval = func.lower(func.coalesce(Conference.status, ""))
     counted = and_(listed, status != "cancelled")
     not_started_approved = and_(approval == "approved", status.notin_(("ongoing", "live", "completed", "cancelled")))
@@ -180,20 +183,21 @@ def trainer_summary_counts(
     def how_many(condition):
         return func.coalesce(func.sum(case((condition, 1), else_=0)), 0)
 
-    total, completed, pending, missed, ongoing = db.execute(
+    total, completed, pending, missed, ongoing, pending_approval = db.execute(
         select(
             how_many(counted),
             how_many(and_(counted, status == "completed")),
             how_many(and_(scoped, not_started_approved, not_(past))),
             how_many(and_(counted, not_started_approved, past)),
             how_many(status.in_(("ongoing", "live"))),
+            how_many(and_(counted, approval == "pending")),
         ).where(owned)
     ).one()
 
     trainings = select(Conference.conferenceUid).where(owned, *([] if default_view else [listed]))
     trained = union(
         select(Attendance.traineeUid).where(Attendance.conferenceUid.in_(trainings), Attendance.status == "Present"),
-        select(AssessmentResult.traineeUid).where(AssessmentResult.conferenceUid.in_(trainings), AssessmentResult.status == "Submitted"),
+        select(AssessmentResult.traineeUid).where(AssessmentResult.conferenceUid.in_(trainings), assessment_repository.finished()),
     ).subquery()
     total_trainees = db.scalar(select(func.count()).select_from(trained)) or 0
 
@@ -204,6 +208,7 @@ def trainer_summary_counts(
         "pending": int(pending),
         "missed": int(missed),
         "ongoing": int(ongoing),
+        "pendingApproval": int(pending_approval),
     }
 
 
@@ -218,7 +223,7 @@ def count_trained_by_conference(db: Session, conference_uids: Collection[str]) -
         select(Attendance.conferenceUid.label("conferenceUid"), Attendance.traineeUid.label("traineeUid"))
         .where(Attendance.conferenceUid.in_(uids), Attendance.status == "Present"),
         select(AssessmentResult.conferenceUid, AssessmentResult.traineeUid)
-        .where(AssessmentResult.conferenceUid.in_(uids), AssessmentResult.status == "Submitted"),
+        .where(AssessmentResult.conferenceUid.in_(uids), assessment_repository.finished()),
     ).subquery()
     rows = db.execute(select(trained.c.conferenceUid, func.count()).group_by(trained.c.conferenceUid)).all()
     return {conference_uid: int(count) for conference_uid, count in rows}
@@ -232,10 +237,11 @@ _LIVE_QUIZ_PATH = "$.liveQuiz.assessmentSuiteUid"
 
 
 class live_quiz_suite_is(ColumnElement):
-    """SQL for `module_flow.live_quiz_suite_uid(conference) == suite`: the Live Quiz test id stored
-    in `sessionConfig` JSON equals `suite`. A missing, empty or malformed config, a missing key, or
-    a non-text value (a number, null) never matches - as the Python lookup (json.loads + .get)
-    behaves. Compiled per database below."""
+    """SQL for `suite in conference_format.quiz_suite_uids(conference)`: `suite` is a Live Quiz
+    question set the `sessionConfig` JSON names - the older {"liveQuiz": {"assessmentSuiteUid": ...}}
+    dict, or a {"type": "Quiz", "linkedUid": ...} module of the other system's list (user,
+    2026-10-17). A missing, empty or malformed config, a missing key, or a non-text value (a
+    number, null) never matches - as the Python twin behaves. Compiled per database below."""
 
     type = Boolean()
     inherit_cache = True
@@ -248,11 +254,18 @@ class live_quiz_suite_is(ColumnElement):
 @compiles(live_quiz_suite_is)
 def _live_quiz_suite_is_sqlite(element, compiler, **kw):
     config, suite = compiler.process(element.config, **kw), compiler.process(element.suite, **kw)
-    # CASE guards the JSON functions: SQLite raises on malformed JSON, and CASE is evaluated lazily.
+    # CASE guards the JSON functions: SQLite raises on malformed JSON, and CASE is evaluated lazily -
+    # also per list element, which is only read as an object when it is one.
+    quiz_module = (
+        f"EXISTS (SELECT 1 FROM json_each({config}) AS flow_module WHERE CASE WHEN flow_module.type = 'object' THEN "
+        f"(json_extract(flow_module.value, '$.type') = 'Quiz' AND json_type(flow_module.value, '$.linkedUid') = 'text' "
+        f"AND json_extract(flow_module.value, '$.linkedUid') = {suite}) ELSE 0 END)"
+    )
     return (
-        f"(CASE WHEN json_valid({config}) THEN "
+        f"(CASE WHEN json_valid({config}) THEN ("
         f"(json_type({config}, '{_LIVE_QUIZ_PATH}') = 'text' AND json_extract({config}, '{_LIVE_QUIZ_PATH}') = {suite}) "
-        f"ELSE 0 END)"
+        f"OR (json_type({config}) = 'array' AND length({suite}) > 0 AND {quiz_module})"
+        f") ELSE 0 END)"
     )
 
 
@@ -261,10 +274,13 @@ def _live_quiz_suite_is_mysql(element, compiler, **kw):
     config, suite = compiler.process(element.config, **kw), compiler.process(element.suite, **kw)
     # Compared as JSON to JSON (a JSON string equals only that same string), so the column's
     # character set / collation never meets the JSON's - no "illegal mix of collations" - and a
-    # JSON number or null never equals a text id.
+    # JSON number or null never equals a text id. JSON_CONTAINS finds a list element holding both
+    # "type": "Quiz" and this "linkedUid" as JSON strings.
     return (
-        f"(CASE WHEN JSON_VALID({config}) THEN "
-        f"COALESCE(JSON_EXTRACT({config}, '{_LIVE_QUIZ_PATH}') = CAST(JSON_QUOTE({suite}) AS JSON), 0) "
+        f"(CASE WHEN JSON_VALID({config}) THEN COALESCE("
+        f"JSON_EXTRACT({config}, '{_LIVE_QUIZ_PATH}') = CAST(JSON_QUOTE({suite}) AS JSON) "
+        f"OR (JSON_TYPE({config}) = 'ARRAY' AND CHAR_LENGTH({suite}) > 0 "
+        f"AND JSON_CONTAINS({config}, JSON_OBJECT('type', 'Quiz', 'linkedUid', {suite}))), 0) "
         f"ELSE 0 END)"
     )
 
@@ -295,7 +311,7 @@ def _counted_marks(trainee_uid: Optional[str] = None):
         )
         .join(Conference, Conference.conferenceUid == AssessmentResult.conferenceUid)
         .where(
-            AssessmentResult.status == "Submitted",
+            assessment_repository.finished(),
             func.lower(func.coalesce(Conference.conferenceStatus, "")) != "cancelled",
             present,
             scored_suite_condition(),
@@ -348,11 +364,14 @@ class RankPosition:
 def trainee_rank(db: Session, trainee_uid: str, state: Optional[str]) -> tuple[RankPosition, RankPosition]:
     """(global, state) competition rank of one trainee among every ranked trainee of this tenant:
     1 + how many have a strictly higher percent (ties share a rank). Never Present -> not ranked
-    (rank None). No state -> an empty state pool. Two statements, aggregated in the database: no
+    (rank None). No state -> an empty state pool. A state is matched in any of its saved spellings
+    (utils/places: "Uttar Pradesh", "UTTAR PRADESH", "uttar_pradesh", "up"), so trainees registered
+    by older and newer app builds share one pool. Two statements, aggregated in the database: no
     other trainee's row leaves it."""
     mine = db.execute(select(_ranked(trainee_uid).c.percent)).scalar_one_or_none()
     ranked = _ranked()
-    in_state = ranked.c.state == state if state else false()
+    has_state = bool(place_key(state))
+    in_state = place_key_sql(ranked.c.state).in_(place_spellings(state)) if has_state else false()
     higher = ranked.c.percent > mine if mine is not None else false()
 
     def how_many(condition):
@@ -364,7 +383,7 @@ def trainee_rank(db: Session, trainee_uid: str, state: Optional[str]) -> tuple[R
     ranked_here = mine is not None
     return (
         RankPosition(1 + int(above) if ranked_here else None, int(total)),
-        RankPosition(1 + int(state_above) if ranked_here and state else None, int(state_total)),
+        RankPosition(1 + int(state_above) if ranked_here and has_state else None, int(state_total)),
     )
 
 
@@ -383,12 +402,12 @@ def session_ranks(db: Session, trainee_uid: str, suite_by_conference: dict[str, 
         attempt, newer_attempt = func.coalesce(result.c.attemptNumber, 0), func.coalesce(newer.c.attemptNumber, 0)
         query = select(result.c.conferenceUid, result.c.traineeUid, result.c.percentage).where(
             tuple_(result.c.conferenceUid, result.c.assessmentSuiteUid).in_(pairs),
-            result.c.status == "Submitted",
+            assessment_repository.finished(result.c.status),
             ~exists().where(
                 newer.c.conferenceUid == result.c.conferenceUid,
                 newer.c.assessmentSuiteUid == result.c.assessmentSuiteUid,
                 newer.c.traineeUid == result.c.traineeUid,
-                newer.c.status == "Submitted",
+                assessment_repository.finished(newer.c.status),
                 or_(newer_attempt > attempt, and_(newer_attempt == attempt, newer.c.id > result.c.id)),
             ),
         )
@@ -410,7 +429,7 @@ def session_ranks(db: Session, trainee_uid: str, suite_by_conference: dict[str, 
 def counted_condition():
     """A training the Training / Trainers cards count: Completed, or approved
     and still to run (Scheduled / Ongoing)."""
-    status = func.lower(Conference.conferenceStatus)
+    status = status_sql(Conference.conferenceStatus)
     return or_(
         status == "completed",
         and_(func.lower(Conference.status) == "approved", status.in_(("scheduled", "ongoing"))),
@@ -452,8 +471,10 @@ class DashboardSnapshot:
     pax_groups: list[tuple] = field(default_factory=list)
     # (trainingType, attendance status, sessionMeta, count)
     attendance_groups: list[tuple] = field(default_factory=list)
+    # The stored trainer value (ID or login name) of each training counted.
     busy_trainers: set = field(default_factory=set)
-    agency_trainers: set = field(default_factory=set)
+    # Agency-team trainers in the pool, by login name -> their ID (None when they have none).
+    agency_trainers: dict = field(default_factory=dict)
     attempts: int = 0
     passed: int = 0
     percent_total: float = 0.0
@@ -521,7 +542,7 @@ def _snapshot_query(conditions: list, agency_companies: Optional[Collection[str]
     agency_conditions = [AgencyTeam.role == "trainer"]
     if agency_companies is not None:
         agency_conditions.append(_norm(AgencyTeam.company).in_(sorted(agency_companies)))
-    agency_q = select(*_member("agency", _text(AgencyTeam.username))).where(*agency_conditions)
+    agency_q = select(*_member("agency", _text(AgencyTeam.username), _text(AgencyTeam.agencyTeamUid))).where(*agency_conditions)
 
     results_q = (
         select(
@@ -535,7 +556,7 @@ def _snapshot_query(conditions: list, agency_companies: Optional[Collection[str]
         .select_from(AssessmentResult)
         .join(Conference, join_conf_res)
         # Marks only: a Survey has no right answers, so its 0% must not count as a failed attempt.
-        .where(AssessmentResult.status == "Submitted", scored_suite_condition(), *conditions)
+        .where(assessment_repository.finished(), scored_suite_condition(), *conditions)
     )
 
     # Present (training, trainee) pairs, and how many of them never submitted
@@ -547,7 +568,7 @@ def _snapshot_query(conditions: list, agency_companies: Optional[Collection[str]
         .distinct()
     )
     submitted = exists().where(
-        AssessmentResult.status == "Submitted",
+        assessment_repository.finished(),
         AssessmentResult.conferenceUid == Attendance.conferenceUid,
         AssessmentResult.traineeUid == Attendance.traineeUid,
     )
@@ -555,7 +576,7 @@ def _snapshot_query(conditions: list, agency_companies: Optional[Collection[str]
         select(AssessmentResult.conferenceUid, AssessmentResult.traineeUid)
         .join(Conference, join_conf_res)
         .where(
-            AssessmentResult.status == "Submitted",
+            assessment_repository.finished(),
             AssessmentResult.conferenceUid != "",
             AssessmentResult.traineeUid != "",
             *conditions,
@@ -598,7 +619,7 @@ def _read_busy_trainer(snapshot: DashboardSnapshot, row) -> None:
 
 def _read_agency_trainer(snapshot: DashboardSnapshot, row) -> None:
     if row.a:
-        snapshot.agency_trainers.add(row.a)
+        snapshot.agency_trainers[row.a] = row.b
 
 
 def _read_results(snapshot: DashboardSnapshot, row) -> None:

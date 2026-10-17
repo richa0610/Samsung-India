@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from collections.abc import Collection
 from typing import Optional
 
 from sqlalchemy import String, cast, exists, false, func, or_, select, union
@@ -53,19 +54,13 @@ def get_update_conflict(db: Session, trainee_id: int, phone, email) -> Trainee |
     )
 
 
-def get_admin_registration_conflict(
-    db: Session, phone: int, email: str | None, username: str | None, trainee_uid: str
-) -> Trainee | None:
-    return (
-        db.query(Trainee)
-        .filter(
-            (Trainee.phone == phone)
-            | (Trainee.email == email)
-            | (Trainee.username == username)
-            | (Trainee.traineeUid == trainee_uid)
-        )
-        .first()
-    )
+def get_admin_registration_conflict(db: Session, phone: int, email: str | None, username: str | None) -> Trainee | None:
+    """A trainee who already has this phone, email or (when one is given) login name. A blank
+    username isn't compared - it would match every trainee who has none."""
+    conditions = [Trainee.phone == phone, Trainee.email == email]
+    if username:
+        conditions.append(Trainee.username == username)
+    return db.query(Trainee).filter(or_(*conditions)).first()
 
 
 def get_by_uids(db: Session, trainee_uids: set[str]) -> list[Trainee]:
@@ -149,23 +144,25 @@ def list_page(
     return keyset.paginate(db, stmt, order, cursor=cursor, limit=limit, page=page)
 
 
-def trainer_owned_condition(trainer_username: str):
+def trainer_owned_condition(trainer: Collection[str]):
     """A trainee this trainer may see: assigned to them directly (`trainerEmployeeId`), or with
     any attendance row (including the pre-seeded "Pending" roster entry made when a training is
     scheduled) on one of their own conferences - so a trainee who was put on a trainer's roster
     is visible to that trainer even if the trainee's own `trainerEmployeeId` column points
-    elsewhere or is blank."""
-    if not (trainer_username or "").strip():
+    elsewhere or is blank. `trainer` is every value a row may name them by (their ID or login name -
+    conference_repository.trainer_keys)."""
+    keys = conference_repository.trainer_keys(trainer)
+    if not keys:
         return false()
     on_their_roster = exists().where(
         Attendance.traineeUid == Trainee.traineeUid,
         Attendance.conferenceUid == Conference.conferenceUid,
-        conference_repository.trainer_condition(trainer_username),
+        conference_repository.trainer_condition(keys),
     )
-    return or_(Trainee.trainerEmployeeId == trainer_username, on_their_roster)
+    return or_(Trainee.trainerEmployeeId.in_(keys), on_their_roster)
 
 
-def trainer_owned_list_condition(trainer_username: str):
+def trainer_owned_list_condition(trainer: Collection[str]):
     """The same set as `trainer_owned_condition`, shaped for LISTING and COUNTING many trainees:
     `traineeUid IN (derived table: assigned UNION on-their-roster)`. The derived table is built once
     from the trainer's indexes (ix_trainee_trainer, ix_conference_trainer -> attendance by
@@ -173,14 +170,15 @@ def trainer_owned_list_condition(trainer_username: str):
     for every trainee in the tenant (perf/phase6_experiments.py owned: 564 -> 52 ms count, 580 ->
     38 ms page, same 9,770 rows, 100k-attendance dataset). For checking ONE known trainee keep
     `trainer_owned_condition` - its EXISTS probe is cheaper than building the whole set."""
-    if not (trainer_username or "").strip():
+    keys = conference_repository.trainer_keys(trainer)
+    if not keys:
         return false()
     assigned = aliased(Trainee)
     owned = union(
-        select(assigned.traineeUid.label("traineeUid")).where(assigned.trainerEmployeeId == trainer_username),
+        select(assigned.traineeUid.label("traineeUid")).where(assigned.trainerEmployeeId.in_(keys)),
         select(Attendance.traineeUid)
         .join(Conference, Conference.conferenceUid == Attendance.conferenceUid)
-        .where(conference_repository.trainer_condition(trainer_username)),
+        .where(conference_repository.trainer_condition(keys)),
     ).subquery("owned_trainees")
     return Trainee.traineeUid.in_(select(owned.c.traineeUid))
 

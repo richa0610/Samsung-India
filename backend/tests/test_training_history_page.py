@@ -106,6 +106,10 @@ class TrainingHistoryPage(unittest.TestCase):
     def test_the_dashboard_reports_the_current_session_not_the_last_training_counted(self):
         self.add_training("CONF-ON", "2026-09-01", "Ongoing")     # the live session - current
         self.add_training("CONF-UP", "2099-01-01", "Scheduled")   # counted after it
+        # Joined by QR - a pre-assigned "Pending" row isn't the trainee's session until they join it
+        # (test_home_session_selection).
+        self.db.query(Attendance).filter_by(conferenceUid="CONF-ON", traineeUid=ME).update({"status": "Joined"})
+        self.db.commit()
         current, started, _start_at = session_service._select_current_conference(self.db, trainee=self.me())
         self.assertEqual((current.conferenceUid, started), ("CONF-ON", True))
         dashboard = trainee_dashboard_service.build_trainee_dashboard(self.db, self.me(), 5)

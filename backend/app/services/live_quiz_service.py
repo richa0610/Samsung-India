@@ -2,7 +2,8 @@
 
 The trainer drives a synchronised quiz from the Session Dashboard's Live Studio
 card; every joined trainee's phone follows. State is authoritative on the
-`conference` row (`liveQuizState` / `liveQuestionId` / `liveTimerEndsAt`); each
+`conference` row (`liveQuizState` / `liveQuestionId` / `liveTimerEndsAt`, stored the other
+system's way and read / written only through conference_format); each
 mutation nudges the `/ws/live/{conferenceUid}` room with a thin
 `{"type": "live_quiz"}` event so both sides refetch their REST view. Trainee
 scores are computed once, when the quiz finishes.
@@ -23,6 +24,7 @@ from app.core.constants import (
     LIVE_QUIZ_STATE_LEADERBOARD,
     LIVE_QUIZ_STATE_QUESTION_LIVE,
     MODULE_NAMES,
+    RESULT_COMPLETED,
 )
 from app.core.exceptions import bad_request, conflict, not_found
 from app.core.request_context import caller_device
@@ -36,7 +38,7 @@ from app.repositories import (
     conference_repository,
     trainee_repository,
 )
-from app.services import conference_access, trainee_access
+from app.services import answer_numbers, conference_access, trainee_access
 from app.routers.ws import manager as ws_manager
 from app.utils.date_utils import utc_from_epoch_ms, utc_now
 from app.schemas.session import (
@@ -53,10 +55,17 @@ from app.schemas.session import (
     QuestionOption,
 )
 from app.schemas.training import LiveStudioOut, LiveStudioQuestionOut
-from app.services.assessment_service import record_start, result_to_complete, score_answers
+from app.services.assessment_service import answers_snapshot, record_start, result_to_complete, score_answers
+from app.utils.conference_format import (
+    active_module,
+    is_running,
+    quiz_state,
+    set_quiz_state,
+    set_timer_ends,
+    timer_ends_ms,
+)
 from app.services.module_flow import live_quiz_suite_uid, mark_checkout_if_last_module
-
-_LOBBY_STATES = (LIVE_QUIZ_STATE_IDLE, "WAITING", "")
+from app.utils import question_format
 
 
 def _now_ms() -> int:
@@ -64,30 +73,16 @@ def _now_ms() -> int:
 
 
 def _question_timer_seconds(question: Question) -> int:
-    try:
-        settings = json.loads(question.settings) if question.settings else {}
-        return int(settings.get("timerSeconds") or LIVE_QUIZ_DEFAULT_TIMER_SECONDS)
-    except (ValueError, TypeError):
-        return LIVE_QUIZ_DEFAULT_TIMER_SECONDS
+    return question_format.timer_seconds(question) or LIVE_QUIZ_DEFAULT_TIMER_SECONDS
 
 
 def _question_options(question: Question) -> list[dict]:
-    try:
-        return json.loads(question.options) if question.options else []
-    except ValueError:
-        return []
+    return question_format.options(question)
 
 
 def _question_explanation(question: Question) -> Optional[str]:
-    """Shown on the trainee's result / time's-up card. The seed data keeps it
-    in `descriptions`; the Answer-Key panel writes `settings.explanation`."""
-    try:
-        settings = json.loads(question.settings) if question.settings else {}
-        if settings.get("explanation"):
-            return str(settings["explanation"])
-    except (ValueError, TypeError):
-        pass
-    return (question.descriptions or None) if hasattr(question, "descriptions") else None
+    """Shown on the trainee's result / time's-up card (utils/question_format)."""
+    return question_format.explanation(question)
 
 
 def _quiz_title(suite: Optional[AssessmentSuite]) -> str:
@@ -100,7 +95,7 @@ def _timer_paused(conference: Conference) -> bool:
     """The trainer pressed Stop Timer: the clock is frozen (`liveTimerRemainingMs` holds what was
     left, `liveTimerEndsAt` is stale) and answers are locked until Play. Only while a question is
     live - a value left behind by a quiz ended or restarted mid-pause is not a pause."""
-    return conference.liveQuizState == LIVE_QUIZ_STATE_QUESTION_LIVE and conference.liveTimerRemainingMs is not None
+    return quiz_state(conference) == LIVE_QUIZ_STATE_QUESTION_LIVE and conference.liveTimerRemainingMs is not None
 
 
 def _timer_expired(conference: Conference) -> bool:
@@ -108,14 +103,16 @@ def _timer_expired(conference: Conference) -> bool:
     nothing left - its stale `liveTimerEndsAt` passing during the pause doesn't count."""
     if _timer_paused(conference):
         return conference.liveTimerRemainingMs <= 0
-    return bool(conference.liveTimerEndsAt) and _now_ms() >= conference.liveTimerEndsAt
+    ends_ms = timer_ends_ms(conference)
+    return ends_ms is not None and _now_ms() >= ends_ms
 
 
 def _broadcast_ms(conference: Conference, question: Question) -> Optional[int]:
     """When the current question went live = its deadline minus its duration."""
-    if not conference.liveTimerEndsAt:
+    ends_ms = timer_ends_ms(conference)
+    if ends_ms is None:
         return None
-    return conference.liveTimerEndsAt - _question_timer_seconds(question) * 1000
+    return ends_ms - _question_timer_seconds(question) * 1000
 
 
 def _present_live_quiz(db: Session, trainee: Trainee, conference_uid: str) -> tuple[Conference, str]:
@@ -141,9 +138,15 @@ def _sum_response_ms(rows) -> int:
 
 
 def _result_response_ms(result: AssessmentResult) -> int:
+    """The trainee's total answering time, the leaderboard's tie-break: the snapshot's per-question
+    "responseMs" added up (assessment_service.answers_snapshot) - or, on a result scored before the
+    snapshot took the other system's shape, its "totalResponseMs"."""
     try:
-        return int(json.loads(result.answersSnapshot or "{}").get("totalResponseMs", 0))
-    except (ValueError, TypeError):
+        snapshot = json.loads(result.answersSnapshot or "{}")
+        if "totalResponseMs" in snapshot:
+            return int(snapshot["totalResponseMs"])
+        return sum(int(entry.get("responseMs") or 0) for entry in snapshot.values() if isinstance(entry, dict))
+    except (ValueError, TypeError, AttributeError):
         return 0
 
 
@@ -184,13 +187,13 @@ def build_live_studio(db: Session, conference: Conference) -> Optional[LiveStudi
     return LiveStudioOut(
         suiteUid=suite_uid,
         suiteTitle=_quiz_title(suite),
-        state=conference.liveQuizState or LIVE_QUIZ_STATE_IDLE,
+        state=quiz_state(conference),
         activeQuestionId=active_qid,
         # While paused, liveTimerEndsAt is stale (frozen at whatever it was
         # when Stop Timer was pressed) - the client must use
         # timerRemainingMs as the frozen display value instead of counting
         # down from this.
-        timerEndsAt=conference.liveTimerEndsAt or None,
+        timerEndsAt=timer_ends_ms(conference),
         timerRemainingMs=conference.liveTimerRemainingMs if _timer_paused(conference) else None,
         serverNowMs=_now_ms(),
         participants=participants,
@@ -218,9 +221,9 @@ def _owned_live_conference(
     """Same access rule as training.common.owned_conference: the assigned trainer, or
     (per the Phase C access grants) an admin-table account whose scope covers this conference."""
     conference = conference_access.get_authorized_conference(db, admin, conference_uid, common_db, tenant_id)
-    if conference.conferenceStatus != "Ongoing":
+    if not is_running(conference):
         raise conflict("Session is not currently running")
-    if conference.activeModuleId != "LIVE_QUIZ":
+    if active_module(conference) != "LIVE_QUIZ":
         raise conflict("Live Quiz isn't the active module")
     return conference
 
@@ -251,9 +254,9 @@ def broadcast_question(
     if not question or question.assessmentSuiteUid != suite_uid:
         raise bad_request("That question isn't part of this session's Live Quiz")
 
-    conference.liveQuizState = LIVE_QUIZ_STATE_QUESTION_LIVE
+    set_quiz_state(conference, LIVE_QUIZ_STATE_QUESTION_LIVE)
     conference.liveQuestionId = str(question_id)
-    conference.liveTimerEndsAt = _now_ms() + _question_timer_seconds(question) * 1000
+    set_timer_ends(conference, _now_ms() + _question_timer_seconds(question) * 1000)
     # A fresh question always starts running, never inheriting a pause left
     # over from whatever question was live before it.
     conference.liveTimerRemainingMs = None
@@ -279,7 +282,7 @@ def stop_timer(
     a stale screen - or by a second trainer/admin on the same session - can't
     flip it the other way. None (an older app that sends no body) toggles."""
     conference = _owned_live_conference(db, admin, conference_uid, common_db, tenant_id)
-    if conference.liveQuizState != LIVE_QUIZ_STATE_QUESTION_LIVE:
+    if quiz_state(conference) != LIVE_QUIZ_STATE_QUESTION_LIVE:
         raise conflict("No question is currently live")
 
     is_paused = _timer_paused(conference)
@@ -291,10 +294,11 @@ def stop_timer(
     if pause:
         # Freeze at whatever's left, clamped to 0 so a press after the
         # deadline already passed can't store a negative.
-        conference.liveTimerRemainingMs = max(0, (conference.liveTimerEndsAt or now) - now)
+        ends_ms = timer_ends_ms(conference)
+        conference.liveTimerRemainingMs = max(0, (ends_ms if ends_ms is not None else now) - now)
     else:
         # Pick the clock back up with whatever was left.
-        conference.liveTimerEndsAt = now + conference.liveTimerRemainingMs
+        set_timer_ends(conference, now + conference.liveTimerRemainingMs)
         conference.liveTimerRemainingMs = None
 
     conference_repository.save(db, conference)
@@ -311,7 +315,7 @@ def show_leaderboard(
     tenant_id: str = None,
 ):
     conference = _owned_live_conference(db, admin, conference_uid, common_db, tenant_id)
-    conference.liveQuizState = LIVE_QUIZ_STATE_LEADERBOARD
+    set_quiz_state(conference, LIVE_QUIZ_STATE_LEADERBOARD)
     conference.liveQuestionId = None
     conference.liveTimerRemainingMs = None
     conference_repository.save(db, conference)
@@ -328,7 +332,7 @@ def show_lobby(
     tenant_id: str = None,
 ):
     conference = _owned_live_conference(db, admin, conference_uid, common_db, tenant_id)
-    conference.liveQuizState = LIVE_QUIZ_STATE_IDLE
+    set_quiz_state(conference, LIVE_QUIZ_STATE_IDLE)
     conference.liveQuestionId = None
     conference.liveTimerRemainingMs = None
     conference_repository.save(db, conference)
@@ -359,29 +363,33 @@ def _write_trainee_result(
     """Complete a trainee's Live Quiz result from their answer rows - the
     "Started" row their first answer wrote (_record_quiz_start), so startedAt
     is when the quiz began for them. Idempotent - no-op if they already have a
-    Submitted result here (so a trainee's own Final Submit and the trainer's
-    Finish never double-score). Total response time (ms) goes in
-    `answersSnapshot` for the leaderboard tie-break; `durationSeconds` gets its
-    whole-seconds form. `device` is the trainee's own IP / user agent
+    finished result here (so a trainee's own Final Submit and the trainer's
+    Finish never double-score). `answersSnapshot` lists every question with its
+    answer time for the leaderboard tie-break (assessment_service.answers_snapshot);
+    `durationSeconds` is the total in whole seconds. `device` is the trainee's own IP / user agent
     (request_context.caller_device) when they submitted it themselves; a result
     the trainer's Finish scored keeps the device of the trainee's first answer -
     never the trainer's."""
     if assessment_repository.get_latest_result(db, conference_uid, trainee_uid, suite_uid):
         return
-    picks = {}
+    picks: dict[int, Optional[str]] = {}
+    response_ms_by_qid: dict[int, int] = {}
     for row in answer_rows:
         try:
-            picks[int(row.questionId)] = row.selectedOption
+            question_id = int(row.questionId)
         except (TypeError, ValueError):
             continue
+        picks[question_id] = row.selectedOption
+        response_ms = _row_response_ms(row)
+        if response_ms is not None:
+            response_ms_by_qid[question_id] = response_ms
     total, max_score, percentage, _ = score_answers(questions, picks)
-    response_ms = _sum_response_ms(answer_rows)
     result = result_to_complete(db, conference_uid, trainee_uid, suite_uid)
     result.totalScore, result.maxScore, result.percentage = total, max_score, percentage
     result.submittedAt = utc_now()
-    result.durationSeconds = response_ms // 1000
-    result.answersSnapshot = json.dumps({"totalResponseMs": response_ms})
-    result.status = "Submitted"
+    result.durationSeconds = _sum_response_ms(answer_rows) // 1000
+    result.answersSnapshot = answers_snapshot(questions, picks, scored=True, response_ms_by_qid=response_ms_by_qid)
+    result.status = RESULT_COMPLETED
     for column, value in (device or {}).items():
         setattr(result, column, value)
 
@@ -406,7 +414,7 @@ def finish_quiz(db: Session, conference: Conference) -> None:
     """Score every participant who isn't already scored, then mark the quiz
     FINISHED. Idempotent - safe to call from the trainer's Finish action,
     `advance_module` past LIVE_QUIZ, and `end_training`."""
-    if conference.liveQuizState == LIVE_QUIZ_STATE_FINISHED:
+    if quiz_state(conference) == LIVE_QUIZ_STATE_FINISHED:
         return
 
     suite_uid = live_quiz_suite_uid(conference)
@@ -419,7 +427,7 @@ def finish_quiz(db: Session, conference: Conference) -> None:
         for trainee_uid, answer_rows in rows_by_trainee.items():
             _write_trainee_result(db, conference.conferenceUid, suite_uid, trainee_uid, questions, answer_rows)
 
-    conference.liveQuizState = LIVE_QUIZ_STATE_FINISHED
+    set_quiz_state(conference, LIVE_QUIZ_STATE_FINISHED)
     db.commit()
 
 
@@ -428,7 +436,7 @@ def finish_quiz(db: Session, conference: Conference) -> None:
 def get_live_quiz_view(db: Session, trainee: Trainee, conference_uid: str) -> LiveQuizView:
     conference, _attendance = trainee_access.present_conference(db, trainee, conference_uid)
 
-    state = conference.liveQuizState or LIVE_QUIZ_STATE_IDLE
+    state = quiz_state(conference)
     suite_uid = live_quiz_suite_uid(conference)
 
     question_out: Optional[LiveQuestionOut] = None
@@ -458,7 +466,7 @@ def get_live_quiz_view(db: Session, trainee: Trainee, conference_uid: str) -> Li
         if _timer_paused(conference):
             timer_remaining_ms = conference.liveTimerRemainingMs
         else:
-            timer_ends_at = conference.liveTimerEndsAt or None
+            timer_ends_at = timer_ends_ms(conference)
 
     return LiveQuizView(
         state=state,
@@ -479,9 +487,9 @@ def submit_live_answer(
     conference, _attendance = trainee_access.present_conference(db, trainee, payload.conferenceUid, lock=True)
 
     live_question = (
-        conference.liveQuizState == LIVE_QUIZ_STATE_QUESTION_LIVE
+        quiz_state(conference) == LIVE_QUIZ_STATE_QUESTION_LIVE
         and conference.liveQuestionId == str(payload.questionId)
-        and bool(conference.liveTimerEndsAt)
+        and timer_ends_ms(conference) is not None
     )
     if not live_question or _timer_expired(conference):
         return LiveAnswerResult(accepted=False)
@@ -491,6 +499,8 @@ def submit_live_answer(
         return LiveAnswerResult(accepted=False, paused=True)
 
     question = assessment_repository.get_question(db, payload.questionId)
+    # Saved as the option's number (answer_numbers); the app is answered with option ids.
+    saved_option = answer_numbers.number_for(question, payload.selectedOption) if question else None
     now_ms = _now_ms()
     broadcast_ms = _broadcast_ms(conference, question) if question else None
     response_ms = max(0, now_ms - broadcast_ms) if broadcast_ms is not None else None
@@ -507,16 +517,15 @@ def submit_live_answer(
         trainee_uid=trainee.traineeUid,
         suite_uid=suite_uid,
         question_id=payload.questionId,
-        selected_option=payload.selectedOption,
+        selected_option=saved_option,
         response_ms=response_ms,
     )
     _nudge(background_tasks, payload.conferenceUid, tenant_id)
 
-    correct_option = (question.correct_answer or None) if question else None
     return LiveAnswerResult(
         accepted=True,
-        correct=bool(payload.selectedOption) and payload.selectedOption == correct_option,
-        correctOptionId=correct_option,
+        correct=answer_numbers.is_correct(question, saved_option) if question else False,
+        correctOptionId=answer_numbers.correct_option_id(question) if question else None,
         explanation=_question_explanation(question) if question else None,
     )
 
@@ -605,8 +614,8 @@ def _summary_question(order: int, question: Question, row) -> LiveQuizSummaryQue
             for o in _question_options(question)
         ],
         status=_answer_status(row),
-        yourOptionId=(row.selectedOption or None) if row is not None else None,
-        correctOptionId=question.correct_answer or None,
+        yourOptionId=answer_numbers.option_id(question, row.selectedOption) if row is not None else None,
+        correctOptionId=answer_numbers.correct_option_id(question),
         explanation=_question_explanation(question),
         responseMs=_row_response_ms(row) if row is not None else None,
     )
@@ -628,9 +637,9 @@ def reveal_live_question(db: Session, trainee: Trainee, conference_uid: str, que
         raise not_found("Question not found")
     return LiveRevealOut(
         questionId=question_id,
-        correctOptionId=question.correct_answer or None,
+        correctOptionId=answer_numbers.correct_option_id(question),
         explanation=_question_explanation(question),
-        yourOptionId=answer.selectedOption if answer else None,
+        yourOptionId=answer_numbers.option_id(question, answer.selectedOption) if answer else None,
     )
 
 
@@ -678,7 +687,7 @@ def get_live_quiz_results(db: Session, trainee: Trainee, conference_uid: str) ->
     then, and the trainee's Rank tab keeps showing it after the session ends."""
     conference, suite_uid = _present_live_quiz(db, trainee, conference_uid)
 
-    finished = conference.liveQuizState == LIVE_QUIZ_STATE_FINISHED
+    finished = quiz_state(conference) == LIVE_QUIZ_STATE_FINISHED
     questions = assessment_repository.list_questions_for_suite(db, suite_uid)
     ranked = live_quiz_ranked_results(db, conference)
     mine = next((r for r in ranked if r.traineeUid == trainee.traineeUid), None)

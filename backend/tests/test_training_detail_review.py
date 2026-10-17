@@ -10,10 +10,11 @@ Synthetic TenantWorld (in-memory SQLite) only - see test_phase4_operations for t
 
 import json
 
+from app.models.attendance import Attendance
 from app.models.conference import Conference
 from app.models.quiz import Question
 from app.repositories import assessment_repository
-from tests.test_phase4_operations import PRESENT, S_N1, Phase4TestCase
+from tests.test_phase4_operations import PRESENT, ROSTERED, S_N1, Phase4TestCase
 
 
 class TrainingDetailReviewTestCase(Phase4TestCase):
@@ -83,3 +84,41 @@ class TheLiveQuizShowsOnlyQuestionsThatReachedTheTrainee(TrainingDetailReviewTes
     def test_after_the_training_ends_every_question_is_reviewable(self):
         self.set_conference(conferenceStatus="Completed")
         self.assertEqual(self.reviewed_ids("LIVE_QUIZ"), [q.id for q in self.quiz])
+
+
+class MissedOrAbsentShowsOnlyTheOutcome(TrainingDetailReviewTestCase):
+    """User, 2026-10-13: a trainee who missed the training or was marked absent can't see its
+    details - only the outcome, like the Missed screen - so no module, question or answer key
+    reaches them; a trainee who was Present still gets the full breakdown."""
+
+    def detail(self, trainee_uid):
+        response = self.as_trainee(trainee_uid, "GET", f"/sessions/{S_N1}/detail")
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()
+
+    def mark(self, trainee_uid, status):
+        self.alpha.query(Attendance).filter_by(conferenceUid=S_N1, traineeUid=trainee_uid).update({"status": status})
+        self.alpha.commit()
+
+    def test_a_trainee_marked_absent_gets_only_the_outcome_after_the_training(self):
+        self.set_conference(conferenceStatus="Completed")
+        self.mark(ROSTERED, "Absent")
+        body = self.detail(ROSTERED)
+        self.assertEqual((body["status"], body["modules"]), ("Absent", []))
+
+    def test_a_trainee_marked_absent_gets_only_the_outcome_while_it_runs(self):
+        self.open_module("STANDARD_TEST")
+        self.mark(ROSTERED, "Absent")
+        self.assertEqual(self.detail(ROSTERED)["modules"], [])
+
+    def test_a_trainee_who_missed_it_gets_only_the_outcome(self):
+        self.set_conference(conferenceStatus="Completed")  # ROSTERED was never marked Present
+        body = self.detail(ROSTERED)
+        self.assertEqual((body["status"], body["modules"]), ("Missed", []))
+
+    def test_a_present_trainee_still_gets_the_full_breakdown(self):
+        self.set_conference(conferenceStatus="Completed")
+        body = self.detail(PRESENT)
+        self.assertEqual(body["status"], "Completed")
+        self.assertIn("STANDARD_TEST", [m["key"] for m in body["modules"]])
+        self.assertEqual(len(self.module("STANDARD_TEST")["questions"]), len(self.questions))

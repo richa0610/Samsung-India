@@ -1,5 +1,4 @@
-import { useMemo } from "react";
-import { View, StyleSheet } from "react-native";
+import { Pressable, View, StyleSheet } from "react-native";
 import {
     Control,
     Controller,
@@ -11,7 +10,7 @@ import {
 import AppText from "@/components/ui/AppText";
 import AppInput from "@/components/ui/AppInput";
 import InlineSelect from "@/components/ui/InlineSelect";
-import { STATES } from "@/data/states";
+import { useStateDistricts } from "@/hooks/useStateDistricts";
 
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
@@ -36,10 +35,9 @@ export default function ProfessionalDetails({
 }: ProfessionalDetailsProps) {
     const locked = (name: keyof RegisterFormValues) => lockedFields?.has(name) ?? false;
     const state = useWatch({ control, name: "state" });
-    const selectedState = useMemo(
-        () => STATES.find((item) => item.value === state),
-        [state]
-    );
+    const district = useWatch({ control, name: "district" });
+    // From the pincode directory; a value saved by an older build ("uttar_pradesh") shows as its name.
+    const places = useStateDistricts(state, district);
 
     return (
         <View>
@@ -110,19 +108,16 @@ export default function ProfessionalDetails({
                         control={control}
                         name="state"
                         rules={{ required: "State is required" }}
-                        render={({ field: { value, onChange } }) => (
+                        render={({ field: { onChange } }) => (
                             <InlineSelect
                                 placeholder="Select State*"
-                                value={value}
+                                value={places.shownState}
                                 disabled={locked("state")}
                                 onSelect={(newValue) => {
                                     onChange(newValue);
                                     setValue("district", "");
                                 }}
-                                options={STATES.map((item) => ({
-                                    label: item.label,
-                                    value: item.value,
-                                }))}
+                                options={places.stateOptions}
                             />
                         )}
                     />
@@ -132,13 +127,13 @@ export default function ProfessionalDetails({
                     <Controller
                         control={control}
                         name="district"
-                        render={({ field: { value, onChange } }) => (
+                        render={({ field: { onChange } }) => (
                             <InlineSelect
-                                placeholder="Select City"
-                                value={value}
-                                disabled={locked("district")}
+                                placeholder={state ? "Select District" : "Select State First"}
+                                value={places.shownDistrict}
+                                disabled={locked("district") || !state}
                                 onSelect={onChange}
-                                options={selectedState?.cities || []}
+                                options={places.districtOptions}
                             />
                         )}
                     />
@@ -146,6 +141,13 @@ export default function ProfessionalDetails({
             </View>
             {errors.state && (
                 <AppText style={styles.error}>{errors.state.message}</AppText>
+            )}
+            {places.failed && (
+                <Pressable onPress={places.retry} accessibilityRole="button" hitSlop={8}>
+                    <AppText style={styles.error}>
+                        {"Couldn't load the state list. Tap to try again."}
+                    </AppText>
+                </Pressable>
             )}
         </View>
     );

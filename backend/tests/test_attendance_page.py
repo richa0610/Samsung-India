@@ -128,7 +128,7 @@ class AttendancePageTestCase(unittest.TestCase):
                             totalScore=rng.randint(0, 10),
                             maxScore=10,
                             percentage=rng.choice([0, 25.5, 60, 100]),
-                            status=rng.choice(["Submitted", "Submitted", "Started"]),
+                            status=rng.choice(["Completed", "Submitted", "Started"]),
                         )
                     )
         self.db.commit()
