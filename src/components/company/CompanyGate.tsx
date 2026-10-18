@@ -1,12 +1,8 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
 
-import AppText from "@/components/ui/AppText";
-import { COMPANY_TEXT } from "@/constants/strings";
 import { useCompany } from "@/hooks/useCompany";
-import { Colors } from "@/theme/colors";
-import { FontWeight } from "@/theme/typography";
 
+import CompanyBadge from "./CompanyBadge";
 import CompanyCodeForm from "./CompanyCodeForm";
 
 type CompanyGateProps = {
@@ -15,8 +11,9 @@ type CompanyGateProps = {
 
 /**
  * The company code is mandatory before signing in (user, 2026-10-18): until this device has a
- * company, the gate shows the company code form instead of `children` (the sign-in options, a QR
- * join). Once it has one, it shows "Company: <name> · Change" above them.
+ * company, the gate shows the company code form instead of `children` (e.g. a QR join preview).
+ * Once it has one, it shows the company badge (with Change) above them. The first screen has its
+ * own full-page version of this step - CompanyCodeScreen.
  */
 export default function CompanyGate({ children }: CompanyGateProps) {
   const company = useCompany();
@@ -29,30 +26,8 @@ export default function CompanyGate({ children }: CompanyGateProps) {
 
   return (
     <>
-      <View style={styles.row}>
-        <AppText variant="bodySmall" color={Colors.loginSubtext}>
-          {`${COMPANY_TEXT.current}: `}
-        </AppText>
-        <AppText variant="bodySmall" color={Colors.textHeading} weight={FontWeight.semiBold}>
-          {company.companyName}
-        </AppText>
-        <Pressable
-          onPress={() => setChanging(true)}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={`${COMPANY_TEXT.change} ${COMPANY_TEXT.current.toLowerCase()}`}
-        >
-          <AppText variant="bodySmall" color={Colors.loginAccent} weight={FontWeight.semiBold} style={styles.change}>
-            {COMPANY_TEXT.change}
-          </AppText>
-        </Pressable>
-      </View>
+      <CompanyBadge company={company} onChange={() => setChanging(true)} />
       {children}
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "center", flexWrap: "wrap", marginTop: 16 },
-  change: { marginLeft: 10 },
-});

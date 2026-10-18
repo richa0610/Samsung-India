@@ -43,6 +43,13 @@ export const COMPANY_TEXT = {
   required: "Type your company code to continue.",
   current: "Company",
   change: "Change",
+  // The first screen's full-page company step (CompanyCodeScreen).
+  welcome: `Welcome to ${BRAND.name}`,
+  welcomeBody: "Let's connect you to your company. You only need to do this once on this phone.",
+  cardTitle: "Your company",
+  cardSubtitle: "Enter the code your trainer or admin shared",
+  help: "Don't have a code? Ask your trainer or admin.",
+  back: "Back",
   // A QR code from another company (useLinkCompany).
   qrBelongsTo: "This training belongs to",
   qrSwitchHint: "Switch this phone to that company to join it?",

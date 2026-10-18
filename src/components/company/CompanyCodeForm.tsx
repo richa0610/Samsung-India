@@ -14,20 +14,26 @@ type CompanyCodeFormProps = {
   onDone?: () => void;
   /** Shown only when there is already a company to go back to. */
   onCancel?: () => void;
+  /** Its own title and explanation (default) - off where the page already says it (CompanyCodeScreen). */
+  intro?: boolean;
 };
 
 /** "Enter your company code" - ties this device to one company before anyone signs in. */
-export default function CompanyCodeForm({ onDone, onCancel }: CompanyCodeFormProps) {
+export default function CompanyCodeForm({ onDone, onCancel, intro = true }: CompanyCodeFormProps) {
   const { code, changeCode, error, loading, submit } = useCompanyCodeForm(onDone);
 
   return (
-    <View style={styles.container}>
-      <AppText variant="h3" color={Colors.textHeading} align="center" style={styles.title}>
-        {COMPANY_TEXT.title}
-      </AppText>
-      <AppText variant="bodySmall" color={Colors.loginSubtext} align="center" style={styles.body}>
-        {COMPANY_TEXT.body}
-      </AppText>
+    <View style={[styles.container, !intro && styles.embedded]}>
+      {intro && (
+        <>
+          <AppText variant="h3" color={Colors.textHeading} align="center" style={styles.title}>
+            {COMPANY_TEXT.title}
+          </AppText>
+          <AppText variant="bodySmall" color={Colors.loginSubtext} align="center" style={styles.body}>
+            {COMPANY_TEXT.body}
+          </AppText>
+        </>
+      )}
 
       <AppInput
         label={COMPANY_TEXT.label}
@@ -66,6 +72,7 @@ export default function CompanyCodeForm({ onDone, onCancel }: CompanyCodeFormPro
 
 const styles = StyleSheet.create({
   container: { alignSelf: "stretch", marginTop: 24 },
+  embedded: { marginTop: 20 },
   title: { fontWeight: "700" },
   body: { marginTop: 8, marginBottom: 20 },
   field: { marginBottom: 8 },

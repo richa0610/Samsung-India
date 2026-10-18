@@ -1,37 +1,51 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StatusBar } from "expo-status-bar";
-import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { BackHandler, Pressable, ScrollView, StyleSheet, View } from "react-native";
 
-import CompanyGate from "@/components/company/CompanyGate";
+import CompanyBadge from "@/components/company/CompanyBadge";
+import CompanyCodeScreen from "@/components/company/CompanyCodeScreen";
 import AppText from "@/components/ui/AppText";
-import { BRAND, LOGIN_TEXT } from "@/constants/strings";
+import { LOGIN_TEXT } from "@/constants/strings";
+import { useCompany } from "@/hooks/useCompany";
 import { Colors } from "@/theme/colors";
 
-import BrandWordmark from "./login/BrandWordmark";
-import FooterWaves from "./login/FooterWaves";
+import LoginFooter from "./login/LoginFooter";
 import LoginHero from "./login/LoginHero";
 import LoginOptionButton from "./login/LoginOptionButton";
 import LoginRoleSheet, { StaffRole } from "./login/LoginRoleSheet";
 
-const FOOTER_WAVE_HEIGHT = 150;
-
-/** The app's first screen: participants join by QR or Company ID / phone; trainers and admins tap
- *  "Login here" and pick their role in the "Login as" sheet (both sign in on the same screen, worded
- *  for that role - the server's role decides where they land). Every option waits behind the
- *  company code (CompanyGate). All wording comes from LOGIN_TEXT / BRAND, all colours from the theme. */
+/** The app's first screen. Step 1, on its own page: the company code (CompanyCodeScreen) - until
+ *  this phone has a company, and again when the person taps Change. Step 2: participants join by
+ *  QR or Company ID / phone; trainers and admins tap "Login here" and pick their role in the
+ *  "Login as" sheet (both sign in on the same screen, worded for that role - the server's role
+ *  decides where they land). All wording comes from LOGIN_TEXT / BRAND, all colours from the theme. */
 export default function LoginLandingScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const company = useCompany();
+  const [changingCompany, setChangingCompany] = useState(false);
   const [roleSheetOpen, setRoleSheetOpen] = useState(false);
+  const stopChangingCompany = () => setChangingCompany(false);
+
+  // While changing company, the phone's back button returns to the sign-in options.
+  useEffect(() => {
+    if (!changingCompany) return;
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      setChangingCompany(false);
+      return true;
+    });
+    return () => subscription.remove();
+  }, [changingCompany]);
 
   const openStaffLogin = (role: StaffRole) => {
     setRoleSheetOpen(false);
     router.push(role === "admin" ? { pathname: "/trainer_login", params: { portal: "admin" } } : "/trainer_login");
   };
+
+  if (!company || changingCompany) {
+    return <CompanyCodeScreen onDone={stopChangingCompany} onCancel={company ? stopChangingCompany : undefined} />;
+  }
 
   return (
     <View style={styles.container}>
@@ -46,50 +60,43 @@ export default function LoginLandingScreen() {
           <AppText variant="bodySmall" color={Colors.loginSubtext} align="center" style={styles.subtitle}>
             {LOGIN_TEXT.subtitle}
           </AppText>
+          <CompanyBadge company={company} onChange={() => setChangingCompany(true)} />
 
-          <CompanyGate>
-            <View style={styles.options}>
-              <LoginOptionButton icon="scan-outline" label={LOGIN_TEXT.viaQr} onPress={() => router.push("/scan")} />
-              <LoginOptionButton
-                icon="person-outline"
-                label={LOGIN_TEXT.viaUsername}
-                onPress={() => router.push("/participant_login")}
-              />
-            </View>
+          <View style={styles.options}>
+            <LoginOptionButton icon="scan-outline" label={LOGIN_TEXT.viaQr} onPress={() => router.push("/scan")} />
+            <LoginOptionButton
+              icon="person-outline"
+              label={LOGIN_TEXT.viaUsername}
+              onPress={() => router.push("/participant_login")}
+            />
+          </View>
 
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <AppText variant="caption" color={Colors.loginSubtext}>
-                {LOGIN_TEXT.divider}
-              </AppText>
-              <View style={styles.dividerLine} />
-            </View>
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <AppText variant="caption" color={Colors.loginSubtext}>
+              {LOGIN_TEXT.divider}
+            </AppText>
+            <View style={styles.dividerLine} />
+          </View>
 
-            <Pressable
-              style={styles.staffRow}
-              onPress={() => setRoleSheetOpen(true)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={`${LOGIN_TEXT.staffPrompt} ${LOGIN_TEXT.staffLink}`}
-            >
-              <AppText variant="label" color={Colors.loginSubtext} style={styles.staffPrompt}>
-                {LOGIN_TEXT.staffPrompt}
-              </AppText>
-              <AppText variant="label" color={Colors.loginAccent} style={styles.staffLink}>
-                {LOGIN_TEXT.staffLink}
-              </AppText>
-              <Ionicons name="chevron-forward" size={15} color={Colors.loginAccent} />
-            </Pressable>
-          </CompanyGate>
+          <Pressable
+            style={styles.staffRow}
+            onPress={() => setRoleSheetOpen(true)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`${LOGIN_TEXT.staffPrompt} ${LOGIN_TEXT.staffLink}`}
+          >
+            <AppText variant="label" color={Colors.loginSubtext} style={styles.staffPrompt}>
+              {LOGIN_TEXT.staffPrompt}
+            </AppText>
+            <AppText variant="label" color={Colors.loginAccent} style={styles.staffLink}>
+              {LOGIN_TEXT.staffLink}
+            </AppText>
+            <Ionicons name="chevron-forward" size={15} color={Colors.loginAccent} />
+          </Pressable>
         </View>
 
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
-          <FooterWaves width={width} height={FOOTER_WAVE_HEIGHT} />
-          <BrandWordmark color={Colors.brandWordmark} size="small" align="center" />
-          <AppText variant="caption" color={Colors.loginSubtext} style={styles.tagline}>
-            {BRAND.tagline.join("  |  ")}
-          </AppText>
-        </View>
+        <LoginFooter />
       </ScrollView>
 
       <LoginRoleSheet visible={roleSheetOpen} onClose={() => setRoleSheetOpen(false)} onChoose={openStaffLogin} />
@@ -103,7 +110,7 @@ const styles = StyleSheet.create({
   body: { paddingHorizontal: 24, paddingTop: 22, alignItems: "center" },
   title: { fontWeight: "700" },
   subtitle: { marginTop: 8, maxWidth: 300 },
-  options: { flexDirection: "row", gap: 12, marginTop: 30, alignSelf: "stretch" },
+  options: { flexDirection: "row", gap: 12, marginTop: 24, alignSelf: "stretch" },
   dividerRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -116,6 +123,4 @@ const styles = StyleSheet.create({
   staffRow: { flexDirection: "row", alignItems: "center", marginTop: 32, gap: 4 },
   staffPrompt: { fontWeight: "400" },
   staffLink: { marginLeft: 8, fontWeight: "600" },
-  footer: { marginTop: "auto", paddingTop: 72, alignItems: "center", overflow: "hidden" },
-  tagline: { marginTop: 8 },
 });
