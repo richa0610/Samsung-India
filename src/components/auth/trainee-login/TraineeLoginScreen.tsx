@@ -17,6 +17,7 @@ import { joinSession } from "@/api/session";
 import RegisterSheet from "@/components/common/RegisterSheet";
 import AppText from "@/components/ui/AppText";
 import { useAuth } from "@/hooks/useAuth";
+import { useRequireCompany } from "@/hooks/useCompany";
 import { Colors } from "@/theme/colors";
 import { Spacing } from "@/theme/spacing";
 import { FontWeight } from "@/theme/typography";
@@ -28,6 +29,7 @@ const BACKGROUND_IMAGE = require("@/assets/bg/trainee_bg.jpg");
 
 export default function TraineeLoginScreen() {
   const router = useRouter();
+  useRequireCompany();
   const insets = useSafeAreaInsets();
   const { join } = useLocalSearchParams<{ join?: string }>();
   const { setSession } = useAuth();

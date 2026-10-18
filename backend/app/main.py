@@ -27,6 +27,7 @@ from app.routers.catalog import router as catalog_router
 from app.routers.locations import router as locations_router
 from app.routers.media import router as media_router
 from app.routers.session import router as session_router
+from app.routers.tenants import router as tenants_router
 from app.routers.trainee import router as trainee_router
 from app.routers.trainer import router as trainer_router
 from app.routers.training import router as training_router
@@ -209,6 +210,7 @@ app.include_router(locations_router)
 app.include_router(training_router)
 app.include_router(ws_router)
 app.include_router(media_router)
+app.include_router(tenants_router)
 
 
 @app.get("/")

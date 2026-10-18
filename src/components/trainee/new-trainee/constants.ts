@@ -1,7 +1,7 @@
 import { SelectOption } from "@/components/ui/SearchableSelect";
-import { COMPANY_OPTIONS, REQUESTED_BY_OPTIONS } from "@/components/training/add-training/constants";
+import { REQUESTED_BY_OPTIONS } from "@/components/training/add-training/constants";
 
-export { COMPANY_OPTIONS, REQUESTED_BY_OPTIONS };
+export { REQUESTED_BY_OPTIONS };
 
 export const AGENCY_OPTIONS: SelectOption[] = [
   { label: "Quess Corp Ltd", value: "Quess Corp Ltd" },

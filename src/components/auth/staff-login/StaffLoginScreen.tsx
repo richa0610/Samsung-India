@@ -21,6 +21,7 @@ import TrainerIcon from "@/components/auth/login/TrainerIcon";
 import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
 import { STAFF_LOGIN_TEXT } from "@/constants/strings";
+import { useRequireCompany } from "@/hooks/useCompany";
 import { useTrainerLogin } from "@/hooks/useTrainerLogin";
 import { Colors } from "@/theme/colors";
 import { createShadow } from "@/theme/shadows";
@@ -82,6 +83,7 @@ function SubmitButton({ title, loading, onPress }: { title: string; loading: boo
  *  wording differs. Text from STAFF_LOGIN_TEXT, colours from the theme. */
 export default function StaffLoginScreen({ portal, reason }: Props) {
   const router = useRouter();
+  useRequireCompany();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const text = STAFF_LOGIN_TEXT[portal];

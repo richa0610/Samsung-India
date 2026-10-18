@@ -58,7 +58,7 @@ class TenantStatusRecheck(unittest.TestCase):
 
     def test_an_active_tenant_passes(self):
         self.manager._check_tenant_active("GAMMA", registry_with("active"))
-        self.assertEqual(self.manager._status_cache.get("GAMMA"), "active")
+        self.assertIs(self.manager._status_cache.get("GAMMA"), True)
 
 
 if __name__ == "__main__":

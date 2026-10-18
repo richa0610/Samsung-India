@@ -13,7 +13,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { BackHandler, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { CurrentSession, LiveQuizResults, getCurrentSession, getLiveQuizResults, isSessionLive } from "@/api/session";
+import {
+  CurrentSession,
+  LiveQuizResults,
+  getCachedCurrentSession,
+  getCurrentSession,
+  getLiveQuizResults,
+  isSessionLive,
+  setCachedCurrentSession,
+} from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
 import { useLiveQuizChannel } from "@/hooks/useLiveQuizChannel";
 import { TraineeTab } from "@/hooks/useTraineeHome";
@@ -38,8 +46,10 @@ export function useQuizLeaderboard() {
   const params = useLocalSearchParams<{ conferenceUid?: string }>();
   const { token, logout } = useAuth();
 
-  const [conferenceUid, setConferenceUid] = useState<string | null>(params.conferenceUid ?? null);
-  const [session, setSession] = useState<CurrentSession | null>(null);
+  const [conferenceUid, setConferenceUid] = useState<string | null>(
+    () => params.conferenceUid ?? getCachedCurrentSession(token)?.conferenceUid ?? null,
+  );
+  const [session, setSession] = useState<CurrentSession | null>(() => getCachedCurrentSession(token));
   const [results, setResults] = useState<LiveQuizResults | null>(null);
   // Same confirm-before-logout flow as Home/Dashboard/Profile's power
   // button - opening the popup is separate from actually logging out,
@@ -58,6 +68,7 @@ export function useQuizLeaderboard() {
     try {
       const current = await getCurrentSession(token, params.conferenceUid);
       setSession(current);
+      setCachedCurrentSession(token, current);
       const uid = params.conferenceUid ?? current.conferenceUid ?? conferenceUid;
       if (uid) {
         setConferenceUid(uid);

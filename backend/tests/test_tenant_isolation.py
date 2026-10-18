@@ -315,7 +315,7 @@ class RelatedEndpointAccessControl(WorldTestCase):
         """The point of the feature this scope is built on: a Company Admin manages the whole
         company, including a training assigned to a trainer they've never touched before. Sent the
         way the edit form sends it: the whole form, including the training's own place and trainer."""
-        full_form = {**self.EDIT_PAYLOAD, "company": "Samsung India", "zone": "South Zone", "region": "South 1",
+        full_form = {**self.EDIT_PAYLOAD, "zone": "South Zone", "region": "South 1",
                      "trainerEmployeeId": "trainer2", "trainerName": "Trainer2"}
         response = self.w.client.patch(f"/admin/trainings/{uid('S_S1')}", json=full_form, headers=self.w.headers("coadmin"))
         self.assertEqual(response.status_code, 200)
@@ -438,16 +438,16 @@ class TraineeListAccessControl(WorldTestCase):
 
 
 class TraineeRegistrationAuthorization(WorldTestCase):
-    """POST /admin/trainees: company/zone/region come from the request body like every other
-    field on the form, but for a Company Admin, Coordinator or Sub-coordinator they also double
-    as an authorization boundary - a mismatched value is a forged scope, not a typo, and is
-    rejected rather than silently corrected."""
+    """POST /admin/trainees: the company is the tenant's (user, 2026-10-18 - a form naming one is
+    refused); zone/region come from the request body like every other field on the form, but for a
+    Coordinator or Sub-coordinator they also double as an authorization boundary - a mismatched
+    value is a forged scope, not a typo, and is rejected rather than silently corrected."""
 
     def payload(self, **overrides):
         base = {
             "traineeUid": "TR-NEW", "fullName": "New Person", "designation": "Promoter", "gender": "Male",
             "primaryEmail": "new.person@example.com", "primaryPhone": "9123456780", "state": "Delhi",
-            "zone": "North Zone", "region": "North 1", "company": "Samsung India", "requestedBy": "Quess Corp Ltd",
+            "zone": "North Zone", "region": "North 1", "requestedBy": "Quess Corp Ltd",
             "trainerId": "trainer1", "trainerName": "Trainer One", "supervisorId": "sup1", "supervisorName": "Sup One",
             "jobStatus": "Active", "username": "newperson", "password": "Correct-Horse-9",
         }
@@ -457,9 +457,17 @@ class TraineeRegistrationAuthorization(WorldTestCase):
     def register(self, who, **overrides):
         return self.w.client.post("/admin/trainees", json=self.payload(**overrides), headers=self.w.headers(who))
 
-    def test_company_admin_cannot_forge_a_different_company(self):
+    def test_a_form_naming_a_company_is_refused(self):
         response = self.register("coadmin", company="Other Co")
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 422)
+
+    def test_the_trainee_is_filed_under_the_tenants_company(self):
+        response = self.register("coadmin")
+        self.assertEqual(response.status_code, 201, response.text)
+        self.assertEqual(response.json()["company"], "Samsung India")
+        self.w.tenant_db[ALPHA].expire_all()
+        stored = self.w.tenant_db[ALPHA].query(Trainee).filter_by(traineeUid=response.json()["traineeUid"]).one()
+        self.assertEqual(stored.company, "Samsung India")  # the name: no agency is registered in this world
 
     def test_company_admin_can_register_within_their_own_company_any_zone(self):
         response = self.register("coadmin", zone="South Zone", region="South 1")  # any zone is fine - whole company
@@ -481,8 +489,8 @@ class TraineeRegistrationAuthorization(WorldTestCase):
         response = self.register("subcoord", zone="North Zone", region="Delhi NCR")
         self.assertEqual(response.status_code, 201, response.text)
 
-    def test_super_admin_is_not_restricted_to_any_single_company(self):
-        response = self.register("super", company="Other Co", zone="North Zone", region="North 1")
+    def test_super_admin_is_not_restricted_to_any_zone(self):
+        response = self.register("super", zone="South Zone", region="South 1")
         self.assertEqual(response.status_code, 201, response.text)
 
     def test_a_rejected_registration_writes_nothing(self):

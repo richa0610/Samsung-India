@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, EmailStr, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints
 
 from app.schemas._common import (
     PageMeta,
@@ -20,7 +20,10 @@ ApprovalStatus = Literal["Approved", "Pending", "Rejected"]
 
 class TraineeAdminIn(BaseModel):
     """Payload for POST /admin/trainees - the trainer/admin-side "register a
-    new trainee" form. Mirrors NewTraineeInput on the frontend."""
+    new trainee" form. Mirrors NewTraineeInput on the frontend. Anything else -
+    `company` included, since a trainee's company is its tenant's - is refused (422)."""
+
+    model_config = ConfigDict(extra="forbid")
 
     # Ignored - the server makes the trainee's ID from their zone (models/uid_events.py, user
     # 2026-10-16); an older app build still sends the ID it had typed in.
@@ -40,7 +43,6 @@ class TraineeAdminIn(BaseModel):
     district: OptShortStr = None
     zone: ShortStr
     region: ShortStr
-    company: ShortStr
     requestedBy: ShortStr
     trainerId: IdStr
     trainerName: ShortStr

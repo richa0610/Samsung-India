@@ -409,10 +409,10 @@ class TenantSchemaSyncOnFirstUse(unittest.TestCase):
 class PlacementRules(FixesTestCase):
     """Rule 1 (trainer registering a trainee) and rule 2 (admin assigning trainers)."""
 
-    def register(self, who, n, company="Samsung India", trainer="trainer1", zone="North Zone"):
+    def register(self, who, n, trainer="trainer1", zone="North Zone"):
         body = {"traineeUid": f"TR-P-{n}", "fullName": "New Person", "designation": "Promoter", "gender": "Male",
                 "primaryEmail": f"p{n}@example.com", "primaryPhone": f"91234567{n:02d}", "state": "Delhi", "zone": zone,
-                "region": "North 1", "company": company, "requestedBy": "Quess", "trainerId": trainer,
+                "region": "North 1", "requestedBy": "Quess", "trainerId": trainer,
                 "trainerName": "T", "supervisorId": "s", "supervisorName": "S", "jobStatus": "Active",
                 "username": f"placement{n}", "password": "Correct-Horse-9"}
         return self.w.client.post("/admin/trainees", json=body, headers=self.w.headers(who)).status_code
@@ -421,14 +421,14 @@ class PlacementRules(FixesTestCase):
         self.assertEqual(self.register("trainer1", 1), 201)                          # self
         self.assertEqual(self.register("trainer1", 2, trainer="trainer2"), 201)      # same-company trainer
         self.assertEqual(self.register("trainer1", 3, trainer="trainer3"), 403)      # Other Co trainer
-        self.assertEqual(self.register("trainer1", 4, company="Other Co"), 403)      # another company
+        self.assertEqual(self.register("trainer3", 4, trainer="trainer3"), 403)      # an Other Co trainer: not this tenant's company
         self.assertEqual(self.register("trainer1", 5, trainer="ghost"), 403)         # not a trainer here
 
     def test_an_admin_assigns_only_trainers_from_companies_in_their_grant(self):
         self.assertEqual(self.register("coadmin", 6, trainer="trainer3"), 403)       # Other Co trainer
         self.assertEqual(self.register("coadmin", 7, trainer="trainer2"), 201)
         self.assertEqual(self.register("super", 8, trainer="trainer3"), 201)         # super: any trainer in the tenant
-        create = {"conferenceDate": "2026-10-01", "conferenceTime": "10:00 AM", "company": "Samsung India",
+        create = {"conferenceDate": "2026-10-01", "conferenceTime": "10:00 AM",
                   "zone": "North Zone", "trainerEmployeeId": "trainer3"}
         self.assertEqual(self.w.client.post("/admin/trainings", json=create, headers=self.w.headers("coadmin")).status_code, 403)
 
@@ -452,7 +452,8 @@ class PartialTrainingPatch(FixesTestCase):
         self.assertEqual((after.company, after.zone, after.region, after.trainerEmployeeId, after.conferenceDate), place)
 
     def test_the_merged_result_must_stay_inside_the_grant(self):
-        self.assertEqual(self.patch("coadmin", "S_S1", {"company": "Other Co"}).status_code, 403)
+        # The company isn't editable (it is the tenant's): an edit that sends one is refused.
+        self.assertEqual(self.patch("coadmin", "S_S1", {"company": "Other Co"}).status_code, 422)
         self.assertEqual(self.patch("coord", "S_N1", {"zone": "South Zone"}).status_code, 403)
         self.assertEqual(self.patch("coadmin", "S_S1", {"trainerEmployeeId": "trainer3"}).status_code, 403)
         self.assertEqual(self.row("S_S1").company, "Samsung India")
@@ -466,7 +467,7 @@ class PartialTrainingPatch(FixesTestCase):
 
     def test_the_full_edit_form_still_works(self):
         row = self.row("S_N1")
-        form = {"company": row.company, "zone": row.zone, "region": row.region, "trainerEmployeeId": row.trainerEmployeeId,
+        form = {"zone": row.zone, "region": row.region, "trainerEmployeeId": row.trainerEmployeeId,
                 "trainerName": row.trainerName, "conferenceDate": "2026-10-05", "conferenceTime": "11:00 AM",
                 "isResidential": False, "sessionFlow": None, "venue": None, "checklist": []}
         self.assertEqual(self.patch("coord", "S_N1", form).status_code, 200)

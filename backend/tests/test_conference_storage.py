@@ -19,9 +19,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.models.agency import Agency
+from app.models.common.tenant_registry import Tenant
 from app.models.conference import Conference
 from app.utils.date_utils import ist_now
-from tests.tenant_fixtures import uid
+from tests.tenant_fixtures import ALPHA, uid
 from tests.test_trainer_authorization import TrainerWorldTestCase
 
 PHOTO = ("p.jpg", b"\xff\xd8\xff\xe0" + b"\x00" * 64, "image/jpeg")
@@ -43,7 +44,7 @@ class StoredTheirWayTestCase(TrainerWorldTestCase):
 class ANewTraining(StoredTheirWayTestCase):
     def create(self, who="coadmin", **overrides):
         body = {
-            "company": "Samsung India", "zone": "North", "region": "North 1", "trainerEmployeeId": "trainer2",
+            "zone": "North", "region": "North 1", "trainerEmployeeId": "trainer2",
             "trainerName": "Trainer2", "conferenceDate": "2026-10-20", "conferenceTime": "02:00 PM",
             "state": "Delhi", "district": "New Delhi",
             "sessionFlow": {
@@ -124,9 +125,27 @@ class ANewTraining(StoredTheirWayTestCase):
         items = self.get("coadmin", "/admin/trainings/page?limit=200&trainers=trainer2").json()["items"]
         self.assertIn(c.conferenceUid, {i["conferenceUid"] for i in items})
 
+    def test_the_company_is_the_tenants_and_a_form_cannot_name_one(self):
+        c = self.create(who="super", trainerEmployeeId="trainer3", trainerName="Trainer3")
+        self.assertEqual((c.company, c.trainerEmployeeId), (SAMSUNG_ID, "g3"))
+        body = {"company": "Other Co", "conferenceDate": "2026-10-20", "conferenceTime": "02:00 PM"}
+        self.assertEqual(self.post("super", "/admin/trainings", body).status_code, 422)
+
+    def test_a_tenant_linked_to_its_agency_stores_that_id(self):
+        self.w.common.query(Tenant).filter(Tenant.tenant_uid == ALPHA).update({"agency_uid": "AGY2687355"})
+        self.w.common.commit()
+        self.assertEqual(self.create().company, "AGY2687355")
+
     def test_an_unregistered_company_keeps_its_name(self):
-        c = self.create(who="super", company="Other Co", trainerEmployeeId="trainer3", trainerName="Trainer3")
-        self.assertEqual((c.company, c.trainerEmployeeId), ("Other Co", "g3"))
+        self.w.common.query(Agency).delete()
+        self.w.common.commit()
+        self.assertEqual(self.create().company, "Samsung India")
+
+    def test_a_tenant_missing_from_the_registry_cannot_create(self):
+        self.w.common.query(Tenant).filter(Tenant.tenant_uid == ALPHA).delete()
+        self.w.common.commit()
+        response = self.post("super", "/admin/trainings", {"conferenceDate": "2026-10-20", "conferenceTime": "02:00 PM"})
+        self.assertEqual(response.status_code, 409, response.text)
 
     def test_an_admin_table_trainer_is_stored_by_their_admin_id(self):
         c = self.create(who="super", trainerEmployeeId="adm_trainer", trainerName="Adm Trainer")

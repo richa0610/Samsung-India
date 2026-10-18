@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import LoginLandingScreen from "@/components/auth/LoginLandingScreen";
 import { SLIDE_INTERVAL_MS } from "@/components/auth/login/LoginHero";
+import { setCompany } from "@/config/company";
 import { BRAND, LOGIN_ROLE_TEXT, LOGIN_TEXT } from "@/constants/strings";
 
 const mockPush = jest.fn();
@@ -16,8 +17,11 @@ jest.mock("react-native-safe-area-context", () => ({
 }));
 
 // The first render loads the icon set and svg from scratch; do it once here, so each test below
-// runs within the normal per-test limit.
+// runs within the normal per-test limit. The device already has its company (the sign-in options
+// wait behind the company code - CompanyGate has its own tests); a made-up one, so "no Samsung"
+// below still checks the brand.
 beforeAll(async () => {
+  setCompany({ tenantId: "acme", companyName: "Acme Retail" });
   const first = await render(<LoginLandingScreen />);
   await first.unmount();
 }, 30_000);

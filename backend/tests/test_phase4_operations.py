@@ -281,7 +281,7 @@ class NoMassAssignment(Phase4TestCase):
     def test_trainee_registration_ignores_a_supplied_photo_path(self):
         body = {"traineeUid": "TR-MA", "fullName": "New Person", "designation": "Promoter", "gender": "Male",
                 "primaryEmail": "ma@example.com", "primaryPhone": "9123456700", "state": "Delhi", "zone": "North Zone",
-                "region": "North 1", "company": "Samsung India", "requestedBy": "Quess", "trainerId": "trainer1",
+                "region": "North 1", "requestedBy": "Quess", "trainerId": "trainer1",
                 "trainerName": "Trainer One", "supervisorId": "s", "supervisorName": "S", "jobStatus": "Active",
                 "username": "masspath", "password": "Correct-Horse-9", "profilePhoto": "trainee_photos/TR-S_S1-0.jpg"}
         response = self.w.client.post("/admin/trainees", json=body, headers=self.w.headers("trainer1"))

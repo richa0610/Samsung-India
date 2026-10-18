@@ -1,6 +1,6 @@
 from app.core.config import settings
 from app.database.common import CommonSessionLocal
-from app.models.common.tenant_registry import Tenant
+from app.repositories import tenant_repository
 
 
 def get_proctoring_settings(tenant_id: str) -> tuple[bool, int]:
@@ -16,7 +16,7 @@ def get_proctoring_settings(tenant_id: str) -> tuple[bool, int]:
     before an admin ever managed it)."""
     common_db = CommonSessionLocal()
     try:
-        tenant = common_db.query(Tenant).filter(Tenant.tenant_uid == tenant_id).first()
+        tenant = tenant_repository.get(common_db, tenant_id)
     finally:
         common_db.close()
 

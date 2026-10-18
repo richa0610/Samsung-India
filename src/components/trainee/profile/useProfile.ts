@@ -5,7 +5,13 @@ import { Alert, BackHandler } from "react-native";
 import ImageCropPicker from "react-native-image-crop-picker";
 
 import { ApiError, uploadTraineePhoto } from "@/api/auth";
-import { CurrentSession, getCurrentSession, isSessionLive } from "@/api/session";
+import {
+  CurrentSession,
+  getCachedCurrentSession,
+  getCurrentSession,
+  isSessionLive,
+  setCachedCurrentSession,
+} from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
 import { TraineeTab } from "@/hooks/useTraineeHome";
 import { canNavigate } from "@/utils/navigationGuard";
@@ -14,7 +20,7 @@ import { DetailItem, MAX_PHOTO_BYTES, placeName, shownValue } from "./constants"
 export function useProfile() {
   const router = useRouter();
   const { trainee, token, logout, setSession } = useAuth();
-  const [session, setSessionState] = useState<CurrentSession | null>(null);
+  const [session, setSessionState] = useState<CurrentSession | null>(() => getCachedCurrentSession(token));
   const [editVisible, setEditVisible] = useState(false);
   const [uploading, setUploading] = useState(false);
   // Same confirm-before-logout flow as the trainer's dashboard/profile
@@ -50,7 +56,10 @@ export function useProfile() {
         return;
       }
       getCurrentSession(token)
-        .then((s) => setSessionState(s))
+        .then((s) => {
+          setSessionState(s);
+          setCachedCurrentSession(token, s);
+        })
         .catch(() => setSessionState(null));
     }, [token]),
   );
@@ -142,7 +151,10 @@ export function useProfile() {
     } else if (tab === "dashboard") {
       router.replace("/trainee_dashboard");
     } else if (tab === "rank") {
-      router.replace("/quiz_leaderboard");
+      router.replace({
+        pathname: "/quiz_leaderboard",
+        params: { conferenceUid: session?.conferenceUid ?? "" },
+      });
     }
   };
 

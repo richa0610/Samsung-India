@@ -3,12 +3,12 @@ import { useRouter } from "expo-router";
 import { scanFromURLAsync, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
 
-import { parseJoinCode } from "./parseJoinCode";
+import { parseJoinLink } from "./parseJoinLink";
 
 /**
  * Backs the in-app QR scanner (`app/scan.tsx`) - the participant entry
- * point. Reads a session QR with expo-camera, pulls the conference code
- * out of it, and hands off to the join screen (the same place a
+ * point. Reads a session QR with expo-camera, pulls the join code (and the
+ * company it names) out of it, and hands off to the join screen (the same place a
  * `samsungindia://join/<code>` deep link lands, so the rest of the flow -
  * preview -> login/register -> session - is unchanged). The QR can be read
  * live from the camera or picked from the photo gallery (UPI-style).
@@ -22,10 +22,11 @@ export function useQrScanner() {
 
   const goToJoin = useCallback(
     (raw: string): boolean => {
-      const code = parseJoinCode(raw);
-      if (!code) return false;
+      const link = parseJoinLink(raw);
+      if (!link) return false;
       handled.current = true;
-      router.replace({ pathname: "/join/[code]", params: { code } });
+      const params = link.company ? { code: link.code, company: link.company } : { code: link.code };
+      router.replace({ pathname: "/join/[code]", params });
       return true;
     },
     [router],
@@ -62,7 +63,7 @@ export function useQrScanner() {
     try {
       const scans = await scanFromURLAsync(picked.assets[0].uri, ["qr"]);
       const codes = scans.map((s) => s.data).filter(Boolean);
-      const match = codes.map(parseJoinCode).find((c): c is string => !!c);
+      const match = codes.find((code) => parseJoinLink(code));
 
       if (match && goToJoin(match)) return;
 

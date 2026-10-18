@@ -11,6 +11,7 @@ from app.routers.ws import manager as ws_manager
 from app.schemas.trainee import TokenResponse, TraineeLogin, TraineeRegister, TraineeUpdate
 from app.services import catalog_service
 from app.services.activity_log_service import log_activity
+from app.services.company_ids import require_tenant_company
 from app.utils.validators import read_photo_upload
 
 LOGIN_SCOPE = "trainee-login"   # rate_limit's key prefix for this login's failure counts
@@ -18,6 +19,7 @@ LOGIN_SCOPE = "trainee-login"   # rate_limit's key prefix for this login's failu
 
 def register(
     db: Session,
+    common_db: Session,
     payload: TraineeRegister,
     background_tasks: BackgroundTasks,
     tenant_id: str,
@@ -31,7 +33,12 @@ def register(
 
     # Saved as the master list names them; the zone starts the trainee's ID (models/uid_events.py).
     zone, region = catalog_service.master_zone_region(db, payload.zone, payload.region)
-    trainee = trainee_repository.create(db, Trainee(**payload.model_dump(exclude={"zone", "region"}), zone=zone, region=region))
+    # The company is the tenant's (user, 2026-10-18) - without one, a company-scoped admin wouldn't
+    # see the trainee at all.
+    company = require_tenant_company(common_db, tenant_id).stored
+    trainee = trainee_repository.create(
+        db, Trainee(**payload.model_dump(exclude={"zone", "region"}), zone=zone, region=region, company=company)
+    )
 
     background_tasks.add_task(ws_manager.broadcast, tenant_id, {"type": "trainee_created", "traineeUid": trainee.traineeUid})
 

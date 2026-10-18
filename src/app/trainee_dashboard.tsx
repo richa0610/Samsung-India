@@ -60,7 +60,10 @@ export default function TraineeDashboardScreen() {
     if (tab === "home") {
       router.replace("/session_detail");
     } else if (tab === "rank") {
-      router.replace("/quiz_leaderboard");
+      router.replace({
+        pathname: "/quiz_leaderboard",
+        params: { conferenceUid: session?.conferenceUid ?? "" },
+      });
     } else if (tab === "profile") {
       router.replace("/profile");
     }

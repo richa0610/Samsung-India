@@ -48,6 +48,10 @@ class TenantLimit(unittest.TestCase):
         statuses, _ = self.run_requests(["T"] * 4, limit=2, wait=2.0, hold=0.2)
         self.assertEqual(statuses, [200, 200, 200, 200])
 
+    def test_one_tenants_spellings_share_one_cap(self):
+        statuses, _ = self.run_requests(["SLOW", "slow", "Slow ", "sLoW"])
+        self.assertEqual(sorted(statuses), [200, 200, 503, 503])
+
     def test_made_up_tenant_names_leave_nothing_behind(self):
         _, slots = self.run_requests([f"RANDOM{n}" for n in range(50)], limit=1, hold=0.01)
         self.assertEqual(slots, {})

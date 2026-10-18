@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import { Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import CompanyGate from "@/components/company/CompanyGate";
 import AppText from "@/components/ui/AppText";
 import { BRAND, LOGIN_TEXT } from "@/constants/strings";
 import { Colors } from "@/theme/colors";
@@ -19,8 +20,8 @@ const FOOTER_WAVE_HEIGHT = 150;
 
 /** The app's first screen: participants join by QR or Company ID / phone; trainers and admins tap
  *  "Login here" and pick their role in the "Login as" sheet (both sign in on the same screen, worded
- *  for that role - the server's role decides where they land). All wording comes from LOGIN_TEXT /
- *  BRAND, all colours from the theme. */
+ *  for that role - the server's role decides where they land). Every option waits behind the
+ *  company code (CompanyGate). All wording comes from LOGIN_TEXT / BRAND, all colours from the theme. */
 export default function LoginLandingScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -46,38 +47,40 @@ export default function LoginLandingScreen() {
             {LOGIN_TEXT.subtitle}
           </AppText>
 
-          <View style={styles.options}>
-            <LoginOptionButton icon="scan-outline" label={LOGIN_TEXT.viaQr} onPress={() => router.push("/scan")} />
-            <LoginOptionButton
-              icon="person-outline"
-              label={LOGIN_TEXT.viaUsername}
-              onPress={() => router.push("/participant_login")}
-            />
-          </View>
+          <CompanyGate>
+            <View style={styles.options}>
+              <LoginOptionButton icon="scan-outline" label={LOGIN_TEXT.viaQr} onPress={() => router.push("/scan")} />
+              <LoginOptionButton
+                icon="person-outline"
+                label={LOGIN_TEXT.viaUsername}
+                onPress={() => router.push("/participant_login")}
+              />
+            </View>
 
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <AppText variant="caption" color={Colors.loginSubtext}>
-              {LOGIN_TEXT.divider}
-            </AppText>
-            <View style={styles.dividerLine} />
-          </View>
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <AppText variant="caption" color={Colors.loginSubtext}>
+                {LOGIN_TEXT.divider}
+              </AppText>
+              <View style={styles.dividerLine} />
+            </View>
 
-          <Pressable
-            style={styles.staffRow}
-            onPress={() => setRoleSheetOpen(true)}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`${LOGIN_TEXT.staffPrompt} ${LOGIN_TEXT.staffLink}`}
-          >
-            <AppText variant="label" color={Colors.loginSubtext} style={styles.staffPrompt}>
-              {LOGIN_TEXT.staffPrompt}
-            </AppText>
-            <AppText variant="label" color={Colors.loginAccent} style={styles.staffLink}>
-              {LOGIN_TEXT.staffLink}
-            </AppText>
-            <Ionicons name="chevron-forward" size={15} color={Colors.loginAccent} />
-          </Pressable>
+            <Pressable
+              style={styles.staffRow}
+              onPress={() => setRoleSheetOpen(true)}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={`${LOGIN_TEXT.staffPrompt} ${LOGIN_TEXT.staffLink}`}
+            >
+              <AppText variant="label" color={Colors.loginSubtext} style={styles.staffPrompt}>
+                {LOGIN_TEXT.staffPrompt}
+              </AppText>
+              <AppText variant="label" color={Colors.loginAccent} style={styles.staffLink}>
+                {LOGIN_TEXT.staffLink}
+              </AppText>
+              <Ionicons name="chevron-forward" size={15} color={Colors.loginAccent} />
+            </Pressable>
+          </CompanyGate>
         </View>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>

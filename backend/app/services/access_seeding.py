@@ -24,11 +24,10 @@ from app.dependencies.filters import ConferenceFilters
 from app.models.admin import Admin
 from app.models.admin_access import AccessBase, AdminAccess
 from app.models.agency import Agency, AgencyBase
-from app.models.common.tenant_registry import Tenant
 from app.models.conference import Conference
 from app.models.data_scope import DataScope
 from app.models.logs_master import LogsMaster
-from app.repositories import agency_repository
+from app.repositories import agency_repository, tenant_repository
 from app.services.access_service import AccessRole, company_admin_key, norm, resolve_scope
 from app.services.account_ids import account_keys
 from app.services.data_scope_service import apply_identity_scope
@@ -173,10 +172,10 @@ def build_plan(
 
 def _check_tenant(plan: Plan, common_db: Session) -> None:
     tenant_uid = plan.tenant_uid
-    tenant = common_db.query(Tenant).filter(Tenant.tenant_uid == tenant_uid).first()
+    tenant = tenant_repository.get(common_db, tenant_uid)
     if tenant is None:
         plan.add("WARN", f"tenant '{tenant_uid}' has no row in the tenant registry (it works only as the default tenant)")
-    elif (tenant.status or "").lower() != "active":
+    elif not tenant.is_active:
         plan.add("BLOCK", f"tenant '{tenant_uid}' is {tenant.status!r}, not active")
     else:
         plan.add("OK", f"tenant '{tenant_uid}' is registered and active")

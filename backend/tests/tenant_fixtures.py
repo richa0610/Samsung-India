@@ -108,8 +108,11 @@ class TenantWorld:
         self.common = sessionmaker(bind=self.common_engine)()
         self.tenant_db = {ALPHA: sessionmaker(bind=self.alpha_engine)(), BETA: sessionmaker(bind=self.beta_engine)()}
 
+        # Both tenants' registered company is "Samsung India" - what a new training there is filed
+        # under (a training's company is its tenant's); "Other Co" rows stand for data the other
+        # system wrote.
         for tenant in (ALPHA, BETA):
-            self.common.add(Tenant(tenant_uid=tenant, company_name=f"{tenant} Corp", database_host="h", database_port=3306,
+            self.common.add(Tenant(tenant_uid=tenant, company_name="Samsung India", database_host="h", database_port=3306,
                                    database_name=tenant.lower(), database_username="u", database_password="p", status="active"))
         self._seed_accounts()
         self._seed_data()

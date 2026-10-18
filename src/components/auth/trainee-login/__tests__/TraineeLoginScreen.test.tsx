@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react-nativ
 
 import { loginTrainee } from "@/api/auth";
 import TraineeLoginScreen from "@/components/auth/trainee-login/TraineeLoginScreen";
+import { setCompany } from "@/config/company";
 import { STAFF_LOGIN_TEXT } from "@/constants/strings";
 
 const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn(), canGoBack: jest.fn(() => true) };
@@ -25,6 +26,7 @@ jest.mock("@/api/auth", () => ({
 const mockLogin = jest.mocked(loginTrainee);
 
 beforeAll(async () => {
+  setCompany({ tenantId: "acme", companyName: "Acme Retail" }); // sign-in screens need the company first
   const first = await render(<TraineeLoginScreen />);
   await first.unmount();
 }, 30_000);

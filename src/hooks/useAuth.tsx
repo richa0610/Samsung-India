@@ -4,7 +4,9 @@ import * as SecureStore from "expo-secure-store";
 
 import { AdminAccount, AdminAuthSession, logoutAdmin } from "@/api/admin";
 import { AuthSession, Trainee, logoutTrainee } from "@/api/auth";
+import { clearCachedCurrentSession } from "@/api/session";
 import { getWsBaseUrl } from "@/constants/api";
+import { useBackfillCompany } from "@/hooks/useCompany";
 import { emit } from "@/services/liveEvents";
 
 // Cold-start persistence for both sessions - without this, a still-valid JWT
@@ -69,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [adminSession, setAdminSessionState] = useState<AdminAuthSession | null>(null);
   const [restoring, setRestoring] = useState(CAN_PERSIST);
   const adminToken = adminSession?.access_token ?? null;
+  useBackfillCompany(session?.access_token ?? adminToken, restoring);
 
   // One-shot rehydration on mount - there's nothing to read back on web.
   useEffect(() => {
@@ -90,11 +93,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setSession = useCallback((next: AuthSession) => {
     setSessionState(next);
     writeStored(AUTH_SESSION_KEY, next);
+    setAdminSessionState(null);
+    writeStored(ADMIN_SESSION_KEY, null);
   }, []);
 
   const logout = useCallback(() => {
     // Revoke the token server-side too; best-effort - signing out locally never waits on it.
     if (session?.access_token) logoutTrainee(session.access_token).catch(() => {});
+    clearCachedCurrentSession();
     setSessionState(null);
     writeStored(AUTH_SESSION_KEY, null);
   }, [session]);
@@ -102,6 +108,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const setAdminSession = useCallback((next: AdminAuthSession) => {
     setAdminSessionState(next);
     writeStored(ADMIN_SESSION_KEY, next);
+    setSessionState(null);
+    writeStored(AUTH_SESSION_KEY, null);
   }, []);
 
   const adminLogout = useCallback(() => {

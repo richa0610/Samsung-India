@@ -16,6 +16,9 @@ class Tenant(CommonBase):
     id = Column(Integer, primary_key=True, index=True)
     tenant_uid = Column(String(100), unique=True, nullable=False, index=True)
     company_name = Column(String(200), nullable=False)
+    # The company's agency ID in the shared registry (`agency.agencyUid`) - filled by
+    # scripts/link_tenant_agencies.py once the company is registered there.
+    agency_uid = Column(String(100))
     database_host = Column(String(255), nullable=False)
     database_port = Column(Integer, nullable=False, default=3306)
     database_name = Column(String(100), nullable=False)
@@ -38,3 +41,8 @@ class Tenant(CommonBase):
     updated_at = Column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
     )
+
+    @property
+    def is_active(self) -> bool:
+        """Only an "active" tenant (any letter case) is served; suspended / inactive ones are refused."""
+        return (self.status or "").strip().lower() == "active"

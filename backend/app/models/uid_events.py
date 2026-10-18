@@ -20,6 +20,7 @@ from app.models.attendance import Attendance
 from app.models.attendance_log import AttendanceLog
 from app.models.booking import Booking
 from app.models.category import Category, SubCategory
+from app.models.common.tenant_registry import Tenant
 from app.models.conference import Conference
 from app.models.logs_master import LogsMaster
 from app.models.quiz import Assessment, AssessmentResult, AssessmentSuite
@@ -28,7 +29,7 @@ from app.models.venue import Venue
 from app.utils.conference_format import quiz_suite_uids
 from app.utils.conference_id import new_conference_uid
 from app.utils.helpers import audience_class
-from app.utils.uid import next_daily_uid, next_uid
+from app.utils.uid import next_daily_uid, next_tenant_uid, next_uid
 from app.utils.zones import zone_code
 
 # (model, uid attribute, prefix)
@@ -110,3 +111,12 @@ def _fill_conference_uid(mapper, connection, target):
     CONF2610001 (app/utils/conference_id.py)."""
     if not target.conferenceUid:
         target.conferenceUid = new_conference_uid(connection)
+
+
+@event.listens_for(Tenant, "before_insert")
+def _fill_tenant_uid(mapper, connection, target):
+    """A new tenant's ID (user, 2026-10-18): TEN_ + its company's first three letters + _ + YY + a
+    running number from 20001, e.g. TEN_SAM_2620001 (app/utils/uid.py). Tenants made before keep
+    theirs ("samsung", "demo")."""
+    if not target.tenant_uid:
+        target.tenant_uid = next_tenant_uid(connection, target.company_name)

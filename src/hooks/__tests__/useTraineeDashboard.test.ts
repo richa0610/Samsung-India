@@ -17,9 +17,12 @@ jest.mock("@/hooks/useAdminFilters", () => ({
   useAdminFilters: () => ({ applied: mockApplied, appliedKey: JSON.stringify(mockApplied) }),
 }));
 jest.mock("@/api/session", () => ({
+  ...jest.requireActual<object>("@/api/session"),
   getCurrentSession: jest.fn(() => Promise.reject(new Error("no session"))),
   getTraineeDashboard: jest.fn(() => Promise.resolve(null)),
   isSessionLive: jest.fn(() => false),
+  getCachedCurrentSession: jest.fn(() => null),
+  setCachedCurrentSession: jest.fn(),
 }));
 
 beforeEach(() => {

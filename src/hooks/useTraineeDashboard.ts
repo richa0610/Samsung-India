@@ -2,7 +2,15 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { BackHandler } from "react-native";
 
-import { CurrentSession, TraineeDashboard, getCurrentSession, getTraineeDashboard, isSessionLive } from "@/api/session";
+import {
+  CurrentSession,
+  TraineeDashboard,
+  getCachedCurrentSession,
+  getCurrentSession,
+  getTraineeDashboard,
+  isSessionLive,
+  setCachedCurrentSession,
+} from "@/api/session";
 import { TraineeMetricCardKey } from "@/components/trainee/dashboard/TraineeMetricsGrid";
 import { useAdminFilters } from "@/hooks/useAdminFilters";
 import { useAuth } from "@/hooks/useAuth";
@@ -13,7 +21,7 @@ export function useTraineeDashboard() {
   const { trainee, token, logout } = useAuth();
   const { applied, appliedKey } = useAdminFilters("trainee");
 
-  const [session, setSession] = useState<CurrentSession | null>(null);
+  const [session, setSession] = useState<CurrentSession | null>(() => getCachedCurrentSession(token));
   const [dashboard, setDashboard] = useState<TraineeDashboard | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -33,7 +41,12 @@ export function useTraineeDashboard() {
       getCurrentSession(token),
       getTraineeDashboard(token, 5, { start: applied.start, end: applied.end }),
     ]);
-    setSession(sessionResult.status === "fulfilled" ? sessionResult.value : null);
+    if (sessionResult.status === "fulfilled" && sessionResult.value) {
+      setSession(sessionResult.value);
+      setCachedCurrentSession(token, sessionResult.value);
+    } else {
+      setSession(null);
+    }
     setDashboard(dashboardResult.status === "fulfilled" ? dashboardResult.value : null);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- `appliedKey` is `applied`, serialised so an equal filter doesn't refetch
   }, [token, appliedKey]);

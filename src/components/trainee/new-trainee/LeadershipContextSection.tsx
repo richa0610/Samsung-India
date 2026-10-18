@@ -8,7 +8,7 @@ import { SUPERVISOR_DESIGNATION_OPTIONS } from "./constants";
 import { NewTraineeForm } from "./useNewTraineeForm";
 
 export function LeadershipContextSection({ form }: { form: NewTraineeForm }) {
-  const trainerPlaceholder = form.company ? "Select Trainer" : "Select Company First";
+  const trainerPlaceholder = "Select Trainer";
   return (
     <AppCard style={styles.card}>
       <SectionTitle index={2} title="Leadership Context" icon="people-outline" />
@@ -19,7 +19,6 @@ export function LeadershipContextSection({ form }: { form: NewTraineeForm }) {
         icon="briefcase-outline"
         value={form.trainerId}
         options={form.trainerOptions}
-        disabled={!form.company}
         onSelect={(option) => {
           form.setTrainerId(option.value);
           form.setTrainerName(option.label.split(" - ")[1] ?? "");
@@ -33,7 +32,6 @@ export function LeadershipContextSection({ form }: { form: NewTraineeForm }) {
         icon="briefcase-outline"
         value={form.supervisorId}
         options={form.trainerOptions}
-        disabled={!form.company}
         onSelect={(option) => {
           form.setSupervisorId(option.value);
           form.setSupervisorName(option.label.split(" - ")[1] ?? "");

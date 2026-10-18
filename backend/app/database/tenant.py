@@ -12,12 +12,17 @@ from sqlalchemy.pool import QueuePool
 from app.core.config import settings
 from app.core.secret_box import SecretUnavailable, decrypt_secret
 from app.core.ttl_cache import TTLCache
+from app.database import common as common_database
 from app.database.common import common_engine
 from app.database.connection import SAFE_ENGINE_OPTIONS, TenantBase, build_connect_args
 from app.database.schema_sync import sync_missing_columns, sync_missing_indexes
 from app.models.common.tenant_registry import Tenant
+from app.repositories import tenant_repository
 
 logger = logging.getLogger("tenant_manager")
+
+# The one key of TenantConnectionManager._uid_cache: the registry's IDs, by code_key.
+_SPELLINGS = "spellings"
 
 
 def _inactive_tenant_error() -> HTTPException:
@@ -49,13 +54,46 @@ class TenantConnectionManager:
         self._sessionmakers: Dict[str, sessionmaker] = {}
         self._lock = threading.Lock()
         self._status_cache = TTLCache(ttl_seconds=self.STATUS_CACHE_SECONDS, max_entries=500)
+        self._uid_cache = TTLCache(ttl_seconds=self.STATUS_CACHE_SECONDS, max_entries=1)
 
     def clear_status_cache(self) -> None:
-        """Forces the next `get_engine`/`get_session` call for every tenant to re-read the
-        registry instead of trusting a cached verdict. Tests use this so they don't have to wait
-        out STATUS_CACHE_SECONDS after flipping a tenant's status; production has no caller for
-        this today (the cache expiring on its own is what normal operation relies on)."""
+        """Forgets every cached registry read - status verdicts and ID spellings - so the next call
+        for every tenant re-reads the registry. Tests use this so they don't have to wait out
+        STATUS_CACHE_SECONDS after changing a tenant's row; production has no caller for this today
+        (the cache expiring on its own is what normal operation relies on)."""
         self._status_cache.clear()
+        self._uid_cache.clear()
+
+    def canonical_uid(self, tenant_id: str) -> str:
+        """The registry's own spelling of a tenant ID an app sent or a person typed before login
+        ("SAMSUNG " -> "samsung"), so every per-tenant key - connection pool, token claim,
+        admin_access grant, media folder, WebSocket room - sees one spelling of one tenant. An ID
+        the registry doesn't know (or can't be asked about) comes back as sent, trimmed: get_engine
+        then refuses it exactly as before.
+
+        Reads the whole (small) registry at most once per STATUS_CACHE_SECONDS, never once per ID
+        asked about, so made-up IDs cost nothing. A tenant registered within that window is matched
+        in its exact spelling straight away, in another letter case once the window ends."""
+        sent = tenant_id.strip()
+        spellings = self._uid_cache.get(_SPELLINGS)
+        if spellings is None:
+            spellings = self._read_spellings()
+            if spellings is None:
+                return sent
+            self._uid_cache.set(_SPELLINGS, spellings)
+        return spellings.get(tenant_repository.code_key(sent), sent)
+
+    @staticmethod
+    def _read_spellings() -> Optional[Dict[str, str]]:
+        """Every registered tenant ID by its `code_key`, or None when the registry can't be read."""
+        common_db = common_database.CommonSessionLocal()
+        try:
+            return {tenant_repository.code_key(uid): uid for uid in tenant_repository.list_uids(common_db)}
+        except SQLAlchemyError:
+            logger.exception("Failed to read the tenant registry's IDs")
+            return None
+        finally:
+            common_db.close()
 
     def _check_tenant_active(self, tenant_uid: str, common_db: Optional[Session]) -> None:
         """Re-verifies the tenant is still active on every call - not just when its connection
@@ -72,21 +110,25 @@ class TenantConnectionManager:
         with how a Common DB error is already handled in the cold path below."""
         cached = self._status_cache.get(tenant_uid)
         if cached is not None:
-            if cached != "active":
+            if not cached:
                 raise _inactive_tenant_error()
             return
         if common_db is None:
             return
         try:
-            record = common_db.query(Tenant).filter(Tenant.tenant_uid == tenant_uid).first()
+            record = tenant_repository.get(common_db, tenant_uid)
         except SQLAlchemyError:
             logger.exception("Failed to re-check tenant status for '%s'", tenant_uid)
             return
         if record is None:
             return
-        tenant_status = (record.status or "").lower()
-        self._status_cache.set(tenant_uid, tenant_status)
-        if tenant_status != "active":
+        self._remember_status(tenant_uid, record)
+
+    def _remember_status(self, tenant_uid: str, record: Tenant) -> None:
+        """Caches the verdict just read from the registry - so get_engine's fast path doesn't
+        re-query Common DB on the very next call - and refuses a tenant that isn't active."""
+        self._status_cache.set(tenant_uid, record.is_active)
+        if not record.is_active:
             raise _inactive_tenant_error()
 
     def _build_tenant_url(
@@ -144,11 +186,7 @@ class TenantConnectionManager:
         tenant_record: Optional[Tenant] = None
         if common_db is not None:
             try:
-                tenant_record = (
-                    common_db.query(Tenant)
-                    .filter(Tenant.tenant_uid == tenant_uid)
-                    .first()
-                )
+                tenant_record = tenant_repository.get(common_db, tenant_uid)
             except SQLAlchemyError:
                 logger.exception("Failed to query tenant registry from Common DB")
 
@@ -170,11 +208,7 @@ class TenantConnectionManager:
 
     def _registry_url(self, tenant_uid: str, tenant_record: Tenant) -> URL:
         """The connection URL from an active tenant's registry row, its password decrypted."""
-        # Primes _status_cache with the verdict just read, so get_engine's fast path
-        # doesn't immediately re-query Common DB on the very next call.
-        self._status_cache.set(tenant_uid, tenant_record.status.lower())
-        if tenant_record.status.lower() != "active":
-            raise _inactive_tenant_error()
+        self._remember_status(tenant_uid, tenant_record)
         try:
             database_password = decrypt_secret(tenant_record.database_password)
         except SecretUnavailable:

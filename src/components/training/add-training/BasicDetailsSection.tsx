@@ -1,5 +1,6 @@
 import { StyleSheet } from "react-native";
 
+import CompanyField from "@/components/company/CompanyField";
 import AppCard from "@/components/ui/AppCard";
 import AppInput from "@/components/ui/AppInput";
 import { SearchableSelect } from "@/components/ui/SearchableSelect";
@@ -34,27 +35,16 @@ export function BasicDetailsSection({ form }: { form: AddTrainingForm }) {
         onSelect={(option) => form.setRegion(option.value)}
         disabled={!form.zone}
       />
-      <SearchableSelect
-        label="Company"
-        required
-        compact
-        placeholder="Select Company"
-        icon="business-outline"
-        value={form.company}
-        options={[{ label: form.company, value: form.company }]}
-        onSelect={() => {}}
-        disabled
-      />
+      <CompanyField compact value={form.company} />
       <SearchableSelect
         label="Requested By"
         required
         compact
-        placeholder={form.company ? "Select Requester" : "Select Company First"}
+        placeholder="Select Requester"
         icon="person-outline"
         value={form.requestedByOption}
-        options={form.company ? form.requestedByOptions : []}
+        options={form.requestedByOptions}
         onSelect={(option) => form.setRequestedByOption(option.value)}
-        disabled={!form.company}
       />
       {form.requestedByOption === "Other" && (
         <AppInput compact placeholder="Enter Name" value={form.requestedByOther} onChangeText={form.setRequestedByOther} />

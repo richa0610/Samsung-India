@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 
 import { SelectOption } from "@/components/ui/SearchableSelect";
 import { useAuth } from "@/hooks/useAuth";
+import { useCompany } from "@/hooks/useCompany";
 import { useStateDistricts } from "@/hooks/useStateDistricts";
 import { subscribe } from "@/services/liveEvents";
 import {
@@ -81,7 +82,8 @@ const itself = (name: string) => name;
 // and submits via updateTraining instead of createTraining.
 export function useAddTrainingForm(editing?: { conferenceUid: string }) {
   const router = useRouter();
-  const { adminToken, admin, adminLogout } = useAuth();
+  const { adminToken, adminLogout } = useAuth();
+  const signedInCompany = useCompany()?.companyName ?? "";
   const isEditing = !!editing;
 
   const [loadingDetail, setLoadingDetail] = useState(isEditing);
@@ -89,10 +91,11 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
 
   const [zone, setZone] = useState("");
   const [region, setRegion] = useState("");
-  // The company this training belongs to is the logged-in admin/trainer's
-  // own company (admin.company), not a user choice - see BasicDetailsSection,
-  // which renders this locked rather than as an editable picker.
-  const [company] = useState(admin?.company ?? "Samsung India");
+  // A training's company is its tenant's - the server sets it, never the
+  // form (user, 2026-10-18). Shown locked (BasicDetailsSection): the
+  // signed-in company for a new training, the training's own for an edit.
+  const [trainingCompany, setTrainingCompany] = useState<string | null>(null);
+  const company = trainingCompany ?? signedInCompany;
   const [requestedByOption, setRequestedByOption] = useState("");
   const [requestedByOther, setRequestedByOther] = useState("");
 
@@ -238,6 +241,7 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
     fetchTrainingDetail(adminToken, editing.conferenceUid)
       .then((detail) => {
         if (cancelled) return;
+        setTrainingCompany(detail.company ?? null);
         setZone(detail.zone ?? "");
         setRegion(detail.region ?? "");
         // The stored value is already whatever the admin resolved it to last
@@ -530,7 +534,6 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
       const payload = {
         zone: cleanText(shownZone, 100) || undefined,
         region: cleanText(shownRegion, 100) || undefined,
-        company: cleanText(company, 120) || undefined,
         requestedBy: cleanText(requestedBy, 120) || undefined,
         trainerEmployeeId: trainerId || undefined,
         trainerName: trainerName || undefined,

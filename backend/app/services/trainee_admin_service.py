@@ -15,6 +15,7 @@ from app.schemas.trainee_admin import TraineeAdminIn, TraineeAdminOut, TraineePa
 from app.services import placement_rules, trainee_service
 from app.services.access_service import resolve_scope
 from app.services.activity_log_service import log_activity
+from app.services.company_ids import company_names, require_tenant_company
 from app.utils.date_utils import utc_naive_to_ist
 from app.utils.status import title_status
 
@@ -25,7 +26,14 @@ def _ist_stamp(stored_utc: Optional[datetime]) -> Optional[str]:
     return ist.strftime("%Y-%m-%d %H:%M:%S") if ist else None
 
 
-def _trainee_to_admin_out(t: Trainee) -> TraineeAdminOut:
+def _admin_out(common_db: Optional[Session], trainees: list[Trainee]) -> list[TraineeAdminOut]:
+    """Trainees as the lists show them - a stored agency ID by its company's name (one registry
+    read for the whole page)."""
+    names = company_names(common_db, (t.company for t in trainees))
+    return [_trainee_to_admin_out(t, names.get(t.company, t.company)) for t in trainees]
+
+
+def _trainee_to_admin_out(t: Trainee, company: Optional[str]) -> TraineeAdminOut:
     return TraineeAdminOut(
         traineeUid=t.traineeUid,
         registeredAt=_ist_stamp(t.timestamp) or "",
@@ -45,7 +53,7 @@ def _trainee_to_admin_out(t: Trainee) -> TraineeAdminOut:
         district=t.district,
         zone=t.zone,
         region=t.region,
-        company=t.company,
+        company=company,
         requestedBy=t.requestedBy,
         trainerId=t.trainerEmployeeId,
         trainerName=t.trainerName,
@@ -74,13 +82,14 @@ def register_trainee_admin(
 ) -> TraineeAdminOut:
     """Trainer/admin-side "register a new trainee" form - distinct from the
     trainee's own self-registration in services/trainee_service.py."""
-    # Company/zone/region and the assigned trainer come from the form but decide who can see and
-    # manage this trainee, so they follow the same placement rule as a training: a trainer - own
-    # company and a same-company trainer; an admin - inside their grant, with a trainer from a
-    # company it covers.
+    # The company is the tenant's (user, 2026-10-18), never the form's. It, the form's zone/region
+    # and the assigned trainer decide who can see and manage this trainee, so they follow the same
+    # placement rule as a training: a trainer - own company and a same-company trainer; an admin -
+    # inside their grant, with a trainer from a company it covers.
+    company = require_tenant_company(common_db, tenant_id)
     placement_rules.authorize_placement(
         db, common_db, admin, resolve_scope(common_db, admin, tenant_id), tenant_id,
-        company=payload.company, zone=payload.zone, region=payload.region, trainer=payload.trainerId,
+        company=company.name, zone=payload.zone, region=payload.region, trainer=payload.trainerId,
     )
 
     phone_int = int(payload.primaryPhone)
@@ -103,7 +112,7 @@ def register_trainee_admin(
         profilePhoto=None,
         zone=payload.zone,
         region=payload.region,
-        company=payload.company,
+        company=company.stored,
         requestedBy=payload.requestedBy,
         trainerEmployeeId=payload.trainerId,
         trainerName=payload.trainerName,
@@ -141,7 +150,7 @@ def register_trainee_admin(
         remarks=f"Registered trainee {trainee.traineeUid} ({trainee.name})",
     )
 
-    return _trainee_to_admin_out(trainee)
+    return _trainee_to_admin_out(trainee, company.name)
 
 
 async def upload_trainee_photo(
@@ -164,7 +173,7 @@ async def upload_trainee_photo(
         remarks=f"Uploaded the profile photo of trainee {trainee.traineeUid}",
         file_path=trainee.profilePhoto,
     )
-    return _trainee_to_admin_out(trainee)
+    return _admin_out(common_db, [trainee])[0]
 
 
 def list_trainees_page(
@@ -192,4 +201,4 @@ def list_trainees_page(
         )
     except (ValueError, KeyError, TypeError):
         raise bad_request("Invalid page cursor")
-    return TraineePageResponse(items=[_trainee_to_admin_out(t) for t in result.rows], **result.meta())
+    return TraineePageResponse(items=_admin_out(common_db, result.rows), **result.meta())

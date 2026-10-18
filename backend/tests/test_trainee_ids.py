@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.core import rate_limit
 from app.database.connection import TenantBase
+from app.models.agency import Agency
 from app.models.category import Category, SubCategory
 from app.models.trainee import Trainee
 from app.utils.zones import zone_code
@@ -85,6 +86,18 @@ class SelfRegistration(TraineeIdsTestCase):
         self.assertRegex(trainee["traineeUid"], r"^SOUTH-\d+$")
         self.assertEqual((trainee["zone"], trainee["region"]), ("South", "South 1"))
 
+    def test_a_self_registered_trainee_is_filed_under_the_tenants_company(self):
+        # Before 2026-10-18 they had no company at all - invisible to a company-scoped admin.
+        self.w.common.add(Agency(agencyUid="AGY2687355", companyName="Samsung India"))
+        self.w.common.commit()
+        response = self.register(5, zone="South", region="South 1")
+        self.assertEqual(response.status_code, 201, response.text)
+        self.alpha.expire_all()
+        stored = self.alpha.query(Trainee).filter_by(traineeUid=response.json()["trainee"]["traineeUid"]).one()
+        self.assertEqual(stored.company, "AGY2687355")
+        listed = self.w.client.get("/admin/trainees/page?limit=200", headers=self.w.headers("coadmin")).json()["items"]
+        self.assertIn(("Samsung India", stored.traineeUid), [(t["company"], t["traineeUid"]) for t in listed])
+
     def test_a_zone_or_region_not_on_the_master_list_is_refused(self):
         self.assertEqual(self.register(2, zone="Atlantis", region="South 1").status_code, 400)
         self.assertEqual(self.register(3, zone="South", region="North 1").status_code, 400)
@@ -102,7 +115,7 @@ class SelfRegistration(TraineeIdsTestCase):
 
 class NewTraineeForm(TraineeIdsTestCase):
     BODY = {"fullName": "Form Person", "designation": "Promoter", "gender": "Female", "primaryEmail": "form@example.org",
-            "primaryPhone": "9123456711", "state": "Delhi", "zone": "North Zone", "region": "North 1", "company": "Samsung India",
+            "primaryPhone": "9123456711", "state": "Delhi", "zone": "North Zone", "region": "North 1",
             "requestedBy": "Quess", "trainerId": "trainer1", "trainerName": "Trainer One", "supervisorId": "s",
             "supervisorName": "S", "jobStatus": "Active", "password": "Correct-Horse-9"}
 

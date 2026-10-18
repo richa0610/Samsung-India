@@ -22,7 +22,7 @@ export type NewTraineeRecord = {
   district: string | null;
   zone: string;
   region: string;
-  company: string;
+  // No company: a trainee's company is its tenant's, set by the server.
   requestedBy: string;
   trainerId: string;
   trainerName: string;

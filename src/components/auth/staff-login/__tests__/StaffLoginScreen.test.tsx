@@ -4,6 +4,7 @@ import { Alert } from "react-native";
 
 import { loginAdmin } from "@/api/admin";
 import StaffLoginScreen from "@/components/auth/staff-login/StaffLoginScreen";
+import { setCompany } from "@/config/company";
 import { STAFF_LOGIN_TEXT } from "@/constants/strings";
 
 const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn(), canGoBack: jest.fn(() => true) };
@@ -25,6 +26,7 @@ const mockLogin = jest.mocked(loginAdmin);
 // The first render loads the icon set and svg from scratch; do it once here, so each test below
 // runs within the normal per-test limit.
 beforeAll(async () => {
+  setCompany({ tenantId: "acme", companyName: "Acme Retail" }); // sign-in screens need the company first
   const first = await render(<StaffLoginScreen portal="trainer" />);
   await first.unmount();
 }, 30_000);

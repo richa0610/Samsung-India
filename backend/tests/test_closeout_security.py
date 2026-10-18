@@ -171,7 +171,7 @@ class MediaCannotBeProbedOrEscaped(MediaTestCase):
 class AdminTrainingPlacement(TrainerWorldTestCase):
     def form(self, key="S_N1", **overrides):
         row = self.alpha.query(Conference).filter(Conference.conferenceUid == uid(key)).one()
-        body = {"company": row.company, "zone": row.zone, "region": row.region, "trainerEmployeeId": row.trainerEmployeeId,
+        body = {"zone": row.zone, "region": row.region, "trainerEmployeeId": row.trainerEmployeeId,
                 "trainerName": row.trainerName, "conferenceDate": "2026-10-05", "conferenceTime": "11:00 AM"}
         body.update(overrides)
         return body
@@ -188,11 +188,14 @@ class AdminTrainingPlacement(TrainerWorldTestCase):
         self.assertEqual(self.patch("coadmin", "S_S1", self.form("S_S1", zone="North Zone", region="North 1")).status_code, 200)
 
     def test_an_edit_cannot_move_a_training_outside_the_grant(self):
-        cases = [("coadmin", "S_S1", {"company": "Other Co"}), ("coord", "S_N1", {"zone": "South Zone"}),
-                 ("subcoord", "S_DEL", {"region": "North 1"})]
+        cases = [("coord", "S_N1", {"zone": "South Zone"}), ("subcoord", "S_DEL", {"region": "North 1"})]
         for who, key, change in cases:
             with self.subTest(who=who, change=change):
                 self.assertEqual(self.patch(who, key, self.form(key, **change)).status_code, 403)
+
+    def test_an_edit_cannot_change_the_company(self):
+        # A training's company is its tenant's: an edit that sends one is refused, nothing applied.
+        self.assertEqual(self.patch("coadmin", "S_S1", self.form("S_S1", company="Other Co")).status_code, 422)
         self.assertEqual(self.company_of("S_S1"), "Samsung India")
 
     def test_a_partial_edit_cannot_blank_the_place_of_a_training(self):
@@ -219,16 +222,32 @@ class AdminTrainingPlacement(TrainerWorldTestCase):
         self.assertEqual(self.patch("coord", "S_N1", self.form()).status_code, 200)
 
     def test_a_super_admin_may_place_a_training_anywhere(self):
-        self.assertEqual(self.patch("super", "S_N1", self.form(company="Other Co", zone="South Zone")).status_code, 200)
+        self.assertEqual(self.patch("super", "S_N1", self.form(zone="South Zone")).status_code, 200)
 
     def test_creation_follows_the_same_rule(self):
         base = {"conferenceDate": "2026-10-01", "conferenceTime": "10:00 AM", "trainerEmployeeId": "trainer1"}
-        refused = [("coadmin", {"company": "Other Co"}), ("coord", {"company": "Samsung India", "zone": "South Zone"})]
-        for who, place in refused:
-            with self.subTest(who=who, place=place):
-                response = self.w.client.post("/admin/trainings", json={**base, **place}, headers=self.w.headers(who))
-                self.assertEqual(response.status_code, 403)
-        self.assertEqual(self.alpha.query(Conference).filter(Conference.conferenceDate == "2026-10-01").count(), 0)
+        created = lambda: self.alpha.query(Conference).filter(Conference.conferenceDate == "2026-10-01").all()
+        response = self.w.client.post("/admin/trainings", json={**base, "zone": "South Zone"}, headers=self.w.headers("coord"))
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(created(), [])
+        # The company is the tenant's - a form naming one is refused, so it can't file a training elsewhere.
+        response = self.w.client.post("/admin/trainings", json={**base, "company": "Other Co"}, headers=self.w.headers("coadmin"))
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(created(), [])
+        response = self.w.client.post("/admin/trainings", json=base, headers=self.w.headers("coadmin"))
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual([c.company for c in created()], ["Samsung India"])
+
+    def test_an_admin_of_another_company_cannot_create_in_this_tenant(self):
+        other = Admin(adminUid="a-oth", username="otheradmin", name="Other Admin", password=hash_password(PASSWORD), role="admin")
+        self.w.common.add(other)
+        self.w.common.flush()
+        self.w.grant(other, "company_admin", ALPHA, "Other Co")
+        self.w.common.commit()
+        self.w.admins["otheradmin"] = other
+        body = {"conferenceDate": "2026-10-01", "conferenceTime": "10:00 AM"}
+        response = self.w.client.post("/admin/trainings", json=body, headers=self.w.headers("otheradmin"))
+        self.assertEqual(response.status_code, 403)
 
 
 class TraineeRegistrationAgainstEveryRule(TrainerWorldTestCase):
@@ -243,19 +262,19 @@ class TraineeRegistrationAgainstEveryRule(TrainerWorldTestCase):
         self.w.common.commit()
         self.w.admins["twoco"] = two
 
-    def register(self, n, company, zone):
+    def register(self, n, zone):
         body = {"traineeUid": f"TR-NEW-{n}", "fullName": "New Person", "designation": "Promoter", "gender": "Male",
                 "primaryEmail": f"new{n}@example.com", "primaryPhone": f"912345678{n}", "state": "Delhi", "zone": zone,
-                "region": "North 1", "company": company, "requestedBy": "Quess", "trainerId": "trainer1",
+                "region": "North 1", "requestedBy": "Quess", "trainerId": "trainer1",
                 "trainerName": "Trainer One", "supervisorId": "sup1", "supervisorName": "Sup One", "jobStatus": "Active",
                 "username": f"newperson{n}", "password": "Correct-Horse-9"}
         return self.w.client.post("/admin/trainees", json=body, headers=self.w.headers("twoco")).status_code
 
     def test_a_multi_company_grant_is_checked_rule_by_rule(self):
-        self.assertEqual(self.register(1, "Third Co", "North Zone"), 403)      # used to pass: the company check was skipped
-        self.assertEqual(self.register(2, "Samsung India", "South Zone"), 403)  # outside the coordinator's zone
-        self.assertEqual(self.register(3, "Other Co", "South Zone"), 201)       # Company Admin of Other Co: any zone
-        self.assertEqual(self.register(4, "Samsung India", "North Zone"), 201)
+        # The trainee's company is the tenant's (Samsung India), so only the grant's rule for that
+        # company counts - its Company Admin rule for Other Co can't widen it.
+        self.assertEqual(self.register(1, "South Zone"), 403)  # outside the Samsung coordinator's zone
+        self.assertEqual(self.register(2, "North Zone"), 201)
 
 
 class TrainerRoleOnlyLogin(TrainerWorldTestCase):

@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Request, UploadFi
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_trainee
-from app.dependencies.database import get_db, get_tenant_id_from_request
+from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.models.trainee import Trainee
 from app.schemas.trainee import (
     TokenResponse,
@@ -20,10 +20,15 @@ router = APIRouter(prefix="/trainees", tags=["trainees"])
 # Signs the new trainee in too (a self-registered trainee has no password to log in with later).
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register_trainee(
-    payload: TraineeRegister, background_tasks: BackgroundTasks, request: Request, db: Session = Depends(get_db)
+    payload: TraineeRegister,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    db: Session = Depends(get_db),
+    common_db: Session = Depends(get_common_db),
 ):
     return trainee_service.register(
-        db, payload, background_tasks, ip_address=client_ip(request), tenant_id=get_tenant_id_from_request(request)
+        db, common_db, payload, background_tasks,
+        ip_address=client_ip(request), tenant_id=get_tenant_id_from_request(request),
     )
 
 

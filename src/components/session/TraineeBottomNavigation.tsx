@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 
 import HomeIcon from "@/assets/images/svg/home.svg";
+import { isCachedSessionLive } from "@/api/session";
 import AppText from "@/components/ui/AppText";
 import { TraineeTab } from "@/hooks/useTraineeHome";
 import { Colors } from "@/theme/colors";
@@ -65,7 +66,11 @@ export default function TraineeBottomNavigation({
   isTrainingLive = false,
 }: TraineeBottomNavigationProps) {
   const insets = useSafeAreaInsets();
-  const visibleTabs = isTrainingLive ? TABS : TABS.filter((tab) => tab.key !== "rank");
+  // While training is live, the Rank tab stays visible across all tab navigations.
+  // Checking activeTab === "rank" and isCachedSessionLive() avoids the tab disappearing
+  // for a split-second during screen transitions while the new screen's network request resolves.
+  const showRank = isTrainingLive || activeTab === "rank" || isCachedSessionLive();
+  const visibleTabs = showRank ? TABS : TABS.filter((tab) => tab.key !== "rank");
 
   return (
     <View style={[styles.wrapper, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -125,10 +130,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "transparent",
   },
   iconBadgeActive: {
     backgroundColor: Colors.headerBlue,
-    borderWidth: 3,
     borderColor: Colors.white,
     ...Shadows.homeButton,
   },

@@ -215,9 +215,9 @@ class TrainingCreationByTrainers(TrainerWorldTestCase):
         uid_patch.start()
         self.addCleanup(uid_patch.stop)
 
-    def payload(self, trainer, company="Samsung India"):
-        return {"company": company, "trainerEmployeeId": trainer, "trainerName": trainer.title(),
-                "conferenceDate": "2026-10-01", "conferenceTime": "10:00 AM"}
+    def payload(self, trainer, **extra):
+        return {"trainerEmployeeId": trainer, "trainerName": trainer.title(),
+                "conferenceDate": "2026-10-01", "conferenceTime": "10:00 AM", **extra}
 
     def create_logs(self):
         return [row.remarks for row in self.alpha.query(LogsMaster).filter(LogsMaster.action == "CREATE_TRAINING")]
@@ -241,7 +241,17 @@ class TrainingCreationByTrainers(TrainerWorldTestCase):
         self.assertEqual(self.alpha.query(Conference).filter(Conference.conferenceDate == "2026-10-01").count(), 0)
 
     def test_a_trainer_cannot_forge_the_training_company(self):
+        # The company is the tenant's - a form naming one is refused, and nothing is created.
         response = self.post("trainer1", "/admin/trainings", self.payload("trainer1", company="Other Co"))
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(self.create_logs(), [])
+        response = self.post("trainer1", "/admin/trainings", self.payload("trainer1"))
+        stored = self.alpha.query(Conference).filter(Conference.conferenceUid == response.json()["conferenceUid"]).one()
+        self.assertEqual(stored.company, "Samsung India")
+
+    def test_a_trainer_of_another_company_cannot_create_in_this_tenant(self):
+        # trainer3 belongs to Other Co: a trainer places records in their own company only.
+        response = self.post("trainer3", "/admin/trainings", self.payload("trainer3"))
         self.assertEqual(response.status_code, 403)
 
     def test_a_trainer_without_the_trainer_role_cannot_create(self):

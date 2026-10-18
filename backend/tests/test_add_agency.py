@@ -91,10 +91,12 @@ class AddAgency(unittest.TestCase):
         _, problems = self.preview(self.file(localCity="<city>"))
         self.assertEqual(problems, ["localCity still holds the placeholder <city>"])
 
-    def test_the_samsung_template_is_refused_until_it_is_filled_in(self):
-        _, problems = self.preview(DEMO_FILE.with_name("agency.samsung.json"))
-        self.assertIn("email still holds the placeholder <contact email>", problems)
-        self.assertIn("companyName still holds the placeholder <company_name from the tenants row for samsung>", problems)
+    def test_the_samsung_file_passes_every_check_and_names_its_tenants_company(self):
+        # Filled in and registered on 2026-10-18 (AGY2687355); its companyName must stay exactly the
+        # `tenants` row's company_name, the only link between the two.
+        agency, problems = self.preview(DEMO_FILE.with_name("agency.samsung.json"))
+        self.assertEqual(problems, [])
+        self.assertEqual(agency["companyName"], "Samsung India")
         self.assertEqual(self.rows(), 1)
 
     def test_undo_removes_exactly_that_row_and_only_while_it_is_still_this_scripts(self):

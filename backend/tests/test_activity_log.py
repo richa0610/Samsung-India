@@ -108,7 +108,7 @@ class SessionStartForOlderTokens(unittest.TestCase):
         self.assertEqual(activity_log_service._session_start(claims), started.strftime("%Y-%m-%d %H:%M:%S"))
 
     def test_new_tokens_carry_when_they_were_issued(self):
-        claims = activity_log_service._token_claims(create_access_token("someone"))
+        claims = activity_log_service._token_claims(create_access_token("someone", "ALPHA"))
         self.assertLess(abs(claims["iat"] - datetime.now(timezone.utc).timestamp()), 60)
 
 

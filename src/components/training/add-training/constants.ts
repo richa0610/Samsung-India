@@ -5,7 +5,6 @@ import { SelectOption } from "@/components/ui/SearchableSelect";
 
 export const ICON_BADGE_BG = "#E3ECFF";
 
-export const COMPANY_OPTIONS: SelectOption[] = [{ label: "Samsung India", value: "Samsung India" }];
 
 export const REQUESTED_BY_OPTIONS: SelectOption[] = [
   { label: "Quess Corp Ltd", value: "Quess Corp Ltd" },

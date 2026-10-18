@@ -36,9 +36,9 @@ export type SessionFlowConfig = {
 };
 
 export type TrainingCreatePayload = {
+  // No company: a training's company is its tenant's, set by the server.
   zone?: string;
   region?: string;
-  company?: string;
   requestedBy?: string;
 
   trainerEmployeeId?: string;
@@ -368,17 +368,20 @@ export function fetchTrainerSummary(token: string, range?: { start?: string; end
   });
 }
 
-/** The deep link a training's QR code / share message carries (see `scheme` in app.json). */
-export const joinLink = (joinCode: string) => `samsungindia://join/${joinCode}`;
+/** The deep link a training's QR code / share message carries (see `scheme` in app.json): its
+ *  signed join code and the company it belongs to, so a phone set to another company knows which
+ *  one to switch to (parseJoinLink reads it back). */
+export const joinLink = (joinCode: string, tenantId: string) =>
+  `samsungindia://join/${joinCode}?company=${encodeURIComponent(tenantId)}`;
 
-/** The training's signed join code - what its QR code and share link must carry; a bare training
+/** The training's signed join link - what its QR code and share link must carry; a bare training
  *  ID is not accepted by the server. Only the training's trainer (or an admin covering it) gets it. */
 export async function fetchJoinLink(token: string, conferenceUid: string): Promise<string> {
-  const { joinCode } = await apiRequest<{ conferenceUid: string; joinCode: string }>(
+  const { joinCode, tenantId } = await apiRequest<{ conferenceUid: string; joinCode: string; tenantId: string }>(
     `/admin/trainings/${encodeURIComponent(conferenceUid)}/join-code`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  return joinLink(joinCode);
+  return joinLink(joinCode, tenantId);
 }
 
 export function fetchSessionDashboard(token: string, conferenceUid: string) {

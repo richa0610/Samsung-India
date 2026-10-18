@@ -247,7 +247,11 @@ def get_join_code(
     """The signed join code for this training's QR code / share link - only for whoever may run the
     session (the same check as its dashboard). Bound to this tenant."""
     conference = owned_conference(db, admin, conference_uid, common_db, tenant_id)
-    return JoinCodeOut(conferenceUid=conference.conferenceUid, joinCode=join_code.make(tenant_id, conference.conferenceUid))
+    return JoinCodeOut(
+        conferenceUid=conference.conferenceUid,
+        joinCode=join_code.make(tenant_id, conference.conferenceUid),
+        tenantId=tenant_id,
+    )
 
 
 def list_all_performers(

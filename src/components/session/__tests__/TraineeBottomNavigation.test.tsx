@@ -64,3 +64,17 @@ test("when training is live, Rank tab is visible and clickable", async () => {
   fireEvent.press(screen.getByText("Rank"));
   expect(onSelectTab).toHaveBeenCalledWith("rank");
 });
+
+test("when activeTab is rank, Rank tab is visible even if isTrainingLive is false", async () => {
+  const onSelectTab = jest.fn();
+  await render(
+    <TraineeBottomNavigation
+      activeTab="rank"
+      onSelectTab={onSelectTab}
+      isTrainingLive={false}
+    />,
+  );
+
+  expect(screen.getByText("Rank")).toBeTruthy();
+});
+

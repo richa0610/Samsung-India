@@ -7,12 +7,15 @@ import AppButton from "@/components/ui/AppButton";
 import AppCard from "@/components/ui/AppCard";
 import AppText from "@/components/ui/AppText";
 import SecurityFooter from "@/components/common/SecurityFooter";
+import CompanyGate from "@/components/company/CompanyGate";
+import CompanySwitchPrompt from "@/components/company/CompanySwitchPrompt";
+import { COMPANY_TEXT } from "@/constants/strings";
 import { useJoinSession } from "@/hooks/useJoinSession";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 
 export default function JoinSessionScreen() {
-  const { info, error, joining, isLoggedIn, restoring, handleJoin, onBack } = useJoinSession();
+  const { info, error, joining, isLoggedIn, restoring, linkCompany, switchCompany, handleJoin, onBack } = useJoinSession();
 
   const rows: [string, string | null | undefined][] = [
     ["Trainer", info?.trainerName],
@@ -20,6 +23,59 @@ export default function JoinSessionScreen() {
     ["Type", info?.sessionType],
     ["Venue", info?.location],
   ];
+
+  const preview = (
+    <>
+      {(restoring || (!info && !error)) && (
+        <ActivityIndicator color={Colors.mainColour1} style={styles.loader} />
+      )}
+      {!restoring && error && <AppText style={styles.error}>{error}</AppText>}
+
+      {!restoring && info && (
+        <>
+          <AppText variant="h3" style={styles.session}>{info.title}</AppText>
+          <AppText style={styles.status}>
+            {info.started ? "Live now" : info.startsAt ? `Starts ${info.startsAt}` : "Not started yet"}
+          </AppText>
+
+          <View style={styles.rows}>
+            {rows.filter(([, v]) => v).map(([label, value]) => (
+              <View key={label} style={styles.row}>
+                <AppText style={styles.rowLabel}>{label}</AppText>
+                <AppText style={styles.rowValue}>{value}</AppText>
+              </View>
+            ))}
+          </View>
+
+          <AppButton
+            title={isLoggedIn ? "Join Session" : "Continue to Login"}
+            onPress={handleJoin}
+            loading={joining}
+            buttonStyle={styles.button}
+          />
+          {!isLoggedIn && (
+            <AppText style={styles.hint}>{"New here? You'll register on the next step."}</AppText>
+          )}
+        </>
+      )}
+    </>
+  );
+
+  // The company the QR names comes first (useLinkCompany); then, signed out, the company code.
+  const body = () => {
+    switch (linkCompany.kind) {
+      case "switch":
+        return <CompanySwitchPrompt company={linkCompany.company} onSwitch={switchCompany} onCancel={onBack} />;
+      case "signed-in-elsewhere":
+        return <AppText style={styles.error}>{COMPANY_TEXT.qrSignedInElsewhere}</AppText>;
+      case "unknown":
+        return <AppText style={styles.error}>{COMPANY_TEXT.qrUnknownCompany}</AppText>;
+      case "checking":
+        return <ActivityIndicator color={Colors.mainColour1} style={styles.loader} />;
+      default:
+        return restoring || isLoggedIn ? preview : <CompanyGate>{preview}</CompanyGate>;
+    }
+  };
 
   return (
     <>
@@ -36,38 +92,7 @@ export default function JoinSessionScreen() {
               <AppText variant="h3" style={styles.title}>{"You're joining"}</AppText>
             </View>
 
-            {(restoring || (!info && !error)) && (
-              <ActivityIndicator color={Colors.mainColour1} style={styles.loader} />
-            )}
-            {!restoring && error && <AppText style={styles.error}>{error}</AppText>}
-
-            {!restoring && info && (
-              <>
-                <AppText variant="h3" style={styles.session}>{info.title}</AppText>
-                <AppText style={styles.status}>
-                  {info.started ? "Live now" : info.startsAt ? `Starts ${info.startsAt}` : "Not started yet"}
-                </AppText>
-
-                <View style={styles.rows}>
-                  {rows.filter(([, v]) => v).map(([label, value]) => (
-                    <View key={label} style={styles.row}>
-                      <AppText style={styles.rowLabel}>{label}</AppText>
-                      <AppText style={styles.rowValue}>{value}</AppText>
-                    </View>
-                  ))}
-                </View>
-
-                <AppButton
-                  title={isLoggedIn ? "Join Session" : "Continue to Login"}
-                  onPress={handleJoin}
-                  loading={joining}
-                  buttonStyle={styles.button}
-                />
-                {!isLoggedIn && (
-                  <AppText style={styles.hint}>{"New here? You'll register on the next step."}</AppText>
-                )}
-              </>
-            )}
+            {body()}
           </AppCard>
 
           <View style={styles.footer}>

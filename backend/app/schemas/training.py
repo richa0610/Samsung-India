@@ -1,6 +1,6 @@
 from typing import Annotated, Literal, Optional
 
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.schemas._common import (
     PageMeta,
@@ -102,9 +102,12 @@ class SessionFlowConfig(BaseModel):
 
 
 class TrainingCreate(BaseModel):
+    # Exactly the registration form's fields: anything else - `company` included, since a training's
+    # company is its tenant's (management._training_company) - is refused (422), not silently dropped.
+    model_config = ConfigDict(extra="forbid")
+
     zone: OptShortStr = None
     region: OptShortStr = None
-    company: OptShortStr = None
     requestedBy: OptShortStr = None
 
     trainerEmployeeId: OptIdStr = None
@@ -158,10 +161,14 @@ class TrainingAdminUpdate(TrainingCreate):
 
 
 class JoinCodeOut(BaseModel):
-    """The signed code a training's QR code and share link carry (app/utils/join_code.py)."""
+    """The signed code a training's QR code and share link carry (app/utils/join_code.py), and the
+    company (tenant) it is signed for - the link names it, so a phone set to another company knows
+    which one to switch to (user, 2026-10-18). Only a hint: the code itself is checked against the
+    tenant it is used in."""
 
     conferenceUid: str
     joinCode: str
+    tenantId: str
 
 
 class TrainingOut(BaseModel):
@@ -173,7 +180,8 @@ class TrainingOut(BaseModel):
 class TrainingDetailOut(BaseModel):
     """Full editable detail for one training - powers the admin's training
     detail screen and is pre-filled into the edit form there. Field names
-    mirror `TrainingCreate` so the same payload shape can be resubmitted."""
+    mirror `TrainingCreate`; the read-only ones (company, title, venueName,
+    ...) are shown only - the edit form sends back TrainingCreate's fields."""
 
     conferenceUid: str
     title: str

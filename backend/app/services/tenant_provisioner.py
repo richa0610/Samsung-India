@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import Session
@@ -6,12 +7,13 @@ from sqlalchemy.orm import Session
 from app.core.secret_box import encryption_enabled, protect_secret
 from app.database.connection import SAFE_ENGINE_OPTIONS, TenantBase, build_connect_args
 from app.models.common.tenant_registry import Tenant
+from app.repositories import tenant_repository
 
 logger = logging.getLogger("tenant_provisioner")
 
 
 def provision_new_tenant(
-    tenant_uid: str,
+    tenant_uid: Optional[str],
     company_name: str,
     database_host: str,
     database_port: int,
@@ -23,7 +25,8 @@ def provision_new_tenant(
 ) -> Tenant:
     """Provisions a new tenant database by:
     1. Creating every tenant table in the specified MySQL database instance.
-    2. Registering the tenant in the Common DB tenants registry.
+    2. Registering the tenant in the Common DB tenants registry - under `tenant_uid`, or, when it is
+       None, under the next TEN_<ABC>_<YY><seq> ID (models/uid_events.py).
     """
     db_url = URL.create(
         drivername="mysql+pymysql",
@@ -34,7 +37,7 @@ def provision_new_tenant(
         database=database_name,
     )
 
-    logger.info("Initializing schema for tenant '%s' at %s:%s/%s", tenant_uid, database_host, database_port, database_name)
+    logger.info("Initializing schema for tenant '%s' at %s:%s/%s", tenant_uid or company_name, database_host, database_port, database_name)
 
     tenant_engine = create_engine(db_url, pool_pre_ping=True, connect_args=build_connect_args(), **SAFE_ENGINE_OPTIONS)
     try:
@@ -43,8 +46,8 @@ def provision_new_tenant(
         tenant_engine.dispose()
 
     if not encryption_enabled():
-        logger.warning("TENANT_SECRETS_KEYS is not set - tenant '%s' database password is stored unencrypted", tenant_uid)
-    existing = common_db.query(Tenant).filter(Tenant.tenant_uid == tenant_uid).first()
+        logger.warning("TENANT_SECRETS_KEYS is not set - tenant '%s' database password is stored unencrypted", tenant_uid or company_name)
+    existing = tenant_repository.get(common_db, tenant_uid) if tenant_uid else None
     if existing:
         existing.company_name = company_name
         existing.database_host = database_host
@@ -69,5 +72,5 @@ def provision_new_tenant(
 
     common_db.commit()
     common_db.refresh(tenant_record)
-    logger.info("Successfully provisioned and registered tenant '%s'", tenant_uid)
+    logger.info("Successfully provisioned and registered tenant '%s'", tenant_record.tenant_uid)
     return tenant_record

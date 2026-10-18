@@ -7,6 +7,7 @@ import { SelectOption } from "@/components/ui/SearchableSelect";
 import type { PickedImage } from "@/api/auth";
 import { ApiError, registerNewTrainee, uploadNewTraineePhoto } from "@/api/trainee";
 import { useAuth } from "@/hooks/useAuth";
+import { useCompany } from "@/hooks/useCompany";
 import { useStateDistricts } from "@/hooks/useStateDistricts";
 import { formatDate } from "@/components/training/add-training/formatting";
 import {
@@ -34,7 +35,8 @@ export function useNewTraineeForm() {
   // Corporate Mapping
   const [zone, setZone] = useState("");
   const [region, setRegion] = useState("");
-  const [company, setCompany] = useState("Samsung India");
+  // A trainee's company is the signed-in company - shown, set by the server (user, 2026-10-18).
+  const company = useCompany()?.companyName ?? "";
   const [requestedByOption, setRequestedByOption] = useState("");
   const [requestedByOther, setRequestedByOther] = useState("");
   const requestedBy = requestedByOption === "Other" ? requestedByOther : requestedByOption;
@@ -60,23 +62,15 @@ export function useNewTraineeForm() {
     [zoneGroups, zone],
   );
 
-  // Trainer / Supervisor pickers list this company's agencyteam trainers,
-  // fetched live and re-fetched whenever the company changes.
+  // Trainer / Supervisor pickers list this company's agencyteam trainers, fetched live (the
+  // server narrows them to the caller's own scope either way).
   const [trainerOptions, setTrainerOptions] = useState<SelectOption[]>([]);
   useEffect(() => {
-    if (!adminToken || !company) return;
-    fetchTrainers(adminToken, company)
+    if (!adminToken) return;
+    fetchTrainers(adminToken, company || undefined)
       .then(setTrainerOptions)
       .catch(() => setTrainerOptions([]));
   }, [adminToken, company]);
-
-  const changeCompany = (value: string) => {
-    setCompany(value);
-    setTrainerId("");
-    setTrainerName("");
-    setSupervisorId("");
-    setSupervisorName("");
-  };
 
   // Trainee Profile
   const [profilePhoto, setProfilePhoto] = useState<PickedImage | null>(null);
@@ -118,7 +112,7 @@ export function useNewTraineeForm() {
 
   const handleSubmit = async () => {
     const missingRequired = firstError(
-      required(zone), required(region), required(company), required(requestedBy),
+      required(zone), required(region), required(requestedBy),
       required(trainerId), required(supervisorId),
       required(fullName), required(designation), required(gender),
       required(primaryEmail), required(primaryPhone),
@@ -169,7 +163,6 @@ export function useNewTraineeForm() {
         district,
         zone,
         region,
-        company,
         requestedBy,
         trainerId,
         trainerName,
@@ -218,7 +211,7 @@ export function useNewTraineeForm() {
     zoneOptions,
     region, setRegion,
     regionOptions,
-    company, setCompany: changeCompany,
+    company,
     requestedByOption, setRequestedByOption,
     requestedByOther, setRequestedByOther,
     requestedBy,

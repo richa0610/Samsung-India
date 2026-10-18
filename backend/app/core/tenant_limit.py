@@ -6,9 +6,9 @@ no cap every other tenant queues behind them. Here at most `limit` requests per 
 progress at once; the rest wait WITHOUT holding a thread and, after `wait_seconds`, get a 503
 "busy" instead of waiting forever. A healthy tenant always finds free threads.
 
-The tenant is resolved exactly as the endpoints resolve it (get_tenant_id_from_request: the
-token's verified tenant, else the header, else the default). A slot is kept only while it is in
-use, so made-up tenant names can't make this grow.
+The tenant is the one the endpoints serve (the token's verified tenant, else the header, else the
+default), as `tenant_slot_key` gives it - without a database read, since this runs on the event
+loop. A slot is kept only while it is in use, so made-up tenant names can't make this grow.
 """
 
 import asyncio
@@ -16,7 +16,7 @@ import asyncio
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from app.database.session import get_tenant_id_from_request
+from app.database.session import tenant_slot_key
 
 BUSY = "This organisation's server is busy right now - please try again in a moment."
 
@@ -32,7 +32,7 @@ class TenantConcurrencyLimit:
         if scope["type"] != "http" or self.limit <= 0:
             await self.app(scope, receive, send)
             return
-        tenant = get_tenant_id_from_request(Request(scope))
+        tenant = tenant_slot_key(Request(scope))
         slot = self._slots.setdefault(tenant, [asyncio.Semaphore(self.limit), 0])
         slot[1] += 1
         try:

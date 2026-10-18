@@ -31,6 +31,26 @@ export const LOGIN_TEXT = {
   staffLink: "Login here",
 } as const;
 
+/** The company code step: before anyone signs in, the device is tied to one company by typing its
+ *  company code (the company's tenant ID, any letter case). */
+export const COMPANY_TEXT = {
+  title: "Enter your company code",
+  body: "Ask your trainer or admin for it. You only need to enter it once on this phone.",
+  label: "Company code",
+  placeholder: "Enter company code",
+  submit: "Continue",
+  cancel: "Cancel",
+  required: "Type your company code to continue.",
+  current: "Company",
+  change: "Change",
+  // A QR code from another company (useLinkCompany).
+  qrBelongsTo: "This training belongs to",
+  qrSwitchHint: "Switch this phone to that company to join it?",
+  qrSwitch: "Switch company",
+  qrSignedInElsewhere: "This training belongs to another company. Sign out, then scan the QR code again to join it.",
+  qrUnknownCompany: "This QR code's company isn't available. Ask your trainer for a new QR code.",
+} as const;
+
 /** The trainer / admin sign-in screen (one screen, worded for the role picked in "Login as"). */
 export const STAFF_LOGIN_TEXT = {
   trainer: {

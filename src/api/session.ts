@@ -72,15 +72,44 @@ export type CurrentSession = {
   modules: SessionModule[];
 };
 
+let _cachedCurrentSession: CurrentSession | null = null;
+let _cachedToken: string | null = null;
+
+export function getCachedCurrentSession(token?: string | null): CurrentSession | null {
+  if (!token || token !== _cachedToken) return null;
+  return _cachedCurrentSession;
+}
+
+export function setCachedCurrentSession(token: string | null, session: CurrentSession | null) {
+  _cachedToken = token;
+  _cachedCurrentSession = session;
+}
+
+export function clearCachedCurrentSession() {
+  _cachedToken = null;
+  _cachedCurrentSession = null;
+}
+
+export function isCachedSessionLive(token?: string | null): boolean {
+  if (token) {
+    return isSessionLive(getCachedCurrentSession(token));
+  }
+  return isSessionLive(_cachedCurrentSession);
+}
+
 export function isSessionLive(session: CurrentSession | null | undefined): boolean {
   return Boolean(session && session.started && !session.sessionClosed);
 }
 
-export function getCurrentSession(token: string, conferenceUid?: string) {
+export async function getCurrentSession(token: string, conferenceUid?: string): Promise<CurrentSession> {
   const query = conferenceUid ? `?conference_uid=${encodeURIComponent(conferenceUid)}` : "";
-  return apiRequest<CurrentSession>(`/sessions/current${query}`, {
+  const session = await apiRequest<CurrentSession>(`/sessions/current${query}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+  if (!conferenceUid) {
+    setCachedCurrentSession(token, session);
+  }
+  return session;
 }
 
 // The training behind a shared QR code (samsungindia://join/<code>).

@@ -1,7 +1,7 @@
 /**
  * Deep-link path fixups for the custom-scheme join link.
  *
- * A scanned session QR encodes `samsungindia://join/<code>`. When the OS
+ * A scanned session QR encodes `samsungindia://join/<code>?company=<tenantId>`. When the OS
  * hands that to the app, "join" is parsed as the URL authority - some
  * expo-router / RN versions keep it (`/join/<code>`), others drop it
  * (`/<code>`), and Expo Go wraps it as `exp://host/--/join/<code>`. Left
@@ -22,14 +22,19 @@ export function redirectSystemPath({ path }: { path: string; initial: boolean })
     // Collapse to a single leading slash.
     p = "/" + p.replace(/^\/+/, "");
 
+    // The company the link names (`?company=<tenantId>`) rides along - the join screen offers to
+    // switch to it. Nothing else from the query string is passed on.
+    const company = p.match(/[?&]company=([^&#]+)/i);
+    const query = company ? `?company=${company[1]}` : "";
+
     // Authority kept: `/join/CONF2610014`.
     const withHost = p.match(/^\/join\/([^/?#]+)/i);
-    if (withHost) return `/join/${withHost[1]}`;
+    if (withHost) return `/join/${withHost[1]}${query}`;
 
     // Authority dropped: a bare `/CONF2698735081.SIGNATURE` (or an older unsigned `/CONF2610014`)
     // is a scanned join link.
     const bareCode = p.match(/^\/(CONF\d[A-Za-z0-9]*(?:\.[A-Za-z0-9]+)?)(?:[/?#]|$)/i);
-    if (bareCode) return `/join/${bareCode[1]}`;
+    if (bareCode) return `/join/${bareCode[1]}${query}`;
 
     return path;
   } catch {

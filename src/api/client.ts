@@ -1,4 +1,12 @@
+import { getCompany } from "@/config/company";
 import { getApiBaseUrl } from "@/constants/api";
+
+/** The company this device signs in to, on every request - the server reads it only before
+ *  sign-in (afterwards the token's own tenant wins), so sending it always is harmless. */
+function companyHeader(): Record<string, string> {
+  const company = getCompany();
+  return company ? { "X-Tenant-ID": company.tenantId } : {};
+}
 
 export class ApiError extends Error {
   status: number;
@@ -36,6 +44,7 @@ export async function apiRequest<T>(
       ...options,
       headers: {
         "Content-Type": "application/json",
+        ...companyHeader(),
         ...options.headers,
       },
     });
@@ -72,7 +81,7 @@ export async function apiUpload<T>(
   try {
     response = await fetch(`${base}${path}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { ...companyHeader(), Authorization: `Bearer ${token}` },
       body: formData,
       signal: controller.signal,
     });

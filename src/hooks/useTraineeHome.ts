@@ -10,10 +10,12 @@ import {
   SessionFlowState,
   SessionModule,
   SessionModuleKey,
+  getCachedCurrentSession,
   getCurrentSession,
   getSessionFlowState,
   isModuleLeft,
   isSessionLive,
+  setCachedCurrentSession,
   setSessionFlowState,
 } from "@/api/session";
 import { isSessionLocked, resetSessionViolations, setProctoringSettings } from "@/components/proctoring/violations";
@@ -89,7 +91,7 @@ export function useTraineeHome() {
   }>();
   const { trainee, token, logout } = useAuth();
 
-  const [session, setSession] = useState<CurrentSession | null>(null);
+  const [session, setSession] = useState<CurrentSession | null>(() => getCachedCurrentSession(token));
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -221,6 +223,7 @@ export function useTraineeHome() {
         }
 
         setSession(data);
+        setCachedCurrentSession(token, data);
         setNotAssigned(false);
       } catch (err) {
         if (err instanceof ApiError && err.status === 404) {

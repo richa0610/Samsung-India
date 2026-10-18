@@ -26,7 +26,7 @@ from app.services.access_service import resolve_scope
 from app.services.account_ids import account_id, account_keys, account_name, find_account, login_name
 from app.services.activity_log_service import log_activity
 from app.services.assessment_builder_service import suite_category
-from app.services.company_ids import company_id, company_names
+from app.services.company_ids import company_name, require_tenant_company
 from app.services.training.common import owned_conference, training_out
 from app.utils.conference_format import (
     NO_FILE,
@@ -58,8 +58,8 @@ from app.utils.status import title_status
 # review fields (pax, approval/training status, message) stay editable.
 _EDITABLE_CONFERENCE_STATUSES = {"scheduled", "pending", "not started"}
 
-# Plain PATCH fields -> the conference column each one writes.
-# (company / trainerEmployeeId are stored as IDs - _apply_company_and_trainer.)
+# Plain PATCH fields -> the conference column each one writes. (trainerEmployeeId is stored as
+# the trainer's account ID - _apply_trainer; the company is the tenant's and never edited.)
 _PATCH_COLUMNS = {
     "zone": "zone",
     "region": "region",
@@ -156,13 +156,17 @@ def create_training(
     tenant_id: str = None,
     common_db: Optional[Session] = None,
 ) -> TrainingOut:
+    # A training's company is its tenant's (user, 2026-10-18) - never the form's, so a Super Admin
+    # working in one company can't file a training under another's name.
+    company = require_tenant_company(common_db, tenant_id)
     placement_rules.authorize_placement(
         db, common_db, admin, resolve_scope(common_db, admin, tenant_id), tenant_id,
-        company=payload.company, zone=payload.zone, region=payload.region, trainer=payload.trainerEmployeeId,
+        company=company.name, zone=payload.zone, region=payload.region, trainer=payload.trainerEmployeeId,
     )
 
     trainer = find_account(db, common_db, payload.trainerEmployeeId)
     conference = Conference(
+        company=company.stored,
         zone=payload.zone,
         region=payload.region,
         requestedBy=payload.requestedBy,
@@ -186,7 +190,7 @@ def create_training(
         remarks=None,
         **_session_flow_columns(db, payload, payload.conferenceDate),
     )
-    _apply_company_and_trainer(common_db, conference, payload, {"company", "trainerEmployeeId"}, trainer)
+    _apply_trainer(conference, payload, {"trainerEmployeeId"}, trainer)
     conference_repository.add(db, conference)
     conference.masterRemarks = creation_note(
         payload.isResidential, account_name(admin), account_id(admin), conference.conferenceUid
@@ -242,7 +246,7 @@ def get_training_detail(
         zone=conference.zone,
         region=conference.region,
         # The form shows the company's name and picks the trainer by login name.
-        company=company_names(common_db, [conference.company]).get(conference.company, conference.company),
+        company=company_name(common_db, conference.company),
         requestedBy=conference.requestedBy,
         trainerEmployeeId=login_name(db, common_db, conference.trainerEmployeeId),
         trainerName=conference.trainerName,
@@ -309,14 +313,10 @@ def _program_end(conference: Conference, flow: dict) -> Optional[str]:
     return flow.get("trainingEndDate") or conference.conferenceEndsOn
 
 
-def _apply_company_and_trainer(
-    common_db: Optional[Session], conference: Conference, payload: TrainingCreate, sent: set[str], trainer
-) -> None:
-    """The company and trainer as the other system stores them (user, 2026-10-17): the company's
-    agency ID (its name when it isn't registered), the trainer's account ID and "Name (username)"
-    (as sent when no account matches). `trainer` is the account `payload.trainerEmployeeId` names."""
-    if "company" in sent:
-        conference.company = company_id(common_db, payload.company)
+def _apply_trainer(conference: Conference, payload: TrainingCreate, sent: set[str], trainer) -> None:
+    """The trainer as the other system stores them (user, 2026-10-17): the account ID and
+    "Name (username)" (as sent when no account matches). `trainer` is the account
+    `payload.trainerEmployeeId` names."""
     if "trainerEmployeeId" in sent:
         if trainer is None:
             conference.trainerEmployeeId, conference.trainerName = payload.trainerEmployeeId, payload.trainerName
@@ -336,7 +336,7 @@ def _apply_schedule_fields(
             stored_form = _STORED_FORM.get(field)
             setattr(conference, column, stored_form(value) if stored_form else value)
     trainer = find_account(db, common_db, payload.trainerEmployeeId) if "trainerEmployeeId" in sent else None
-    _apply_company_and_trainer(common_db, conference, payload, sent, trainer)
+    _apply_trainer(conference, payload, sent, trainer)
     if "checklist" in sent:
         conference.checklistUid = ",".join(payload.checklist) if payload.checklist else None
     if sent & _SESSION_FLOW_FIELDS:
@@ -407,13 +407,13 @@ def _update_schedule(
     values over stored ones) must be inside the caller's grant, and a changed trainer must be one
     they may assign."""
     sent = payload.model_fields_set
-    # Checked by name, as the form sends them - a stored company / trainer ID reads back as its
-    # name / login name, so an unchanged one stays unchanged.
-    stored_company = company_names(common_db, [conference.company]).get(conference.company, conference.company)
+    # Checked by name, as grants and the form name them - a stored company / trainer ID reads back
+    # as its name / login name, so an unchanged one stays unchanged. The company isn't editable.
+    stored_company = company_name(common_db, conference.company)
     stored_trainer = login_name(db, common_db, conference.trainerEmployeeId)
     placement_rules.authorize_placement(
         db, common_db, admin, resolve_scope(common_db, admin, tenant_id), tenant_id,
-        company=payload.company if "company" in sent else stored_company,
+        company=stored_company,
         zone=payload.zone if "zone" in sent else conference.zone,
         region=payload.region if "region" in sent else conference.region,
         trainer=payload.trainerEmployeeId if "trainerEmployeeId" in sent else stored_trainer,

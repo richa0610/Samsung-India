@@ -50,7 +50,7 @@ class CorsIsTheOutermostMiddleware(unittest.TestCase):
 
     def test_a_preflight_is_answered_without_touching_the_tenant_limit(self):
         tenant_limit_reached = AssertionError("a preflight reached the tenant limit")
-        with patch("app.core.tenant_limit.get_tenant_id_from_request", side_effect=tenant_limit_reached):
+        with patch("app.core.tenant_limit.tenant_slot_key", side_effect=tenant_limit_reached):
             response = self.w.client.options(
                 "/admin/trainings/page",
                 headers={
@@ -65,7 +65,7 @@ class CorsIsTheOutermostMiddleware(unittest.TestCase):
     def test_the_tenant_limits_busy_response_carries_the_cors_headers(self):
         limiter = next(layer for layer in middleware_layers(self.w.app) if isinstance(layer, TenantConcurrencyLimit))
         every_slot_taken = [asyncio.Semaphore(0), 1]
-        with patch.object(limiter, "wait_seconds", 0.05), patch.dict(limiter._slots, {ALPHA: every_slot_taken}):
+        with patch.object(limiter, "wait_seconds", 0.05), patch.dict(limiter._slots, {ALPHA.lower(): every_slot_taken}):
             response = self.w.client.get(
                 "/admin/trainings/page", headers={**self.w.headers("trainer1"), "Origin": self.origin}
             )

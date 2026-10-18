@@ -30,10 +30,12 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def create_access_token(
     subject: str,
-    tenant_id: Optional[str] = None,
+    tenant_id: str,
     role: Optional[str] = None,
     version: int = 0,
 ) -> str:
+    """A signed session token for `subject` in `tenant_id` - the company the person signed in to;
+    there is no default company (user, 2026-10-18)."""
     issued = datetime.now(timezone.utc)
     expire = issued + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
@@ -41,7 +43,7 @@ def create_access_token(
         # When this login session began - the activity log's loginTime for every action in it.
         "iat": issued,
         "exp": expire,
-        "tenant_id": tenant_id or settings.DEFAULT_TENANT_ID,
+        "tenant_id": tenant_id,
         # The account's tokenVersion when issued - see is_token_current.
         "ver": int(version or 0),
     }

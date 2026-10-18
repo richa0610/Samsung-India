@@ -44,7 +44,11 @@ class StatsAreNeverCached(unittest.TestCase):
         p = patch.object(admin_router.admin_service, "build_admin_dashboard_stats", side_effect=fake_build)
         p.start()
         self.addCleanup(p.stop)
-        self.request = SimpleNamespace(headers={}, query_params={})
+        # A request names its company (there is no default one); its spelling is taken as sent.
+        spelling = patch("app.database.session.tenant_manager.canonical_uid", side_effect=str.strip)
+        spelling.start()
+        self.addCleanup(spelling.stop)
+        self.request = SimpleNamespace(headers={"X-Tenant-ID": "alpha"}, query_params={})
 
     def call(self, fresh=False):
         admin = Admin()

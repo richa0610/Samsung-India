@@ -1,29 +1,21 @@
-import { File, Paths } from "expo-file-system";
+import { persistedText } from "./persistedText";
 
 /**
  * Runtime-configurable backend URL, so a changed PC IP / Wi-Fi never needs
  * a rebuild - the trainer edits it in-app (gear on the role screen).
  *
- * Persisted as a plain string in a file (expo-file-system, already bundled).
- * Read synchronously at module load so `getApiBaseUrl()` is correct before
+ * Persisted as a plain string in a file (see persistedText). Read
+ * synchronously at module load so `getApiBaseUrl()` is correct before
  * the first request; `client.ts` / `useAuth.tsx` call the getters per
  * request, so a change takes effect without an app restart.
  */
 
-const DEFAULT_HOST = "192.168.29.95";
+const DEFAULT_HOST = "10.239.162.53";
 export const DEFAULT_API_URL = process.env.EXPO_PUBLIC_API_URL
   ? normalize(process.env.EXPO_PUBLIC_API_URL)
   : `http://${DEFAULT_HOST}:8000`;
 
-const FILE_NAME = "server-url.txt";
-
-function storeFile(): File | null {
-  try {
-    return new File(Paths.document, FILE_NAME);
-  } catch {
-    return null;
-  }
-}
+const store = persistedText("server-url.txt");
 
 function normalize(input: string): string {
   const url = input.trim();
@@ -32,16 +24,8 @@ function normalize(input: string): string {
   return withScheme.replace(/\/+$/, "");
 }
 
-let currentUrl = DEFAULT_API_URL;
-try {
-  const f = storeFile();
-  if (f?.exists) {
-    const v = f.textSync().trim();
-    if (v) currentUrl = normalize(v);
-  }
-} catch {
-  // keep the default
-}
+const storedUrl = store.read();
+let currentUrl = storedUrl ? normalize(storedUrl) : DEFAULT_API_URL;
 
 export function getApiBaseUrl(): string {
   return currentUrl;
@@ -61,25 +45,12 @@ export function isUsingDefaultServerUrl(): boolean {
 
 export function setServerUrl(input: string): string {
   currentUrl = normalize(input);
-  try {
-    const f = storeFile();
-    if (f) {
-      if (!f.exists) f.create();
-      f.write(currentUrl);
-    }
-  } catch {
-    // in-memory value still applies for this session
-  }
+  store.write(currentUrl);
   return currentUrl;
 }
 
 export function resetServerUrl(): string {
   currentUrl = DEFAULT_API_URL;
-  try {
-    const f = storeFile();
-    if (f?.exists) f.delete();
-  } catch {
-    // ignore
-  }
+  store.remove();
   return currentUrl;
 }
