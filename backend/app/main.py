@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.core.body_limit import BodySizeLimit
 from app.core.request_context import RequestContextMiddleware
 from app.core.tenant_limit import TenantConcurrencyLimit
+from app.core.log_context import install_tenant_log_tags
 from app.core.log_redaction import install_token_redaction
 from app.core.media import MAX_REQUEST_BYTES, MEDIA_ROOT
 from app.database.common import common_engine
@@ -37,6 +38,7 @@ logger = logging.getLogger("main")
 
 # WebSocket handshakes carry the token in the query string; keep it out of uvicorn's log lines.
 install_token_redaction()
+install_tenant_log_tags()
 
 # Startup DB initialisation. Skipped entirely under TESTING (see core/config.py):
 # importing this module in a test must never run DDL against a real database.

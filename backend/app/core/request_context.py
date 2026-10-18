@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 from starlette.requests import Request
 
-from app.database.session import bearer_token
+from app.database.session import bearer_token, named_tenant
 from app.utils.helpers import client_ip
 
 
@@ -25,6 +25,8 @@ class RequestInfo:
     user_agent: str | None
     # The login token presented, if any - the log only ever stores a one-way fingerprint of it.
     token: str | None
+    # The company (tenant) the request names - for the server's log lines (core/log_context.py).
+    tenant: str | None = None
 
     @property
     def line(self) -> str:
@@ -84,6 +86,7 @@ class RequestContextMiddleware:
                 client_ip=client_ip(request),
                 user_agent=request.headers.get("user-agent"),
                 token=bearer_token(request),
+                tenant=named_tenant(request),
             )
         )
         try:

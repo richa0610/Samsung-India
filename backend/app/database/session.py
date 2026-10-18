@@ -67,13 +67,20 @@ def get_tenant_id_from_request(request: Request) -> str:
     return tenant_manager.canonical_uid(tenant_id) if client_named else tenant_id
 
 
-def tenant_slot_key(request: Request) -> str:
-    """The same tenant as `get_tenant_id_from_request`, as a key that needs no database - for code
-    on the event loop (the per-tenant concurrency limit). Lower-cased, so one tenant's spellings
-    share one key. Never refuses: a request naming no company shares the "" key - the routes that
-    need no company (company lookup, place names) and requests its endpoint will refuse."""
+def named_tenant(request: Request) -> Optional[str]:
+    """The tenant a request names - its verified token's, else the company code it sent - as it
+    names it, without a database read: for code on the event loop (the per-tenant concurrency
+    limit, the tenant on each log line). None when it names none. Never refuses."""
     tenant_id, _ = _requested_tenant(request)
-    return (tenant_id or "").lower()
+    return tenant_id
+
+
+def tenant_slot_key(request: Request) -> str:
+    """The same tenant as `get_tenant_id_from_request`, as a key for the per-tenant concurrency
+    limit (`named_tenant`, lower-cased so one tenant's spellings share one key). A request naming no
+    company shares the "" key - the routes that need no company (company lookup, place names) and
+    requests its endpoint will refuse."""
+    return (named_tenant(request) or "").lower()
 
 
 def get_db(
