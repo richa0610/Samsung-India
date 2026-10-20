@@ -293,6 +293,19 @@ class TheSyncMatchesEachCompany(RegistryTestCase):
         self.assertEqual((newcomer.tenant_uid, newcomer.username), (BETA, None))
 
 
+class ADryRunOverSeveralCompanies(RegistryTestCase):
+    def test_it_shows_the_clashes_between_companies_and_writes_nothing(self):
+        self.beta.add(Trainee(traineeUid="TR-S_N1-0", name="Copy", email="copy@example.test", phone=9_600_000_001))
+        self.beta.commit()
+        known = registry_service.known_entries(self.common)
+        first = self.sync(apply=False, known=known)
+        second = self.sync(self.beta, BETA, apply=False, known=known)
+        self.common.rollback()
+        self.assertGreater(first.added, 0)
+        self.assertIn(("TR-S_N1-0", f"ID already registered to company {ALPHA}"), second.skipped)
+        self.assertEqual(self.entries(), [])
+
+
 class CompanySessionsAreClosed(RegistryTestCase):
     def tracked(self, sessions):
         real = tenant_manager.get_session

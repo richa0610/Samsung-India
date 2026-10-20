@@ -101,18 +101,30 @@ def claim_trainee_uid(common_db: Session, zone, open_tenant: Optional[OpenTenant
     """The next trainee ID from the shared counter, inside `common_db`'s transaction - committed with
     the reservation, rolled back with it. A prefix the shared counter has never issued starts above
     every number any company has used for it."""
+    _ensure_shared_counter(common_db, uid_events.trainee_uid_prefix(zone), Trainee.traineeUid, open_tenant)
+    return uid_events.new_trainee_uid(common_db.connection(), zone)
+
+
+def claim_trainer_uid(common_db: Session, open_tenant: Optional[OpenTenant] = None) -> str:
+    """The next trainer ID (AGT...) from the shared counter, inside `common_db`'s transaction. This app
+    never creates trainers (the PHP system does); a maintenance script uses this to give a company's
+    trainers IDs no other company has (scripts/reissue_people_ids.py)."""
+    prefix = uid_events.TRAINER_UID_PREFIX
+    _ensure_shared_counter(common_db, prefix, AgencyTeam.agencyTeamUid, open_tenant)
+    return uid_events.next_uid(common_db.connection(), prefix)
+
+
+def _ensure_shared_counter(common_db: Session, prefix: str, column, open_tenant: Optional[OpenTenant]) -> None:
     connection = common_db.connection()
-    prefix = uid_events.trainee_uid_prefix(zone)
     if not uid_utils.counter_exists(connection, prefix):
-        floor = _first_unused_in_companies(common_db, prefix, open_tenant or _open_tenant(common_db))
+        floor = first_unused_in_companies(common_db, prefix, open_tenant or _open_tenant(common_db), column)
         uid_utils.raise_counter_floor(connection, prefix, floor)
-    return uid_events.new_trainee_uid(connection, zone)
 
 
-def _first_unused_in_companies(common_db: Session, prefix: str, open_tenant: OpenTenant) -> int:
+def first_unused_in_companies(common_db: Session, prefix: str, open_tenant: OpenTenant, column=Trainee.traineeUid) -> int:
     """The first number no active company has used for `prefix`: past each one's own counter and every
-    ID its trainees carry. A company that can't be read refuses the registration (503) rather than risk
-    issuing an ID it already has. Each session opened here is closed here."""
+    ID in `column` (a trainee's, or a trainer's) it carries. A company that can't be read refuses
+    (503) rather than risk issuing an ID it already has. Each session opened here is closed here."""
     floor = uid_utils.START
     for tenant_uid in tenant_repository.list_active_uids(common_db):
         try:
@@ -122,7 +134,7 @@ def _first_unused_in_companies(common_db: Session, prefix: str, open_tenant: Ope
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=UNAVAILABLE)
         try:
             counter = tenant_db.execute(select(UidSequence.next_val).where(UidSequence.prefix == prefix)).scalar()
-            uids = tenant_db.execute(select(Trainee.traineeUid).where(Trainee.traineeUid.like(f"{prefix}%"))).scalars()
+            uids = tenant_db.execute(select(column).where(column.like(f"{prefix}%"))).scalars()
             serials = [serial for serial in (uid_utils.serial_of(uid, prefix) for uid in uids) if serial is not None]
         except SQLAlchemyError:
             logger.exception("Can't read tenant '%s' to start the shared '%s' counter", tenant_uid, prefix)
@@ -242,6 +254,25 @@ class ReconcileReport:
     skipped: list[tuple[str, str]] = field(default_factory=list)
 
 
+@dataclass
+class KnownEntries:
+    """The registry as a sync sees it: read once, then kept in step with what the sync adds - so one
+    run over several companies, a dry run included, sees the clashes between them."""
+
+    rows: list[UserRegistry]
+    by_uid: dict[str, UserRegistry]
+    holders: dict[str, dict[str, UserRegistry]]
+
+
+def known_entries(common_db: Session) -> KnownEntries:
+    rows = registry.list_all(common_db)
+    return KnownEntries(
+        rows=rows,
+        by_uid={row.user_uid.lower(): row for row in rows},
+        holders={attr: {getattr(row, attr): row for row in rows if getattr(row, attr)} for attr in ("username", "hoid")},
+    )
+
+
 def _company_accounts(tenant_db: Session) -> list[Account]:
     trainees = tenant_db.execute(
         select(Trainee.traineeUid, Trainee.username, Trainee.employee_id, Trainee.phone, Trainee.password)
@@ -289,16 +320,22 @@ def _apply(entry: UserRegistry, account: Account, holders: dict, report: Reconci
     return changed
 
 
-def reconcile_tenant(common_db: Session, tenant_db: Session, tenant_uid: str, *, apply: bool = True) -> ReconcileReport:
+def reconcile_tenant(
+    common_db: Session, tenant_db: Session, tenant_uid: str, *, apply: bool = True, known: Optional[KnownEntries] = None
+) -> ReconcileReport:
     """Brings the registry in line with one company's database: adds the accounts it lacks (the PHP
     system's, ones made before the registry), copies changed usernames / HO IDs / phones / password
     hashes, activates finished registrations, disables rows whose account is gone or isn't a trainer
     (a row an admin disabled is left alone) and removes reservations whose registration never finished.
-    An ID another company's row holds is skipped and reported. apply=False writes nothing (a dry run)."""
+    An ID another company's row holds is skipped and reported. apply=False writes nothing (a dry run).
+
+    `known`: shared by a run over several companies, so each sees what the ones before it added. A dry
+    run sharing it is rolled back by its caller after the last company - nothing is flushed meanwhile
+    (sessions here don't autoflush), so nothing reaches the database."""
     report = ReconcileReport(tenant_uid)
-    rows = registry.list_all(common_db)
-    by_uid = {row.user_uid.lower(): row for row in rows}
-    holders = {attr: {getattr(row, attr): row for row in rows if getattr(row, attr)} for attr in ("username", "hoid")}
+    shared = known is not None
+    known = known or known_entries(common_db)
+    rows, by_uid, holders = known.rows, known.by_uid, known.holders
     seen: set[str] = set()
 
     for account in _company_accounts(tenant_db):
@@ -319,6 +356,7 @@ def reconcile_tenant(common_db: Session, tenant_db: Session, tenant_uid: str, *,
             _apply(entry, account, holders, report)
             common_db.add(entry)
             by_uid[key] = entry
+            rows.append(entry)
             report.added += 1
         elif _apply(entry, account, holders, report):
             report.updated += 1
@@ -326,12 +364,14 @@ def reconcile_tenant(common_db: Session, tenant_db: Session, tenant_uid: str, *,
             report.unchanged += 1
 
     now = common_db.execute(select(func.now())).scalar()
-    for entry in rows:
+    for entry in list(rows):
         if entry.tenant_uid != tenant_uid or entry.user_uid.lower() in seen:
             continue
         if entry.status == "pending":
             if entry.created_at is not None and entry.created_at <= now - PENDING_GRACE:
                 common_db.delete(entry)
+                rows.remove(entry)
+                by_uid.pop(entry.user_uid.lower(), None)
                 report.removed += 1
         elif entry.status == "active":
             entry.status = "disabled"
@@ -340,7 +380,7 @@ def reconcile_tenant(common_db: Session, tenant_db: Session, tenant_uid: str, *,
 
     if apply:
         common_db.commit()
-    else:
+    elif not shared:
         common_db.rollback()
     return report
 

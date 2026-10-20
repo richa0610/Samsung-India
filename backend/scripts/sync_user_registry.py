@@ -28,9 +28,10 @@ def main() -> None:
     parser.add_argument("--tenant", help="only this company (its tenant ID)")
     args = parser.parse_args()
 
+    from app.core.config import settings
     from app.database.common import CommonSessionLocal, common_engine
     from app.repositories import tenant_repository
-    from app.services.user_registry_service import reconcile_tenant
+    from app.services.user_registry_service import known_entries, reconcile_tenant
 
     if not inspect(common_engine).has_table("user_registry"):
         sys.exit("The Common DB has no user_registry table yet - deploy the app first (it creates the table on start).")
@@ -38,11 +39,15 @@ def main() -> None:
     common_db = CommonSessionLocal()
     try:
         tenants = [args.tenant] if args.tenant else tenant_repository.list_active_uids(common_db)
+        # The default company first: where two companies' accounts clash, the one synced first keeps the ID.
+        tenants.sort(key=lambda tenant_uid: tenant_uid != settings.DEFAULT_TENANT_ID)
+        # One view of the registry for the whole run, so a dry run shows the clashes between companies too.
+        known = known_entries(common_db)
         for tenant_uid in tenants:
             engine = tenant_engine(tenant_uid)
             tenant_db = sessionmaker(bind=engine)()
             try:
-                report = reconcile_tenant(common_db, tenant_db, tenant_uid, apply=args.apply)
+                report = reconcile_tenant(common_db, tenant_db, tenant_uid, apply=args.apply, known=known)
             finally:
                 tenant_db.close()
                 engine.dispose()
@@ -50,6 +55,8 @@ def main() -> None:
                   f"disable {report.disabled}, remove {report.removed}, skipped {len(report.skipped)}")
             for user_uid, reason in report.skipped:
                 print(f"    skipped {user_uid}: {reason}")
+        if not args.apply:
+            common_db.rollback()
     finally:
         common_db.close()
     print("applied." if args.apply else "dry run - nothing was written. Run again with --apply to write it.")
