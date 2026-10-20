@@ -3,19 +3,25 @@ import { Control, Controller, FieldErrors } from "react-hook-form";
 
 import AppText from "@/components/ui/AppText";
 import AppInput from "@/components/ui/AppInput";
-import AppSelect from "@/components/ui/AppSelect";
+import InlineSelect from "@/components/ui/InlineSelect";
 
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { FontWeight } from "@/theme/fontWeight";
 import { RegisterFormValues } from "@/hooks/useRegisterForm";
+import { mobile10 } from "@/utils/validation/validators";
 
 type PersonalDetailsProps = {
     control: Control<RegisterFormValues>;
     errors: FieldErrors<RegisterFormValues>;
+    // Field names that already have a saved value and must stay read-only
+    // (Edit Profile lets the trainee fill blanks, not rewrite existing data).
+    lockedFields?: Set<keyof RegisterFormValues>;
 };
 
-export default function PersonalDetails({ control, errors }: PersonalDetailsProps) {
+export default function PersonalDetails({ control, errors, lockedFields }: PersonalDetailsProps) {
+    const locked = (name: keyof RegisterFormValues) => lockedFields?.has(name) ?? false;
+
     return (
         <View>
             <AppText style={styles.sectionTitle}>
@@ -30,6 +36,7 @@ export default function PersonalDetails({ control, errors }: PersonalDetailsProp
                     <AppInput
                         placeholder="Full Name*"
                         autoCapitalize="words"
+                        editable={!locked("name")}
                         value={value}
                         onChangeText={onChange}
                     />
@@ -46,13 +53,14 @@ export default function PersonalDetails({ control, errors }: PersonalDetailsProp
                         name="phone"
                         rules={{
                             required: "Phone No is required",
-                            minLength: { value: 10, message: "Enter a valid phone number" },
+                            validate: (v) => mobile10(v, "Phone No") ?? true,
                         }}
                         render={({ field: { value, onChange } }) => (
                             <AppInput
                                 placeholder="Phone No*"
                                 keyboardType="phone-pad"
                                 maxLength={10}
+                                editable={!locked("phone")}
                                 value={value}
                                 onChangeText={onChange}
                             />
@@ -65,26 +73,15 @@ export default function PersonalDetails({ control, errors }: PersonalDetailsProp
                         control={control}
                         name="gender"
                         render={({ field: { value, onChange } }) => (
-                            <AppSelect
-                                selectedValue={value}
-                                onValueChange={onChange}
-                                items={[
-                                    {
-                                        label: "Choose Gender",
-                                        value: "",
-                                    },
-                                    {
-                                        label: "Male",
-                                        value: "male",
-                                    },
-                                    {
-                                        label: "Female",
-                                        value: "female",
-                                    },
-                                    {
-                                        label: "Other",
-                                        value: "other",
-                                    },
+                            <InlineSelect
+                                placeholder="Choose Gender"
+                                value={value}
+                                disabled={locked("gender")}
+                                onSelect={onChange}
+                                options={[
+                                    { label: "Male", value: "male" },
+                                    { label: "Female", value: "female" },
+                                    { label: "Other", value: "other" },
                                 ]}
                             />
                         )}
@@ -111,6 +108,7 @@ export default function PersonalDetails({ control, errors }: PersonalDetailsProp
                         keyboardType="email-address"
                         autoCapitalize="none"
                         autoCorrect={false}
+                        editable={!locked("email")}
                         value={value}
                         onChangeText={onChange}
                     />
@@ -133,6 +131,7 @@ const styles = StyleSheet.create({
 
     row: {
         flexDirection: "row",
+        alignItems: "flex-start",
         gap: 12,
     },
 

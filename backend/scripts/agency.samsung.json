@@ -1,0 +1,15 @@
+{
+  "_comment": "Samsung's own row in `agency` - companyName must be EXACTLY the company_name of its `tenants` row (that name is the only link between the two). The contact person, email and phone are made up (user, 2026-10-18; example.test addresses cannot receive mail) - replace them in the agency table once the real ones are known.",
+  "agency": {
+    "companyName": "Samsung India",
+    "name": "Samsung Contact",
+    "email": "contact@samsung-india.example.test",
+    "phone": "9999999998",
+    "website": "https://www.samsung.com/in/",
+    "localCity": "Gurugram",
+    "localDistrict": "Gurugram",
+    "localState": "Haryana",
+    "localPinCode": "122002",
+    "aboutAgency": "Samsung India - the first company on the TOPS training platform. Contact details are placeholders."
+  }
+}

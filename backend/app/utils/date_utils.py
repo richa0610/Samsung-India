@@ -1,0 +1,152 @@
+from datetime import date, datetime, time, timedelta, timezone
+
+# The venue clock. Every conference in this system is in India, and
+# `conferenceDate`/`conferenceTime` (and the per-module times) are entered in
+# local venue time. IST is a fixed UTC+5:30 with no DST, so a plain offset is
+# exact and needs no tz database.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+# How this app's forms write a venue time (e.g. "10:00 AM") - what the app sends and is sent back.
+# Parse and format venue times with this, never a literal.
+VENUE_TIME_FORMAT = "%I:%M %p"
+# How the other system stores a venue time in `conference` (user, 2026-10-17): "14:00". Every parser
+# below reads both, so rows written either way work.
+STORED_TIME_FORMAT = "%H:%M"
+_TIME_FORMATS = (VENUE_TIME_FORMAT, STORED_TIME_FORMAT)
+
+
+def ist_now() -> datetime:
+    """Current venue (IST) wall-clock time as a naive datetime, for comparing
+    against the naive `conferenceDate`/`conferenceTime` strings. Derived from
+    an absolute UTC reading, so it's correct whether the host runs on UTC
+    (Render) or on local time (a dev machine)."""
+    return datetime.now(timezone.utc).astimezone(IST).replace(tzinfo=None)
+
+
+def utc_now() -> datetime:
+    """Current UTC wall-clock time as a naive datetime - what a bare `datetime.now()` is meant
+    to return everywhere on this stack (see `to_utc_iso`), because it's stored in and compared
+    against naive DB columns alongside MySQL's own `NOW()`, which is UTC on this stack's server.
+    A bare `datetime.now()` only agrees with that when the process's own host clock happens to
+    be set to UTC (true on Render); on a dev machine in another timezone (e.g. IST) it silently
+    returns local wall-clock time instead, throwing off anything computed against a timestamp
+    MySQL wrote - by exactly the host's UTC offset. Use this (like `ist_now()` already does for
+    the IST equivalent) for any "now" that gets stored, or compared against something stored, as
+    one of this stack's naive datetimes."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def utc_from_epoch_ms(epoch_ms: int) -> datetime:
+    """A Unix-epoch reading in milliseconds (the Live Quiz clock, `time.time() * 1000` - e.g.
+    `conference.liveTimerEndsAt`) as this stack's naive UTC datetime, to store next to `utc_now()`."""
+    return datetime.fromtimestamp(epoch_ms / 1000, tz=timezone.utc).replace(tzinfo=None)
+
+
+def utc_naive_to_ist(dt: datetime | None) -> datetime | None:
+    """Convert a naive UTC datetime (how timestamps are stored on this stack -
+    e.g. `conference.actualStartedAt`) to naive IST wall-clock time, so it can
+    be compared against parsed `conferenceDate`/`conferenceTime` values."""
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc).astimezone(IST).replace(tzinfo=None)
+
+
+def ist_day_start_utc(day: date) -> datetime:
+    """The naive UTC instant (how timestamps are stored on this stack) at which the IST calendar
+    day `day` begins - 18:30 UTC the evening before. For matching a stored timestamp against the
+    IST dates the app sends, e.g. a list's From/To range."""
+    return datetime.combine(day, time.min, tzinfo=IST).astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def ist_to_iso(dt: datetime | None) -> str | None:
+    """Tag a naive venue-local (IST) datetime - e.g. a parsed
+    `conferenceDate`/`conferenceTime` - with its +05:30 offset so the app
+    reads it as the correct instant."""
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=IST).isoformat()
+
+
+def to_utc_iso(dt: datetime | None) -> str | None:
+    """A naive `datetime` - whether from Python's `datetime.now()` on the app
+    server or MySQL's `NOW()` - is UTC wall-clock time on this stack (Render +
+    Aiven). Tag it explicitly before sending it to the app: without an offset,
+    `Date.parse()` on the phone misreads it as already being in the device's
+    own local time (see `useLiveRuntime.ts`), which is off by exactly the
+    device's UTC offset (5h30m for IST) for anything still "live"."""
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc).isoformat()
+
+
+def _parse_time(raw: str | None) -> datetime | None:
+    """A venue time written either way ("10:00 AM" or "14:30"), or None when missing or unreadable."""
+    if not raw:
+        return None
+    for fmt in _TIME_FORMATS:
+        try:
+            return datetime.strptime(raw.strip(), fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def to_stored_time(raw: str | None) -> str:
+    """A venue time as `conference` stores it: "02:00 PM" -> "14:00"; "" when there is none. Text
+    that isn't a time is kept as written."""
+    parsed = _parse_time(raw)
+    if parsed is not None:
+        return parsed.strftime(STORED_TIME_FORMAT)
+    return (raw or "").strip()
+
+
+def to_venue_time(raw: str | None) -> str | None:
+    """A venue time as this app shows and sends it: "14:00" -> "02:00 PM"; None when there is none.
+    Text that isn't a time is kept as written."""
+    parsed = _parse_time(raw)
+    if parsed is not None:
+        return parsed.strftime(VENUE_TIME_FORMAT)
+    return (raw or "").strip() or None
+
+
+def parse_module_start(conference_date: str | None, time_str: str | None) -> datetime | None:
+    """`conferenceDate`/`conferenceTime` (and each module's own configured
+    start/end time) are free-text columns filled in by whoever schedules the
+    training (e.g. "2026-07-25" with "10:00 AM" or "10:00"). This is the one place that
+    combines and parses them."""
+    if not conference_date:
+        return None
+    clock = _parse_time(time_str)
+    if clock is None:
+        return None
+    try:
+        day = datetime.strptime(conference_date.strip(), "%Y-%m-%d")
+    except ValueError:
+        return None
+    return day.replace(hour=clock.hour, minute=clock.minute)
+
+
+def time_to_minutes(raw: str | None) -> int | None:
+    """"10:00 AM" / "14:30" -> minutes since midnight, for ordering a session's
+    modules by their planned start time. Returns None for a missing/unparseable
+    value so callers can sort those last."""
+    parsed = _parse_time(raw)
+    return parsed.hour * 60 + parsed.minute if parsed is not None else None
+
+
+def duration(start: str | None, end: str | None) -> str | None:
+    """Formats a "10:00 AM" -> "11:30 AM" (or "10:00" -> "11:30") pair as "1h 30m" for display."""
+    started, ended = _parse_time(start), _parse_time(end)
+    if started is None or ended is None:
+        return None
+
+    minutes = int((ended - started).total_seconds() // 60)
+    if minutes <= 0:
+        return None
+
+    hours, mins = divmod(minutes, 60)
+    if hours and mins:
+        return f"{hours}h {mins}m"
+    if hours:
+        return f"{hours}h"
+    return f"{mins}m"

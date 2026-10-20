@@ -1,12 +1,45 @@
-import { API_BASE_URL } from "@/constants/api";
+import { getCompany } from "@/config/company";
+import { getApiBaseUrl } from "@/constants/api";
+
+/** The company this device signs in to, on every request - the server reads it only before
+ *  sign-in (afterwards the token's own tenant wins), so sending it always is harmless. */
+function companyHeader(): Record<string, string> {
+  const company = getCompany();
+  return company ? { "X-Tenant-ID": company.tenantId } : {};
+}
 
 export class ApiError extends Error {
   status: number;
+  /** The parsed `detail` from the error response - a string, or an object
+   *  like `{ code, message, ... }` for structured errors the UI branches on. */
+  body: unknown;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, body?: unknown) {
     super(message);
     this.status = status;
+    this.body = body;
   }
+}
+
+function errorFromResponse(status: number, data: unknown): ApiError {
+  const detail = (data as { detail?: unknown } | null)?.detail;
+  const message =
+    typeof detail === "string"
+      ? detail
+      : typeof (detail as { message?: unknown })?.message === "string"
+        ? (detail as { message: string }).message
+        : "Something went wrong. Please try again.";
+  return new ApiError(message, status, detail);
+}
+
+/** Told the token of a signed-in request the server answered 401 - the one answer it gives a
+ *  request carrying a token that's no longer good (expired, or signed out on every device); a wrong
+ *  password at login is a 401 too, but a login carries no token. AuthProvider registers this, and
+ *  signs that sign-in out once, wherever in the app the request was made. */
+let onSessionEnded: ((token: string) => void) | null = null;
+
+export function setSessionEndedHandler(handler: ((token: string) => void) | null) {
+  onSessionEnded = handler;
 }
 
 export async function apiRequest<T>(
@@ -14,17 +47,17 @@ export async function apiRequest<T>(
   options: RequestInit = {}
 ): Promise<T> {
   let response: Response;
+  const base = getApiBaseUrl();
+  const headers = {
+    "Content-Type": "application/json",
+    ...companyHeader(),
+    ...options.headers,
+  } as Record<string, string>;
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...options.headers,
-      },
-    });
+    response = await fetch(`${base}${path}`, { ...options, headers });
   } catch (err) {
-    console.warn(`[apiRequest] ${API_BASE_URL}${path} failed:`, err instanceof Error ? err.message : err);
+    console.warn(`[apiRequest] ${base}${path} failed:`, err instanceof Error ? err.message : err);
     throw new ApiError(
       "Couldn't reach the server. Check your connection and try again.",
       0
@@ -34,11 +67,9 @@ export async function apiRequest<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message =
-      typeof data?.detail === "string"
-        ? data.detail
-        : "Something went wrong. Please try again.";
-    throw new ApiError(message, response.status);
+    const token = headers.Authorization?.startsWith("Bearer ") ? headers.Authorization.slice("Bearer ".length) : null;
+    if (response.status === 401 && token) onSessionEnded?.(token);
+    throw errorFromResponse(response.status, data);
   }
 
   return data as T;
@@ -53,18 +84,20 @@ export async function apiUpload<T>(
   timeoutMs = 25000
 ): Promise<T> {
   let response: Response;
+  const base = getApiBaseUrl();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${base}${path}`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { ...companyHeader(), Authorization: `Bearer ${token}` },
       body: formData,
       signal: controller.signal,
     });
   } catch (err) {
-    console.warn(`[apiUpload] ${API_BASE_URL}${path} failed:`, err instanceof Error ? `${err.name}: ${err.message}` : err);
+    const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.warn(`[apiUpload] ${base}${path} failed:`, detail);
     // Weak venue Wi-Fi can stall a multipart upload long enough to trip the
     // AbortController above - give that case a message that points at the
     // connection quality rather than the generic "can't reach server" one.
@@ -85,11 +118,8 @@ export async function apiUpload<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const message =
-      typeof data?.detail === "string"
-        ? data.detail
-        : "Something went wrong. Please try again.";
-    throw new ApiError(message, response.status);
+    if (response.status === 401) onSessionEnded?.(token);
+    throw errorFromResponse(response.status, data);
   }
 
   return data as T;

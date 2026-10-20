@@ -1,0 +1,56 @@
+{
+  "label": "smoke",
+  "database": "perf_attendance_10k",
+  "when": "2026-09-26T15:20:03",
+  "mysql_version": "8.4.11",
+  "innodb_buffer_pool_mb": 512,
+  "table_rows": {
+    "conference": 333,
+    "attendance": 10000,
+    "trainee": 2500,
+    "assessment_results": 5970
+  },
+  "matching_rows_broad_scope": 6541,
+  "client": {
+    "python": "3.14.7",
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 142 Stepping 10, GenuineIntel"
+  },
+  "method": "single sequential client on the same machine as MySQL (no network); warm-up discarded; nearest-rank percentiles",
+  "warmup": 2,
+  "results": [
+    {
+      "case": "A1 page 1, all, default sort (newest first), broad scope",
+      "runs": 8,
+      "statements": 4,
+      "rows_returned": 10,
+      "p50_ms": 46.9,
+      "p95_ms": 178.4,
+      "p99_ms": 178.4,
+      "max_ms": 178.4,
+      "statement_median_ms": {
+        "count": 20.1,
+        "page": 12.2,
+        "tallies": 2.5,
+        "results": 2.3
+      },
+      "session_counters_one_run": {
+        "Created_tmp_tables": 0,
+        "Created_tmp_disk_tables": 0,
+        "Sort_rows": 10011,
+        "Sort_merge_passes": 1,
+        "Handler_read_key": 6869,
+        "Handler_read_next": 6608,
+        "Handler_read_rnd_next": 10335,
+        "Select_scan": 2,
+        "Select_full_join": 0
+      },
+      "explain_analyze": {
+        "count": "-> Aggregate: count(0)  (cost=5682 rows=1) (actual time=24.2..24.2 rows=1 loops=1)\n    -> Nested loop left join  (cost=4709 rows=9727) (actual time=2.23..21.8 rows=6541 loops=1)\n        -> Nested loop inner join  (cost=1305 rows=9727) (actual time=2.22..5.83 rows=6541 loops=1)\n            -> Filter: ((lower(trim(coalesce(conference.company,''))) = 'samsung india') and (conference.conferenceUid is not null))  (cost=35.1 rows=333) (actual time=0.13..0.465 rows=222 loops=1)\n                -> Table scan on conference  (cost=35.1 rows=333) (actual time=0.112..0.27 rows=333 loops=1)\n            -> Covering index lookup on attendance using unique_session_attendance (conferenceUid=conference.conferenceUid)  (cost=0.9 rows=29.2) (actual time=0.00365..0.0133 rows=29.5 loops=222)\n        -> Single-row covering index lookup on trainee using traineeUid (traineeUid=attendance.traineeUid)  (cost=0.25 rows=1) (actual time=0.00226..0.00229 rows=1 loops=6541)\n",
+        "page": "-> Limit: 11 row(s)  (cost=7806 rows=11) (actual time=10.1..11 rows=11 loops=1)\n    -> Nested loop left join  (cost=7806 rows=9727) (actual time=10.1..11 rows=11 loops=1)\n        -> Nested loop inner join  (cost=4401 rows=9727) (actual time=10.1..10.9 rows=11 loops=1)\n            -> Sort: attendance.`timestamp` DESC, attendance.id DESC  (cost=997 rows=9727) (actual time=9.1..9.11 rows=14 loops=1)\n                -> Table scan on attendance  (cost=997 rows=9727) (actual time=0.0314..5.38 rows=10000 loops=1)\n            -> Filter: (lower(trim(coalesce(conference.company,''))) = 'samsung india')  (cost=0.25 rows=1) (actual time=0.0591..0.0591 rows=0.786 loops=14)\n                -> Single-row index lookup on conference using conferenceUid (conferenceUid=attendance.conferenceUid)  (cost=0.25 rows=1) (actual time=0.00528..0.00532 rows=1 loops=14)\n        -> Single-row index lookup on trainee using traineeUid (traineeUid=attendance.traineeUid)  (cost=0.25 rows=1) (actual time=0.00618..0.00624 rows=1 loops=11)\n",
+        "tallies": "-> Group aggregate: sum((case when (attendance.`status` in ('Pending','Joined')) then 1 else 0 end)), sum((case when (attendance.`status` = 'Present') then 1 else 0 end)), count(0)  (cost=52.9 rows=56) (actual time=0.416..1.15 rows=10 loops=1)\n    -> Nested loop inner join  (cost=47.3 rows=56) (actual time=0.209..1.05 rows=37 loops=1)\n        -> Index range scan on attendance using ix_attendance_traineeUid over (traineeUid = 'TR00000278') OR (traineeUid = 'TR00000355') OR (8 more), with index condition: (attendance.traineeUid in ('TR00001229','TR00000539','TR00002061','TR00000359','TR00000355','TR00002354','TR00000376','TR00000278','TR00001274','TR00000928'))  (cost=27.7 rows=56) (actual time=0.0621..0.407 rows=56 loops=1)\n        -> Filter: (lower(trim(coalesce(conference.company,''))) = 'samsung india')  (cost=0.252 rows=1) (actual time=0.00867..0.00879 rows=0.661 loops=56)\n            -> Single-row index lookup on conference using conferenceUid (conferenceUid=attendance.conferenceUid)  (cost=0.252 rows=1) (actual time=0.00742..0.00749 rows=1 loops=56)\n",
+        "results": "-> Nested loop inner join  (cost=14.5 rows=1.5) (actual time=0.116..0.151 rows=8 loops=1)\n    -> Sort: assessment_results.attemptNumber DESC  (cost=9.26 rows=15) (actual time=0.0925..0.0936 rows=11 loops=1)\n        -> Index range scan on assessment_results using ix_results_conf_trainee_status over (conferenceUid = 'CONF0000145' AND traineeUid = 'TR00000278' AND status = 'Submitted') OR (conferenceUid = 'CONF0000145' AND traineeUid = 'TR00000355' AND status = 'Submitted') OR (8 more), with index condition: (((assessment_results.`status` = 'Submitted') and (((assessment_results.conferenceUid = 'CONF0000145') and (assessment_results.traineeUid = 'TR00001229')) or ((assessment_results.conferenceUid = 'CONF0000145') and (assessment_results.traineeUid = 'TR00000359')) or ((assessment_results.conferenceUid = 'CONF0000145') and (assessment_results.traineeUid = 'TR00000355')) or ((assessment_results.conferenceUid = 'CONF0000145') and (assessment_results.traineeUid = 'TR00000278')) or ((assessment_results.conferenceUid = 'CONF0000145') and (assessment_results.traineeUid = 'TR00000376')) or ((assessment_results.conferenceUid = 'CONF0000145') and (assessment_results.traineeUid = 'TR00001274')) or ((assessment_results.conferenceUid = 'CONF0000145') and (assessment_results.traineeUid = 'TR00000928')) or ((assessment_results.conferenceUid = 'CONF0000145') and (assessment_results.traineeUid = 'TR00002061')) or ((assessment_results.conferenceUid = 'CONF0000145') and (assessment_results.traineeUid = 'TR00000539')) or ((assessment_results.conferenceUid = 'CONF0000145') and (assessment_results.traineeUid = 'TR00002354')))) and (assessment_results.conferenceUid is not null))  (cost=9.26 rows=15) (actual time=0.0259..0.0812 rows=11 loops=1)\n    -> Filter: (assessment_results.assessmentSuiteUid = conference.postAssessmentUid)  (cost=0.251 rows=0.1) (actual time=0.00489..0.00495 rows=0.727 loops=11)\n        -> Single-row index lookup on conference using conferenceUid (conferenceUid=assessment_results.conferenceUid), with index condition: (conference.conferenceUid = assessment_results.conferenceUid)  (cost=0.251 rows=1) (actual time=0.00461..0.00462 rows=1 loops=11)\n"
+      }
+    }
+  ]
+}

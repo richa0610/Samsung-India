@@ -1,0 +1,34 @@
+{
+  "label": "after",
+  "database": "perf_trainer_100k",
+  "per_thread": 28,
+  "levels": [
+    {
+      "threads": 1,
+      "requests": 28,
+      "req_per_s": 13.0,
+      "p50_ms": 55.0,
+      "p95_ms": 167.5,
+      "p99_ms": 322.7,
+      "errors": 0
+    },
+    {
+      "threads": 4,
+      "requests": 112,
+      "req_per_s": 29.6,
+      "p50_ms": 115.3,
+      "p95_ms": 239.6,
+      "p99_ms": 297.7,
+      "errors": 0
+    },
+    {
+      "threads": 8,
+      "requests": 224,
+      "req_per_s": 21.3,
+      "p50_ms": 346.0,
+      "p95_ms": 565.3,
+      "p99_ms": 732.0,
+      "errors": 0
+    }
+  ]
+}

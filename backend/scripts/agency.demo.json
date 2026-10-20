@@ -1,0 +1,15 @@
+{
+  "_comment": "A DEMO company for checking multi-company support - every value is made up (example.test addresses cannot receive mail). Remove it with: scripts/add_agency.py --undo backups/agency-<uid>-<time>.json",
+  "agency": {
+    "companyName": "DEMO Bharat Electronics Pvt Ltd",
+    "name": "Demo Contact",
+    "email": "demo.bharat@example.test",
+    "phone": "9999999999",
+    "website": "https://demo-bharat.example.test",
+    "localCity": "Pune",
+    "localDistrict": "Pune",
+    "localState": "Maharashtra",
+    "localPinCode": "411001",
+    "aboutAgency": "Demo company created to check multi-company support. Not a real business."
+  }
+}

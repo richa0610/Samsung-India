@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleProp, StyleSheet, TextInput, View, ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import AppText from "@/components/ui/AppText";
@@ -10,7 +10,11 @@ import { Radius } from "@/theme/radius";
 import { Spacing } from "@/theme/spacing";
 import AppModal from "@/components/ui/AppModal";
 
-export type SelectOption = { label: string; value: string };
+// `name` is optional - only pickers whose `label` isn't itself the plain
+// display name (e.g. the trainer picker prefixes an employee ID onto
+// `label`) set it, for callers that need the bare name rather than the
+// display string.
+export type SelectOption = { label: string; value: string; name?: string };
 
 type SearchableSelectProps = {
   label?: string;
@@ -20,6 +24,11 @@ type SearchableSelectProps = {
   value: string;
   options: SelectOption[];
   onSelect: (option: SelectOption) => void;
+  icon?: keyof typeof Ionicons.glyphMap;
+  disabled?: boolean;
+  // Smaller height/padding for tight layouts like the sessions filter panel.
+  compact?: boolean;
+  containerStyle?: StyleProp<ViewStyle>;
 };
 
 export function SearchableSelect({
@@ -30,6 +39,10 @@ export function SearchableSelect({
   value,
   options,
   onSelect,
+  icon,
+  disabled,
+  compact = false,
+  containerStyle,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -41,7 +54,7 @@ export function SearchableSelect({
   );
 
   return (
-    <View style={styles.field}>
+    <View style={[styles.field, containerStyle]}>
       {label && (
         <AppText style={styles.fieldLabel} weight={FontWeight.medium}>
           {label}
@@ -49,16 +62,18 @@ export function SearchableSelect({
         </AppText>
       )}
       <Pressable
-        style={styles.trigger}
+        style={[styles.trigger, compact && styles.triggerCompact, disabled && styles.triggerDisabled]}
+        disabled={disabled}
         onPress={() => {
           setQuery("");
           setOpen(true);
         }}
       >
-        <AppText style={styles.triggerText} color={selected ? Colors.black : Colors.gray400} numberOfLines={1}>
+        {icon && <Ionicons name={icon} size={compact ? 14 : 16} color={Colors.gray600} />}
+        <AppText style={[styles.triggerText, compact && styles.triggerTextCompact]} color={selected ? Colors.black : Colors.gray400} numberOfLines={1}>
           {selected?.label ?? placeholder}
         </AppText>
-        <Ionicons name="chevron-down" size={16} color={Colors.gray600} />
+        <Ionicons name="chevron-down" size={compact ? 14 : 16} color={Colors.gray600} />
       </Pressable>
 
       <AppModal
@@ -115,8 +130,10 @@ type SearchableMultiSelectProps = {
   title?: string;
   placeholder?: string;
   values: string[];
-  options: string[];
+  options: SelectOption[];
   onChange: (values: string[]) => void;
+  // Smaller height/padding for tight layouts like dense multi-field forms.
+  compact?: boolean;
 };
 
 export function SearchableMultiSelect({
@@ -126,17 +143,19 @@ export function SearchableMultiSelect({
   values,
   options,
   onChange,
+  compact = false,
 }: SearchableMultiSelectProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
+  const labelFor = (value: string) => options.find((o) => o.value === value)?.label ?? value;
   const filtered = useMemo(
-    () => options.filter((o) => o.toLowerCase().includes(query.toLowerCase())),
+    () => options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase())),
     [options, query]
   );
 
-  const toggle = (item: string) => {
-    onChange(values.includes(item) ? values.filter((v) => v !== item) : [...values, item]);
+  const toggle = (value: string) => {
+    onChange(values.includes(value) ? values.filter((v) => v !== value) : [...values, value]);
   };
 
   return (
@@ -147,23 +166,23 @@ export function SearchableMultiSelect({
         </AppText>
       )}
       <Pressable
-        style={styles.trigger}
+        style={[styles.trigger, compact && styles.triggerCompact]}
         onPress={() => {
           setQuery("");
           setOpen(true);
         }}
       >
-        <AppText style={styles.triggerText} color={values.length ? Colors.black : Colors.gray400} numberOfLines={1}>
-          {values.length ? values.join(", ") : placeholder}
+        <AppText style={[styles.triggerText, compact && styles.triggerTextCompact]} color={values.length ? Colors.black : Colors.gray400} numberOfLines={1}>
+          {values.length ? values.map(labelFor).join(", ") : placeholder}
         </AppText>
-        <Ionicons name="chevron-down" size={16} color={Colors.gray600} />
+        <Ionicons name="chevron-down" size={compact ? 14 : 16} color={Colors.gray600} />
       </Pressable>
 
       {values.length > 0 && (
         <View style={styles.chipRow}>
           {values.map((item) => (
             <Pressable key={item} style={styles.chip} onPress={() => toggle(item)}>
-              <AppText style={styles.chipLabel} color={Colors.mainColour1}>{item}</AppText>
+              <AppText style={styles.chipLabel} color={Colors.mainColour1}>{labelFor(item)}</AppText>
               <Ionicons name="close" size={13} color={Colors.mainColour1} />
             </Pressable>
           ))}
@@ -190,11 +209,11 @@ export function SearchableMultiSelect({
           />
         </View>
         <ScrollView style={styles.list} keyboardShouldPersistTaps="handled">
-          {filtered.map((item) => {
-            const active = values.includes(item);
+          {filtered.map((option) => {
+            const active = values.includes(option.value);
             return (
-              <Pressable key={item} style={[styles.row, active && styles.rowActive]} onPress={() => toggle(item)}>
-                <AppText style={styles.rowText} color={active ? Colors.white : Colors.black}>{item}</AppText>
+              <Pressable key={option.value} style={[styles.row, active && styles.rowActive]} onPress={() => toggle(option.value)}>
+                <AppText style={styles.rowText} color={active ? Colors.white : Colors.black}>{option.label}</AppText>
                 {active && <Ionicons name="checkmark" size={16} color={Colors.white} />}
               </Pressable>
             );
@@ -219,7 +238,7 @@ const styles = StyleSheet.create({
   trigger: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 8,
     height: 50,
     borderWidth: 1,
     borderColor: Colors.gray200,
@@ -227,7 +246,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.lg,
     backgroundColor: Colors.white,
   },
-  triggerText: { fontSize: Fonts.xs, flex: 1, marginRight: 8 },
+  triggerDisabled: { backgroundColor: Colors.gray100, opacity: 0.7 },
+  triggerCompact: { height: 38, paddingHorizontal: Spacing.md, gap: 6 },
+  triggerText: { fontSize: Fonts.xs, flex: 1 },
+  triggerTextCompact: { fontSize: 12 },
   sheet: { paddingHorizontal: Spacing.lg, paddingBottom: Spacing.xl, paddingTop: Spacing.sm },
   searchRow: {
     flexDirection: "row",

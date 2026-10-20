@@ -1,0 +1,245 @@
+{
+  "label": "bp32_with_index",
+  "database": "perf_attendance_100k",
+  "when": "2026-09-26T16:21:15",
+  "mysql_version": "8.4.11",
+  "innodb_buffer_pool_mb": 32,
+  "table_rows": {
+    "conference": 3333,
+    "attendance": 100000,
+    "trainee": 25000,
+    "assessment_results": 58756
+  },
+  "matching_rows_broad_scope": 70660,
+  "client": {
+    "python": "3.14.7",
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 142 Stepping 10, GenuineIntel"
+  },
+  "method": "single sequential client on the same machine as MySQL (no network); warm-up discarded; nearest-rank percentiles",
+  "warmup": 3,
+  "results": [
+    {
+      "case": "A1 page 1, all, default sort (newest first), broad scope",
+      "runs": 30,
+      "statements": 4,
+      "rows_returned": 10,
+      "p50_ms": 290.1,
+      "p95_ms": 1037.3,
+      "p99_ms": 1125.8,
+      "max_ms": 1125.8,
+      "statement_median_ms": {
+        "count": 262.5,
+        "page": 3.9,
+        "tallies": 4.2,
+        "results": 3.6
+      },
+      "session_counters_one_run": {
+        "Created_tmp_tables": 0,
+        "Created_tmp_disk_tables": 0,
+        "Sort_rows": 14,
+        "Sort_merge_passes": 0,
+        "Handler_read_key": 73239,
+        "Handler_read_next": 70828,
+        "Handler_read_rnd_next": 3334,
+        "Select_scan": 2,
+        "Select_full_join": 0
+      },
+      "explain_analyze": {}
+    },
+    {
+      "case": "A3 page 1, confirmed",
+      "runs": 30,
+      "statements": 4,
+      "rows_returned": 10,
+      "p50_ms": 189.8,
+      "p95_ms": 341.5,
+      "p99_ms": 343.0,
+      "max_ms": 343.0,
+      "statement_median_ms": {
+        "count": 164.4,
+        "page": 3.8,
+        "tallies": 4.3,
+        "results": 3.6
+      },
+      "session_counters_one_run": {
+        "Created_tmp_tables": 0,
+        "Created_tmp_disk_tables": 0,
+        "Sort_rows": 14,
+        "Sort_merge_passes": 0,
+        "Handler_read_key": 35149,
+        "Handler_read_next": 100173,
+        "Handler_read_rnd_next": 0,
+        "Select_scan": 2,
+        "Select_full_join": 0
+      },
+      "explain_analyze": {}
+    },
+    {
+      "case": "B1 sort participantName asc",
+      "runs": 30,
+      "statements": 4,
+      "rows_returned": 10,
+      "p50_ms": 1132.9,
+      "p95_ms": 1399.5,
+      "p99_ms": 1763.3,
+      "max_ms": 1763.3,
+      "statement_median_ms": {
+        "count": 262.3,
+        "page": 860.9,
+        "tallies": 4.2,
+        "results": 3.0
+      },
+      "session_counters_one_run": {
+        "Created_tmp_tables": 0,
+        "Created_tmp_disk_tables": 0,
+        "Sort_rows": 16,
+        "Sort_merge_passes": 0,
+        "Handler_read_key": 147045,
+        "Handler_read_next": 70683,
+        "Handler_read_rnd_next": 103335,
+        "Select_scan": 2,
+        "Select_full_join": 0
+      },
+      "explain_analyze": {}
+    },
+    {
+      "case": "C1 narrow scope (one zone, one month)",
+      "runs": 30,
+      "statements": 4,
+      "rows_returned": 10,
+      "p50_ms": 143.6,
+      "p95_ms": 176.6,
+      "p99_ms": 205.5,
+      "max_ms": 205.5,
+      "statement_median_ms": {
+        "count": 25.4,
+        "page": 98.9,
+        "tallies": 3.6,
+        "results": 2.6
+      },
+      "session_counters_one_run": {
+        "Created_tmp_tables": 0,
+        "Created_tmp_disk_tables": 0,
+        "Sort_rows": 0,
+        "Sort_merge_passes": 0,
+        "Handler_read_key": 20694,
+        "Handler_read_next": 6161,
+        "Handler_read_rnd_next": 3334,
+        "Select_scan": 2,
+        "Select_full_join": 0
+      },
+      "explain_analyze": {}
+    },
+    {
+      "case": "D2 search medium ('kumar')",
+      "runs": 30,
+      "statements": 4,
+      "rows_returned": 10,
+      "p50_ms": 973.3,
+      "p95_ms": 1205.5,
+      "p99_ms": 1261.7,
+      "max_ms": 1261.7,
+      "statement_median_ms": {
+        "count": 943.8,
+        "page": 7.6,
+        "tallies": 8.6,
+        "results": 3.0
+      },
+      "session_counters_one_run": {
+        "Created_tmp_tables": 0,
+        "Created_tmp_disk_tables": 0,
+        "Sort_rows": 3,
+        "Sort_merge_passes": 0,
+        "Handler_read_key": 73271,
+        "Handler_read_next": 70792,
+        "Handler_read_rnd_next": 3334,
+        "Select_scan": 2,
+        "Select_full_join": 0
+      },
+      "explain_analyze": {}
+    },
+    {
+      "case": "E3 last page (page 7066)",
+      "runs": 30,
+      "statements": 3,
+      "rows_returned": 10,
+      "p50_ms": 1067.0,
+      "p95_ms": 1279.4,
+      "p99_ms": 1302.4,
+      "max_ms": 1302.4,
+      "statement_median_ms": {
+        "page": 1039.2,
+        "tallies": 13.0,
+        "results": 2.8
+      },
+      "session_counters_one_run": {
+        "Created_tmp_tables": 0,
+        "Created_tmp_disk_tables": 0,
+        "Sort_rows": 100003,
+        "Sort_merge_passes": 7,
+        "Handler_read_key": 162583,
+        "Handler_read_next": 67,
+        "Handler_read_rnd_next": 100001,
+        "Select_scan": 1,
+        "Select_full_join": 0
+      },
+      "explain_analyze": {}
+    },
+    {
+      "case": "E4 deep cursor (after 200 pages)",
+      "runs": 30,
+      "statements": 3,
+      "rows_returned": 10,
+      "p50_ms": 28.3,
+      "p95_ms": 32.8,
+      "p99_ms": 32.8,
+      "max_ms": 32.8,
+      "statement_median_ms": {
+        "page": 10.1,
+        "tallies": 3.7,
+        "results": 2.9
+      },
+      "session_counters_one_run": {
+        "Created_tmp_tables": 0,
+        "Created_tmp_disk_tables": 0,
+        "Sort_rows": 5,
+        "Sort_merge_passes": 0,
+        "Handler_read_key": 173,
+        "Handler_read_next": 126,
+        "Handler_read_rnd_next": 0,
+        "Select_scan": 1,
+        "Select_full_join": 0
+      },
+      "explain_analyze": {}
+    },
+    {
+      "case": "F1 limit 50",
+      "runs": 30,
+      "statements": 4,
+      "rows_returned": 50,
+      "p50_ms": 291.0,
+      "p95_ms": 365.8,
+      "p99_ms": 377.5,
+      "max_ms": 377.5,
+      "statement_median_ms": {
+        "count": 250.0,
+        "page": 5.8,
+        "tallies": 11.3,
+        "results": 6.0
+      },
+      "session_counters_one_run": {
+        "Created_tmp_tables": 0,
+        "Created_tmp_disk_tables": 0,
+        "Sort_rows": 25,
+        "Sort_merge_passes": 0,
+        "Handler_read_key": 74038,
+        "Handler_read_next": 71450,
+        "Handler_read_rnd_next": 3334,
+        "Select_scan": 2,
+        "Select_full_join": 0
+      },
+      "explain_analyze": {}
+    }
+  ]
+}

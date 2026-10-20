@@ -17,7 +17,12 @@ export function checkIn(token: string, conferenceUid: string) {
 export type VerifyLocationResult = {
   distanceMeters: number | null;
   withinRadius: boolean | null;
+  /** Geofence radius this check was made against, in metres (defaults to 100). */
+  radiusMeters: number | null;
   venueLabel: string | null;
+  /** The tenant's check-in setting: run the face check before the photo (true), or just capture
+   *  it (false). Missing from an older server = true. */
+  faceDetectionRequired?: boolean;
 };
 
 export function verifyLocation(token: string, conferenceUid: string, latitude: number, longitude: number) {
