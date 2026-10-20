@@ -124,3 +124,16 @@ def get_db(
         raise
     finally:
         session.close()
+
+
+def get_optional_db(
+    request: Request,
+    common_db: Session = Depends(get_common_db),
+) -> Generator[Optional[Session], None, None]:
+    """`get_db` for a sign-in, which may name no company (user, 2026-10-19): None then - the central
+    user registry finds the company (services/sign_in_service). A request that names one - an older
+    app sends the company code - gets that company's session, exactly as `get_db` gives it."""
+    if named_tenant(request) is None:
+        yield None
+        return
+    yield from get_db(request, common_db)

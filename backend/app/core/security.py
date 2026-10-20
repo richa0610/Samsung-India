@@ -33,9 +33,11 @@ def create_access_token(
     tenant_id: str,
     role: Optional[str] = None,
     version: int = 0,
+    session_id: Optional[str] = None,
 ) -> str:
     """A signed session token for `subject` in `tenant_id` - the company the person signed in to;
-    there is no default company (user, 2026-10-18)."""
+    there is no default company (user, 2026-10-18). `session_id`: the signed-in device's session
+    (services/device_sessions), checked on every request."""
     issued = datetime.now(timezone.utc)
     expire = issued + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
@@ -49,6 +51,8 @@ def create_access_token(
     }
     if role:
         payload["role"] = role
+    if session_id:
+        payload["sid"] = session_id
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 

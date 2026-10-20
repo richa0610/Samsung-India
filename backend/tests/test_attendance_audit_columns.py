@@ -34,9 +34,12 @@ class AttendanceAuditTestCase(CheckInTestCase):
 
 class WhoWhenHow(AttendanceAuditTestCase):
     def test_the_trainees_check_in_stamps_its_own_request(self):
-        self.assertEqual(self.secure_check_in(AT_VENUE).status_code, 200)
+        # The token that was sent - a second one minted after the request differs once its
+        # issued-at second has moved on.
+        headers = self.headers(OWN_TRAINEE)
+        self.assertEqual(self.secure_check_in(AT_VENUE, headers=headers).status_code, 200)
         row = self.row()
-        raw_token = self.headers(OWN_TRAINEE)["Authorization"].removeprefix("Bearer ")
+        raw_token = headers["Authorization"].removeprefix("Bearer ")
         self.assertIsNotNone(row.updationOn)
         self.assertEqual(row.token, token_fingerprint(raw_token))
         self.assertNotIn(raw_token, row.token)

@@ -41,7 +41,7 @@ REGISTRY = [
     (Category, "categoryUid", "CAT"),
     (SubCategory, "subCategoryUid", "SUB"),
     (Admin, "adminUid", "ADM"),
-    (AgencyTeam, "agencyTeamUid", "AGT"),
+    (AgencyTeam, "agencyTeamUid", "AGT"),   # TRAINER_UID_PREFIX
     (Accounts, "accountsUid", "ACC"),
     (Booking, "bookingUid", "BKG"),
 ]
@@ -83,12 +83,33 @@ for _model, _attr in ((Assessment, "assessmentUid"), (AssessmentResult, "resultU
 # letters in capitals + YY + a running number per zone, e.g. SOUTH2610001; TRN for a trainee with no
 # zone (utils/zones.zone_code). The app makes it - the forms no longer ask for one.
 NO_ZONE_TRAINEE_PREFIX = "TRN"
+# A trainer's (agencyteam) ID starts with this. A trainee's never does: an ID that starts with it can't
+# sign in as a trainee (user, 2026-10-20) - a guard that only ever refuses; who is a trainee or a
+# trainer is decided by which table their record is in.
+TRAINER_UID_PREFIX = "AGT"
+
+
+def is_trainer_uid(uid) -> bool:
+    return (uid or "").strip().upper().startswith(TRAINER_UID_PREFIX)
+
+
+def trainee_uid_prefix(zone) -> str:
+    code = zone_code(zone)
+    return code if code and not code.startswith(TRAINER_UID_PREFIX) else NO_ZONE_TRAINEE_PREFIX
+
+
+def new_trainee_uid(connection, zone) -> str:
+    """The next trainee ID from the counter on `connection`. The app's registrations pass the Common
+    Database's, so no two companies ever issue the same ID (services/user_registry_service)."""
+    return next_uid(connection, trainee_uid_prefix(zone))
 
 
 @event.listens_for(Trainee, "before_insert")
 def _fill_trainee_uid(mapper, connection, target):
+    """Only for a trainee saved without an ID - the app's registrations set one first, from the shared
+    counter; a script's insert falls back to its company's own counter."""
     if not target.traineeUid:
-        target.traineeUid = next_uid(connection, zone_code(target.zone) or NO_ZONE_TRAINEE_PREFIX)
+        target.traineeUid = new_trainee_uid(connection, target.zone)
 
 
 # An attendance row's ID names how the trainee reached the training, as the other system's do

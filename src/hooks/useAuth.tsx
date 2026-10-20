@@ -1,13 +1,16 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Platform } from "react-native";
+import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 
 import { AdminAccount, AdminAuthSession, logoutAdmin } from "@/api/admin";
 import { AuthSession, Trainee, logoutTrainee } from "@/api/auth";
+import { setSessionEndedHandler } from "@/api/client";
 import { clearCachedCurrentSession } from "@/api/session";
 import { getWsBaseUrl } from "@/constants/api";
 import { useBackfillCompany } from "@/hooks/useCompany";
 import { emit } from "@/services/liveEvents";
+import { isTokenExpired } from "@/utils/sessionToken";
 
 // Cold-start persistence for both sessions - without this, a still-valid JWT
 // was lost the instant the app process died (backgrounded + killed by the
@@ -36,6 +39,16 @@ function writeStored(key: string, value: unknown | null) {
   } else {
     SecureStore.setItemAsync(key, JSON.stringify(value)).catch(() => {});
   }
+}
+
+/** A saved sign-in to restore, or null - one whose token has already run out is forgotten instead,
+ *  since every request it made would only come back 401. */
+function restorable<T extends { access_token: string }>(key: string, stored: T | null): T | null {
+  if (stored && isTokenExpired(stored.access_token)) {
+    writeStored(key, null);
+    return null;
+  }
+  return stored;
 }
 
 // How long to wait before retrying a dropped /ws/admin connection - mobile
@@ -71,6 +84,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [adminSession, setAdminSessionState] = useState<AdminAuthSession | null>(null);
   const [restoring, setRestoring] = useState(CAN_PERSIST);
   const adminToken = adminSession?.access_token ?? null;
+  const router = useRouter();
+  const endedTokenRef = useRef<string | null>(null);
   useBackfillCompany(session?.access_token ?? adminToken, restoring);
 
   // One-shot rehydration on mount - there's nothing to read back on web.
@@ -80,8 +95,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     Promise.all([readStored<AuthSession>(AUTH_SESSION_KEY), readStored<AdminAuthSession>(ADMIN_SESSION_KEY)]).then(
       ([storedSession, storedAdminSession]) => {
         if (!active) return;
-        if (storedSession) setSessionState(storedSession);
-        if (storedAdminSession) setAdminSessionState(storedAdminSession);
+        const restoredSession = restorable(AUTH_SESSION_KEY, storedSession);
+        const restoredAdminSession = restorable(ADMIN_SESSION_KEY, storedAdminSession);
+        if (restoredSession) setSessionState(restoredSession);
+        if (restoredAdminSession) setAdminSessionState(restoredAdminSession);
         setRestoring(false);
       },
     );
@@ -97,13 +114,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     writeStored(ADMIN_SESSION_KEY, null);
   }, []);
 
-  const logout = useCallback(() => {
-    // Revoke the token server-side too; best-effort - signing out locally never waits on it.
-    if (session?.access_token) logoutTrainee(session.access_token).catch(() => {});
+  // Signing out on this device: what a logout does once it has asked the server to revoke the
+  // token, and all there is to do once the server has said the token is no good.
+  const forgetSession = useCallback(() => {
     clearCachedCurrentSession();
     setSessionState(null);
     writeStored(AUTH_SESSION_KEY, null);
-  }, [session]);
+  }, []);
+
+  const forgetAdminSession = useCallback(() => {
+    setAdminSessionState(null);
+    writeStored(ADMIN_SESSION_KEY, null);
+  }, []);
+
+  const logout = useCallback(() => {
+    // Revoke the token server-side too; best-effort - signing out locally never waits on it.
+    if (session?.access_token) logoutTrainee(session.access_token).catch(() => {});
+    forgetSession();
+  }, [session, forgetSession]);
 
   const setAdminSession = useCallback((next: AdminAuthSession) => {
     setAdminSessionState(next);
@@ -115,9 +143,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const adminLogout = useCallback(() => {
     // Revoke the token server-side too; best-effort - signing out locally never waits on it.
     if (adminSession?.access_token) logoutAdmin(adminSession.access_token).catch(() => {});
-    setAdminSessionState(null);
-    writeStored(ADMIN_SESSION_KEY, null);
-  }, [adminSession]);
+    forgetAdminSession();
+  }, [adminSession, forgetAdminSession]);
+
+  // A signed-in request came back 401 (api/client.ts): that sign-in is over - expired, or signed out
+  // on every device. Forget it and open its login screen, saying why: only for the sign-in still in
+  // use (a late answer for an earlier one changes nothing), once however many requests fail
+  // together, and with no server logout - the token is already no good.
+  useEffect(() => {
+    setSessionEndedHandler((endedToken) => {
+      if (endedToken === endedTokenRef.current) return;
+      if (endedToken === adminSession?.access_token) {
+        endedTokenRef.current = endedToken;
+        forgetAdminSession();
+        const portal = adminSession.admin.role === "admin" ? { portal: "admin" } : {};
+        router.replace({ pathname: "/trainer_login", params: { reason: "session_expired", ...portal } });
+      } else if (endedToken === session?.access_token) {
+        endedTokenRef.current = endedToken;
+        forgetSession();
+        router.replace({ pathname: "/participant_login", params: { reason: "session_expired" } });
+      }
+    });
+    return () => setSessionEndedHandler(null);
+  }, [session, adminSession, forgetSession, forgetAdminSession, router]);
 
   const updateAdminPhoto = useCallback((profilePicture: string) => {
     setAdminSessionState((current) => {

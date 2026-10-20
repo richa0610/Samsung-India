@@ -2,12 +2,17 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, StrictBool
 
+from app.schemas.tenant import TenantOut
+
 
 class AdminLoginRequest(BaseModel):
     # Cap both: an unbounded password is a bcrypt slow-hash DoS vector, and
     # an unbounded username is pointless DB-query load.
     username: str = Field(min_length=1, max_length=150)
     password: str = Field(min_length=1, max_length=128)
+    # The signed-in device (services/device_sessions) - see TraineeLogin.deviceId.
+    deviceId: Optional[str] = Field(default=None, max_length=100)
+    deviceName: Optional[str] = Field(default=None, max_length=255)
 
 
 class AdminOut(BaseModel):
@@ -24,6 +29,16 @@ class AdminAuthSession(BaseModel):
     access_token: str
     token_type: str = "bearer"
     admin: AdminOut
+    # The company signed in to - set when the sign-in named none (services/sign_in_service).
+    company: Optional[TenantOut] = None
+
+
+class CompanyChoiceRequest(BaseModel):
+    """The company an admin with access to several picked after signing in without naming one: the
+    ticket that sign-in answered with, and one of the companies it listed."""
+
+    ticket: str = Field(min_length=1, max_length=4096)
+    tenantId: str = Field(min_length=1, max_length=100)
 
 
 class AdminAccessScopeOut(BaseModel):

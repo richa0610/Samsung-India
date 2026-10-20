@@ -6,13 +6,14 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.exceptions import forbidden, invalid_session
+from app.core.exceptions import forbidden, invalid_session, unauthorized
 from app.core.security import is_token_current
 from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.models.trainee import Trainee
 from app.repositories import admin_repository, trainee_repository
+from app.services import device_sessions
 from app.services.access_service import resolve_scope
 
 bearer_scheme = HTTPBearer()
@@ -27,21 +28,42 @@ def _decode_token(credentials: HTTPAuthorizationCredentials) -> dict:
         raise invalid_session()
 
 
+def get_token_claims(credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme)) -> dict:
+    """The verified claims of the request's token, for an endpoint that needs one - Logout, the token's
+    device session. Use it beside the account dependency, which makes the real checks."""
+    return _decode_token(credentials)
+
+
+SIGNED_IN_ELSEWHERE = "You were signed out because this account signed in on another device."
+
+
+def _ensure_live_session(payload: dict, common_db: Session) -> None:
+    """A token naming a device session (services/device_sessions) is good only while that session is:
+    a device signed out by a newer sign-in is told so, any other ended session gets the usual 401."""
+    reason = device_sessions.why_ended(common_db, payload["sid"]) if payload.get("sid") else None
+    if reason == device_sessions.REPLACED:
+        raise unauthorized(SIGNED_IN_ELSEWHERE)
+    if reason is not None:
+        raise invalid_session()
+
+
 def get_current_trainee(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
     db: Session = Depends(get_db),
+    common_db: Session = Depends(get_common_db),
 ) -> Trainee:
-    unauthorized = invalid_session()
+    refused = invalid_session()
     payload = _decode_token(credentials)
 
     try:
         phone = int(payload.get("sub"))
     except (TypeError, ValueError):
-        raise unauthorized
+        raise refused
 
     trainee = trainee_repository.get_by_phone(db, phone)
     if not trainee or not is_token_current(payload, trainee):
-        raise unauthorized
+        raise refused
+    _ensure_live_session(payload, common_db)
 
     return trainee
 
@@ -83,6 +105,7 @@ def _authenticate_admin(payload: dict, username: str, common_db: Session) -> Adm
         raise invalid_session()
     if not resolve_scope(common_db, admin, token_tenant).allowed:
         raise forbidden("Not authorized for this tenant")
+    _ensure_live_session(payload, common_db)
     return admin
 
 
@@ -95,6 +118,7 @@ def _authenticate_trainer(payload: dict, username: str, tenant_db: Session, comm
     # every request, so a role changed after the token was issued stops working at once.
     if not resolve_scope(common_db, agent, payload.get("tenant_id")).is_trainer:
         raise forbidden("This action requires an active trainer account")
+    _ensure_live_session(payload, common_db)
     return agent
 
 
@@ -109,10 +133,14 @@ def resolve_principal(
     """The verified account behind a decoded token, in the token's own tenant, or None: an
     admin-table account only with an admin_access grant for that tenant, an agency account only
     with the trainer role, a trainee by phone in that tenant's database - and in every case only
-    while the token hasn't been revoked. Shared by the WebSocket handshake and
-    `get_current_account`, so both trust exactly what the REST dependencies trust."""
+    while the token hasn't been revoked, nor its device session ended. Shared by the WebSocket
+    handshake and `get_current_account`, so both trust exactly what the REST dependencies trust."""
     principal = _find_principal(payload.get("sub") or "", tenant_id, common_db, tenant_db)
-    return principal if principal is not None and is_token_current(payload, principal) else None
+    if principal is None or not is_token_current(payload, principal):
+        return None
+    if payload.get("sid") and device_sessions.why_ended(common_db, payload["sid"]) is not None:
+        return None
+    return principal
 
 
 def _find_principal(
@@ -139,14 +167,14 @@ def get_current_account(
     """Any verified account - admin, trainer or trainee - with the tenant its token was issued
     for. For endpoints (like serving an uploaded file) that authorize per resource rather than
     per role; the resource check itself decides what this account may reach."""
-    unauthorized = invalid_session()
+    refused = invalid_session()
     payload = _decode_token(credentials)
     tenant_id = payload.get("tenant_id")
     if not isinstance(tenant_id, str) or not tenant_id.strip():
-        raise unauthorized
+        raise refused
     principal = resolve_principal(payload, tenant_id.strip(), common_db, db)
     if principal is None:
-        raise unauthorized
+        raise refused
     return AuthenticatedAccount(principal, tenant_id.strip())
 
 

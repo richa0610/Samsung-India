@@ -45,8 +45,9 @@ def update_profile(
     db: Session = Depends(get_db),
     common_db: Session = Depends(get_common_db),
     admin: Admin | AgencyTeam = Depends(get_current_admin),
+    tenant_id: str = Depends(get_tenant_id_from_request),
 ):
-    return trainer_service.update_profile(common_db, db, admin, payload)
+    return trainer_service.update_profile(common_db, db, admin, payload, tenant_id)
 
 
 @router.post("/profile/photo", response_model=TrainerProfileOut)

@@ -32,22 +32,30 @@ function errorFromResponse(status: number, data: unknown): ApiError {
   return new ApiError(message, status, detail);
 }
 
+/** Told the token of a signed-in request the server answered 401 - the one answer it gives a
+ *  request carrying a token that's no longer good (expired, or signed out on every device); a wrong
+ *  password at login is a 401 too, but a login carries no token. AuthProvider registers this, and
+ *  signs that sign-in out once, wherever in the app the request was made. */
+let onSessionEnded: ((token: string) => void) | null = null;
+
+export function setSessionEndedHandler(handler: ((token: string) => void) | null) {
+  onSessionEnded = handler;
+}
+
 export async function apiRequest<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   let response: Response;
   const base = getApiBaseUrl();
+  const headers = {
+    "Content-Type": "application/json",
+    ...companyHeader(),
+    ...options.headers,
+  } as Record<string, string>;
 
   try {
-    response = await fetch(`${base}${path}`, {
-      ...options,
-      headers: {
-        "Content-Type": "application/json",
-        ...companyHeader(),
-        ...options.headers,
-      },
-    });
+    response = await fetch(`${base}${path}`, { ...options, headers });
   } catch (err) {
     console.warn(`[apiRequest] ${base}${path} failed:`, err instanceof Error ? err.message : err);
     throw new ApiError(
@@ -59,6 +67,8 @@ export async function apiRequest<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    const token = headers.Authorization?.startsWith("Bearer ") ? headers.Authorization.slice("Bearer ".length) : null;
+    if (response.status === 401 && token) onSessionEnded?.(token);
     throw errorFromResponse(response.status, data);
   }
 
@@ -108,6 +118,7 @@ export async function apiUpload<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
+    if (response.status === 401) onSessionEnded?.(token);
     throw errorFromResponse(response.status, data);
   }
 

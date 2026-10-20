@@ -15,7 +15,7 @@ from app.core.tenant_limit import TenantConcurrencyLimit
 from app.core.log_context import install_tenant_log_tags
 from app.core.log_redaction import install_token_redaction
 from app.core.media import MAX_REQUEST_BYTES, MEDIA_ROOT
-from app.database.common import common_engine
+from app.database.common import CommonSessionLocal, common_engine
 from app.database.connection import CommonBase, TenantBase
 from app.database.schema_sync import sync_missing_columns, sync_missing_indexes
 from app.database.tenant import tenant_manager
@@ -33,6 +33,7 @@ from app.routers.trainee import router as trainee_router
 from app.routers.trainer import router as trainer_router
 from app.routers.training import router as training_router
 from app.routers.ws import router as ws_router
+from app.services import user_registry_service
 
 logger = logging.getLogger("main")
 
@@ -146,18 +147,42 @@ async def _db_keepalive_loop() -> None:
         await asyncio.to_thread(_ping_databases)
 
 
+_registry_sync_task: "asyncio.Task | None" = None
+
+
+def _sync_user_registry() -> None:
+    common_db = CommonSessionLocal()
+    try:
+        user_registry_service.reconcile_all(common_db)
+    except Exception:
+        logger.exception("User registry sync failed")
+    finally:
+        common_db.close()
+
+
+async def _user_registry_sync_loop(minutes: int) -> None:
+    """Brings the central user registry in line with every company now and then (trainers the PHP
+    system creates appear without anyone registering them here) - on a worker thread, like the pings."""
+    while True:
+        await asyncio.sleep(minutes * 60)
+        await asyncio.to_thread(_sync_user_registry)
+
+
 @app.on_event("startup")
 async def on_startup():
-    global _keepalive_task
+    global _keepalive_task, _registry_sync_task
     if settings.TESTING:
         return
     _keepalive_task = asyncio.create_task(_db_keepalive_loop())
+    if settings.USER_REGISTRY_SYNC_MINUTES > 0:
+        _registry_sync_task = asyncio.create_task(_user_registry_sync_loop(settings.USER_REGISTRY_SYNC_MINUTES))
 
 
 @app.on_event("shutdown")
 def on_shutdown():
-    if _keepalive_task:
-        _keepalive_task.cancel()
+    for task in (_keepalive_task, _registry_sync_task):
+        if task:
+            task.cancel()
     tenant_manager.close_all()
 
 

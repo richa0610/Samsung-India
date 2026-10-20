@@ -2,6 +2,8 @@ from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from app.schemas.tenant import TenantOut
+
 
 class TraineeRegister(BaseModel):
     name: str = Field(min_length=1, max_length=100)
@@ -17,6 +19,9 @@ class TraineeRegister(BaseModel):
     # older app build sends neither - that trainee's ID starts TRN.
     zone: Optional[str] = Field(default=None, max_length=120)
     region: Optional[str] = Field(default=None, max_length=150)
+    # Registering signs the trainee in on this device (TraineeLogin.deviceId) - not saved on the trainee.
+    deviceId: Optional[str] = Field(default=None, max_length=100)
+    deviceName: Optional[str] = Field(default=None, max_length=255)
 
     @field_validator("state")
     @classmethod
@@ -37,6 +42,10 @@ class TraineeLogin(BaseModel):
     # What the trainee typed into "Company ID / Phone No": their Trainee UID, username or phone number.
     identifier: str = Field(min_length=1, max_length=100)
     password: str = Field(min_length=1, max_length=128)
+    # The signed-in device (services/device_sessions): the app's install ID and a name to show. An
+    # older app sends neither - each of its sign-ins then counts as a new device.
+    deviceId: Optional[str] = Field(default=None, max_length=100)
+    deviceName: Optional[str] = Field(default=None, max_length=255)
 
     @field_validator("identifier")
     @classmethod
@@ -87,3 +96,5 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     trainee: TraineeOut
+    # The company signed in to - set when the sign-in named none (services/sign_in_service).
+    company: Optional[TenantOut] = None

@@ -8,6 +8,8 @@ from app.core.exceptions import forbidden, unauthorized
 from app.core.media import resolve_trainer_avatar
 from app.core.security import create_access_token, verify_password
 from app.dependencies.filters import ConferenceFilters
+from app.models.admin import Admin
+from app.models.agency_team import AgencyTeam
 from app.repositories import admin_repository, dashboard_repository
 from app.repositories.dashboard_repository import DashboardSnapshot
 from app.services.access_service import AccessScope, granted_companies, norm, resolve_scope
@@ -29,11 +31,18 @@ from app.schemas.admin import (
     TrainingTypeGroup,
     TrainingTypeStatusCount,
 )
+from app.services import device_sessions
 from app.services.activity_log_service import log_activity
+from app.services.device_sessions import Device
 from app.services.training.session_dashboard import audience_class
 from app.services.account_ids import account_keys, with_trainer_ids
 from app.utils.conference_format import session_status
 from app.utils.status import title_status
+
+
+LOGIN_SCOPE = "admin-login"   # rate_limit's key prefix for staff sign-in failure counts
+LOGIN_FAILED = "Invalid username or password"
+NOT_AUTHORIZED = "Not authorized for this tenant"
 
 
 def login(
@@ -42,6 +51,7 @@ def login(
     payload: AdminLoginRequest,
     tenant_id: str,
     ip_address: str | None = None,
+    device: Optional[Device] = None,
 ) -> AdminAuthSession:
     """`Admin` (superadmin/internal accounts) lives in the shared Common
     Database; `AgencyTeam` (partner-agency trainers) lives in the caller's
@@ -49,33 +59,18 @@ def login(
     # Per-account failure limit (the only login limit - none per caller IP): wrong passwords for
     # one username, from however many addresses, lock only that username in this tenant for a while.
     account = f"{tenant_id}:{payload.username}"
-    rate_limit.ensure_account_not_locked("admin-login", account)
+    rate_limit.ensure_account_not_locked(LOGIN_SCOPE, account)
     admin = admin_repository.get_admin_by_username(common_db, payload.username)
     if admin and admin.password and verify_password(payload.password, admin.password):
-        rate_limit.clear_account_failures("admin-login", account)
+        rate_limit.clear_account_failures(LOGIN_SCOPE, account)
         # Correct credentials alone aren't enough: the account must actually hold an
         # admin_access grant for the tenant it's trying to log into - reusing the exact same
         # check that already gates every admin-panel request (access_service.resolve_scope), so
         # this can never fall out of sync with what a token is later allowed to do. A Super
         # Admin's global grant passes for any tenant; anyone else needs a grant naming this one.
         if not resolve_scope(common_db, admin, tenant_id).allowed:
-            raise forbidden("Not authorized for this tenant")
-        token = create_access_token(subject=f"admin:{admin.username}", tenant_id=tenant_id, role=admin.role, version=admin.tokenVersion)
-        # `logsmaster` is a per-tenant table (see app/models/logs_master.py) -
-        # write via `db` (this tenant), never `common_db`, even though the
-        # account itself was found in the Common DB.
-        log_activity(db, action="LOGIN", username=admin.username, role=admin.role, ip_address=ip_address, issued_token=token)
-        return AdminAuthSession(
-            access_token=token,
-            admin=AdminOut(
-                username=admin.username,
-                name=admin.name,
-                role=admin.role,
-                company=admin.company,
-                tenant_id=tenant_id,
-                profilePicture=resolve_trainer_avatar(admin.profilePhoto, admin.gender),
-            ),
-        )
+            raise forbidden(NOT_AUTHORIZED)
+        return admin_signed_in(db, admin, tenant_id, ip_address)
 
     # Real trainers live in `agencyteam`, not `admin` - fall back to it so
     # they can sign in the same way once they're not seeded into `admin`.
@@ -83,29 +78,66 @@ def login(
     # `username` (phone) or `offerId` (employee ID).
     agent = admin_repository.get_agency_by_username_or_offer_id(db, payload.username)
     if agent and agent.password and verify_password(payload.password, agent.password):
-        rate_limit.clear_account_failures("admin-login", account)
+        rate_limit.clear_account_failures(LOGIN_SCOPE, account)
         # Only an agency account with the trainer role signs in as a trainer - a NULL or any other
         # role is refused (the approved rule; `status` is deliberately not checked). Same message
         # as an admin without a grant, so the refusal reveals nothing beyond "not allowed here".
         if not resolve_scope(common_db, agent, tenant_id).is_trainer:
-            raise forbidden("Not authorized for this tenant")
-        token = create_access_token(subject=f"agencyteam:{agent.username}", tenant_id=tenant_id, role="trainer", version=agent.tokenVersion)
-        log_activity(db, action="LOGIN", username=agent.username, role="trainer", ip_address=ip_address, issued_token=token)
-        return AdminAuthSession(
-            access_token=token,
-            admin=AdminOut(
-                username=agent.username,
-                name=agent.name or agent.username,
-                role="trainer",
-                offerId=agent.offerId,
-                company=agent.company,
-                tenant_id=tenant_id,
-                profilePicture=resolve_trainer_avatar(agent.profilePhoto, agent.gender),
-            ),
-        )
+            raise forbidden(NOT_AUTHORIZED)
+        return trainer_signed_in(db, agent, tenant_id, ip_address, common_db=common_db, device=device)
 
-    rate_limit.record_account_failure("admin-login", account)
-    raise unauthorized("Invalid username or password")
+    rate_limit.record_account_failure(LOGIN_SCOPE, account)
+    raise unauthorized(LOGIN_FAILED)
+
+
+def admin_signed_in(db: Session, admin: Admin, tenant_id: str, ip_address: str | None = None) -> AdminAuthSession:
+    """The session for an admin-table account whose sign-in to `tenant_id` was just verified."""
+    token = create_access_token(subject=f"admin:{admin.username}", tenant_id=tenant_id, role=admin.role, version=admin.tokenVersion)
+    # `logsmaster` is a per-tenant table (see app/models/logs_master.py) -
+    # write via `db` (this tenant), never `common_db`, even though the
+    # account itself was found in the Common DB.
+    log_activity(db, action="LOGIN", username=admin.username, role=admin.role, ip_address=ip_address, issued_token=token)
+    return AdminAuthSession(
+        access_token=token,
+        admin=AdminOut(
+            username=admin.username,
+            name=admin.name,
+            role=admin.role,
+            company=admin.company,
+            tenant_id=tenant_id,
+            profilePicture=resolve_trainer_avatar(admin.profilePhoto, admin.gender),
+        ),
+    )
+
+
+def trainer_signed_in(
+    db: Session,
+    agent: AgencyTeam,
+    tenant_id: str,
+    ip_address: str | None = None,
+    *,
+    common_db: Optional[Session] = None,
+    device: Optional[Device] = None,
+) -> AdminAuthSession:
+    """The session for an agency trainer whose sign-in to `tenant_id` was just verified. A trainer in
+    the central user registry is signed in on this device (services/device_sessions)."""
+    session_id = device_sessions.begin(common_db, agent, tenant_id, device) if common_db is not None else None
+    token = create_access_token(
+        subject=f"agencyteam:{agent.username}", tenant_id=tenant_id, role="trainer", version=agent.tokenVersion, session_id=session_id
+    )
+    log_activity(db, action="LOGIN", username=agent.username, role="trainer", ip_address=ip_address, issued_token=token)
+    return AdminAuthSession(
+        access_token=token,
+        admin=AdminOut(
+            username=agent.username,
+            name=agent.name or agent.username,
+            role="trainer",
+            offerId=agent.offerId,
+            company=agent.company,
+            tenant_id=tenant_id,
+            profilePicture=resolve_trainer_avatar(agent.profilePhoto, agent.gender),
+        ),
+    )
 
 
 def build_admin_dashboard_stats(

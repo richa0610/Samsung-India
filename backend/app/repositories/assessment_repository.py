@@ -96,8 +96,10 @@ def upsert_answer(
     selected_option: Optional[str],
     response_ms: Optional[int] = None,
 ) -> None:
-    """One row per (conference, trainee, question) - a trainee changing their
-    pick before the timer locks overwrites the same row rather than stacking.
+    """One row per (conference, trainee, question) - an existing row is updated
+    in place, never stacked. Whether a row may be replaced at all is the
+    caller's rule: the Live Quiz never replaces a recorded answer
+    (live_quiz_service.submit_live_answer).
     `response_ms` (Live Quiz) is the time from question broadcast to this
     answer; stored as a bare integer in `remarks` (the schema's per-row notes
     field - no dedicated column) and summed at scoring time for the tie-break."""

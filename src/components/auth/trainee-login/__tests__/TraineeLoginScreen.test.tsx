@@ -4,14 +4,15 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react-nativ
 import { loginTrainee } from "@/api/auth";
 import TraineeLoginScreen from "@/components/auth/trainee-login/TraineeLoginScreen";
 import { setCompany } from "@/config/company";
-import { STAFF_LOGIN_TEXT } from "@/constants/strings";
+import { SESSION_EXPIRED_NOTICE, STAFF_LOGIN_TEXT } from "@/constants/strings";
 
 const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn(), canGoBack: jest.fn(() => true) };
 const mockSetSession = jest.fn();
+let mockParams: Record<string, string> = {};
 
 jest.mock("expo-router", () => ({
   useRouter: () => mockRouter,
-  useLocalSearchParams: () => ({}),
+  useLocalSearchParams: () => mockParams,
 }));
 jest.mock("react-native-safe-area-context", () => ({
   SafeAreaView: require("react-native").View,
@@ -34,6 +35,18 @@ beforeAll(async () => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockRouter.canGoBack.mockReturnValue(true);
+  mockParams = {};
+});
+
+test("sent here because the sign-in ended: says so", async () => {
+  mockParams = { reason: "session_expired" };
+  await render(<TraineeLoginScreen />);
+  expect(screen.getByText(SESSION_EXPIRED_NOTICE)).toBeTruthy();
+});
+
+test("arriving normally shows no such notice", async () => {
+  await render(<TraineeLoginScreen />);
+  expect(screen.queryByText(SESSION_EXPIRED_NOTICE)).toBeNull();
 });
 
 test("renders the brand, hero text, trainee login card, and security badge", async () => {

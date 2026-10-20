@@ -82,7 +82,7 @@ const itself = (name: string) => name;
 // and submits via updateTraining instead of createTraining.
 export function useAddTrainingForm(editing?: { conferenceUid: string }) {
   const router = useRouter();
-  const { adminToken, adminLogout } = useAuth();
+  const { adminToken } = useAuth();
   const signedInCompany = useCompany()?.companyName ?? "";
   const isEditing = !!editing;
 
@@ -581,11 +581,8 @@ export function useAddTrainingForm(editing?: { conferenceUid: string }) {
 
       router.back();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        adminLogout();
-        router.replace({ pathname: "/trainer_login", params: { reason: "session_expired" } });
-        return;
-      }
+      // The sign-in ended: api/client.ts has already signed out and opened the login screen.
+      if (err instanceof ApiError && err.status === 401) return;
       setNotice(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);

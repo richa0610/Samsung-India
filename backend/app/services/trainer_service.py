@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import not_found
@@ -6,7 +8,7 @@ from app.core.security import hash_password
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.repositories import admin_repository
-from app.services import admin_change_audit
+from app.services import admin_change_audit, user_registry_service
 from app.services.access_service import AccessScope, granted_companies, norm, resolve_scope
 from app.schemas.catalog import SelectOptionOut
 from app.schemas.trainer_profile import TrainerProfileOut, TrainerProfileUpdate
@@ -280,7 +282,7 @@ def get_profile(admin: Admin | AgencyTeam) -> TrainerProfileOut:
 
 
 def update_profile(
-    common_db: Session, db: Session, admin: Admin | AgencyTeam, payload: TrainerProfileUpdate
+    common_db: Session, db: Session, admin: Admin | AgencyTeam, payload: TrainerProfileUpdate, tenant_id: Optional[str] = None
 ) -> TrainerProfileOut:
     updates = payload.model_dump(exclude_unset=True, exclude_none=True)
     # Self-service role changes would be a privilege-escalation risk (the
@@ -294,6 +296,9 @@ def update_profile(
 
     _apply_profile_update(admin, updates, _ADMIN_FIELD_MAP if isinstance(admin, Admin) else _AGENCY_FIELD_MAP)
     _save_account(common_db, db, admin, password_changed=bool(updates.get("password")))
+    # A trainer's phone and password are in the shared user registry too (an admin-table account isn't).
+    if isinstance(admin, AgencyTeam) and {"mobileNumber", "password"} & updates.keys():
+        user_registry_service.sync_account(common_db, tenant_id, admin)
     return get_profile(admin)
 
 

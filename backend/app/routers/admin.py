@@ -1,8 +1,10 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
-from app.dependencies.auth import get_current_admin, require_admin_role, require_super_admin
-from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
+from app.dependencies.auth import get_current_admin, get_token_claims, require_admin_role, require_super_admin
+from app.dependencies.database import get_common_db, get_db, get_optional_db, get_tenant_id_from_request
 from app.dependencies.filters import ConferenceFilters, get_conference_filters
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
@@ -13,9 +15,11 @@ from app.schemas.admin import (
     AdminLoginRequest,
     CheckInSettingsOut,
     CheckInSettingsUpdate,
+    CompanyChoiceRequest,
 )
-from app.services import admin_service, media_migration, tenant_settings_service, token_revocation
+from app.services import admin_service, media_migration, sign_in_service, tenant_settings_service, token_revocation
 from app.services.access_service import resolve_scope, scope_summary
+from app.services.device_sessions import Device
 from app.utils.helpers import client_ip
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -26,10 +30,24 @@ def login(
     payload: AdminLoginRequest,
     request: Request,
     common_db: Session = Depends(get_common_db),
-    db: Session = Depends(get_db),
+    db: Optional[Session] = Depends(get_optional_db),
 ):
+    device = Device.of(payload.deviceId, payload.deviceName, request.headers.get("user-agent"))
+    # Without a company code: an admin's grants, or the central user registry for a trainer, say
+    # which company (services/sign_in_service) - an admin with several gets 409 CHOOSE_COMPANY.
+    if db is None:
+        return sign_in_service.sign_in_staff(
+            common_db, payload.username, payload.password, ip_address=client_ip(request), device=device
+        )
     tenant_id = get_tenant_id_from_request(request)
-    return admin_service.login(common_db, db, payload, tenant_id, ip_address=client_ip(request))
+    return admin_service.login(common_db, db, payload, tenant_id, ip_address=client_ip(request), device=device)
+
+
+@router.post("/login/company", response_model=AdminAuthSession)
+def choose_login_company(payload: CompanyChoiceRequest, request: Request, common_db: Session = Depends(get_common_db)):
+    """The company an admin with access to several picked after `POST /admin/login` answered 409
+    CHOOSE_COMPANY - with that answer's ticket."""
+    return sign_in_service.choose_company(common_db, payload.ticket, payload.tenantId, ip_address=client_ip(request))
 
 
 @router.get("/maintenance/media-plan", dependencies=[Depends(require_super_admin)])
@@ -73,10 +91,12 @@ def logout(
     admin: Admin | AgencyTeam = Depends(get_current_admin),
     common_db: Session = Depends(get_common_db),
     db: Session = Depends(get_db),
+    claims: dict = Depends(get_token_claims),
 ) -> None:
-    """Revokes every token of the signed-in account (all devices) - see token_revocation."""
+    """Signs a trainer out on this device; an admin-table account (whose tokens name no device) - or
+    a token from before devices were tracked - on every device (token_revocation.sign_out)."""
     account_db = common_db if isinstance(admin, Admin) else db
-    token_revocation.revoke_all_tokens(account_db, admin, db, ip_address=client_ip(request))
+    token_revocation.sign_out(account_db, admin, db, common_db, claims.get("sid"), ip_address=client_ip(request))
 
 
 @router.get("/dashboard/stats", response_model=AdminDashboardStatsOut)

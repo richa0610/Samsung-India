@@ -29,6 +29,7 @@ PUBLIC, STAFF, ADMIN, TRAINEE, ACCOUNT, WS = "public", "staff", "admin-only", "t
 ROUTES = {
     ("GET", "/"): PUBLIC,
     ("POST", "/admin/login"): PUBLIC,
+    ("POST", "/admin/login/company"): PUBLIC,  # needs the signed ticket a sign-in answered with (tests/test_sign_in_without_company.py)
     ("POST", "/trainees/login"): PUBLIC,
     ("POST", "/trainees/register"): PUBLIC,
     ("GET", "/sessions/join/{code}"): PUBLIC,  # QR preview - needs a signed join code (tests/test_join_codes.py)

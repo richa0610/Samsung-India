@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     # before this ever sits behind a public URL.
     DEBUG: bool = True
 
+    # Minutes between runs of the central user registry's sync (services/user_registry_service
+    # .reconcile_all), which brings in trainers and trainees created outside this app. 0 = off -
+    # the default, so a deploy never starts writing the registry until it is switched on.
+    USER_REGISTRY_SYNC_MINUTES: int = Field(default=0, ge=0)
+
     # Fallback warning count for tenants whose registry row has no explicit
     # proctoring_max_warnings value.
     DEFAULT_PROCTORING_MAX_WARNINGS: int = 3

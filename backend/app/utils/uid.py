@@ -9,7 +9,8 @@ Assessment answers and results follow the other system's style instead (user, 20
 The running counter per prefix lives in the ``uid_sequence`` table so every
 insert path shares one source of truth - the ORM ``before_insert`` hooks in
 ``app/models/uid_events.py``, seed scripts, and the one-off
-``scripts/migrate_uids.py``.
+``scripts/migrate_uids.py``. Each company database has one; the Common Database has one too, for the
+IDs that must never repeat across companies (a trainee's - services/user_registry_service).
 """
 
 import re
@@ -48,6 +49,33 @@ def next_uid(connection: Connection, prefix: str) -> str:
     return f"{prefix}{ist_now().year % 100:02d}{_claim(connection, prefix, START):05d}"
 
 
+_FLOOR_MYSQL = (
+    "INSERT INTO uid_sequence (prefix, next_val) VALUES (:p, :floor) AS new "
+    "ON DUPLICATE KEY UPDATE next_val = GREATEST(uid_sequence.next_val, new.next_val)"
+)
+_FLOOR_SQLITE = (
+    "INSERT INTO uid_sequence (prefix, next_val) VALUES (:p, :floor) "
+    "ON CONFLICT (prefix) DO UPDATE SET next_val = MAX(next_val, excluded.next_val)"
+)
+
+
+def counter_exists(connection: Connection, prefix: str) -> bool:
+    return connection.execute(text("SELECT 1 FROM uid_sequence WHERE prefix = :p"), {"p": prefix}).first() is not None
+
+
+def raise_counter_floor(connection: Connection, prefix: str, floor: int) -> None:
+    """Makes the counter ``prefix``'s next number at least ``floor`` - never lowers it, so two callers
+    raising it at once both end up safe."""
+    sql = _FLOOR_SQLITE if connection.dialect.name == "sqlite" else _FLOOR_MYSQL
+    connection.execute(text(sql), {"p": prefix, "floor": floor})
+
+
+def serial_of(uid: str | None, prefix: str) -> int | None:
+    """The running number of a ``<PREFIX><YY><5-digit seq>`` UID made with ``prefix``, else None."""
+    match = re.fullmatch(rf"{re.escape(prefix)}\d{{2}}(\d{{5}})", uid or "")
+    return int(match.group(1)) if match else None
+
+
 def next_daily_uid(connection: Connection, kind: str) -> str:
     """The next ``<KIND><YYMMDD><count>`` ID, e.g. ``SUB2610160007`` - the other system's style for
     assessment answers and results (SUB = a test or survey, LIVE = the Live Quiz). The count starts
@@ -69,8 +97,8 @@ def tenant_code(company_name: str | None) -> str:
 def next_tenant_uid(connection: Connection, company_name: str | None) -> str:
     """The next tenant ID: ``TEN_`` + the company's ``tenant_code`` + ``_`` + YY + a running number
     from 20001 shared by every tenant, e.g. ``TEN_SAM_2620001``. ``tenants`` lives in the Common
-    database, which has no ``uid_sequence``: the number is the highest one a tenant ID already carries
-    + 1. Tenants are created one at a time by an operator - two made at the same moment could share a
+    database, and takes no counter: the number is the highest one a tenant ID already carries + 1.
+    Tenants are created one at a time by an operator - two made at the same moment could share a
     number (the unique ``tenant_uid`` only refuses it for the same company)."""
     taken = connection.execute(text("SELECT tenant_uid FROM tenants WHERE tenant_uid LIKE 'TEN%'")).scalars()
     serials = [int(match.group(1)) for uid in taken if (match := _TENANT_SERIAL.match(uid or ""))]

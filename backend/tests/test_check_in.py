@@ -62,12 +62,12 @@ class CheckInTestCase(unittest.TestCase):
     def check_in(self, trainee_uid=OWN_TRAINEE):
         return self.w.client.post("/attendance/check-in", json={"conferenceUid": CONFERENCE}, headers=self.headers(trainee_uid))
 
-    def secure_check_in(self, position, field="conferenceUid"):
+    def secure_check_in(self, position, field="conferenceUid", headers=None):
         return self.w.client.post(
             "/attendance/check-in/secure",
             data={field: CONFERENCE, **position},
             files={"photo": ("face.jpg", JPEG, "image/jpeg")},
-            headers=self.headers(OWN_TRAINEE),
+            headers=headers or self.headers(OWN_TRAINEE),
         )
 
     def rows(self, trainee_uid=OWN_TRAINEE):

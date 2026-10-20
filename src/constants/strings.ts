@@ -45,7 +45,7 @@ export const COMPANY_TEXT = {
   change: "Change",
   // The first screen's full-page company step (CompanyCodeScreen).
   welcome: `Welcome to ${BRAND.name}`,
-  welcomeBody: "Let's connect you to your company. You only need to do this once on this phone.",
+  welcomeBody: "",
   cardTitle: "Your company",
   cardSubtitle: "Enter the code your trainer or admin shared",
   help: "Don't have a code? Ask your trainer or admin.",
@@ -91,6 +91,10 @@ export const STAFF_LOGIN_TEXT = {
   secureBody: "We keep your data safe and confidential.",
   back: "Back",
 } as const;
+
+/** Shown on either sign-in screen when the app sent the user there because their sign-in ended -
+ *  expired, or signed out on every device. */
+export const SESSION_EXPIRED_NOTICE = "Your session expired. Please log in again.";
 
 /** The "Login as" sheet that "Login here" opens. */
 export const LOGIN_ROLE_TEXT = {

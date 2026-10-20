@@ -480,6 +480,16 @@ def get_live_quiz_view(db: Session, trainee: Trainee, conference_uid: str) -> Li
     )
 
 
+def _answer_result(question: Optional[Question], saved_option: Optional[str]) -> LiveAnswerResult:
+    """The instant result card for an accepted answer, recorded as `saved_option`."""
+    return LiveAnswerResult(
+        accepted=True,
+        correct=answer_numbers.is_correct(question, saved_option) if question else False,
+        correctOptionId=answer_numbers.correct_option_id(question) if question else None,
+        explanation=_question_explanation(question) if question else None,
+    )
+
+
 def submit_live_answer(
     db: Session, trainee: Trainee, payload: LiveAnswerRequest, background_tasks: BackgroundTasks, tenant_id: str = None
 ) -> LiveAnswerResult:
@@ -499,6 +509,18 @@ def submit_live_answer(
         return LiveAnswerResult(accepted=False, paused=True)
 
     question = assessment_repository.get_question(db, payload.questionId)
+    # One answer per question: whatever is recorded stands - an earlier answer, or the blank row a
+    # reported timeout leaves (which unlocks the reveal). An accepted answer's response names the
+    # correct option, so a later answer replacing the record would let a trainee answer, read the
+    # right option and answer again. The app never repeats one (it locks the options after the first
+    # tap) but a restarted app could: a repeat changes nothing and gets the recorded answer's result.
+    # Checking before writing is safe - the lock above runs this trainee's quiz writes one at a time.
+    recorded = assessment_repository.get_answer(db, payload.conferenceUid, trainee.traineeUid, payload.questionId)
+    if recorded is not None:
+        if recorded.selectedOption is None:
+            return LiveAnswerResult(accepted=False)  # timed out - the app shows it as such
+        return _answer_result(question, recorded.selectedOption)
+
     # Saved as the option's number (answer_numbers); the app is answered with option ids.
     saved_option = answer_numbers.number_for(question, payload.selectedOption) if question else None
     now_ms = _now_ms()
@@ -522,12 +544,7 @@ def submit_live_answer(
     )
     _nudge(background_tasks, payload.conferenceUid, tenant_id)
 
-    return LiveAnswerResult(
-        accepted=True,
-        correct=answer_numbers.is_correct(question, saved_option) if question else False,
-        correctOptionId=answer_numbers.correct_option_id(question) if question else None,
-        explanation=_question_explanation(question) if question else None,
-    )
+    return _answer_result(question, saved_option)
 
 
 def report_live_timeout(

@@ -51,6 +51,7 @@ from app.core.exceptions import forbidden
 from app.models.admin import Admin
 from app.models.admin_access import AdminAccess
 from app.models.agency_team import AgencyTeam
+from app.repositories import tenant_repository
 from app.services.account_ids import account_keys
 from app.services.company_ids import company_keys
 from app.utils.zones import zone_key, zone_spellings
@@ -173,6 +174,16 @@ def resolve_scope(common_db: Session, principal: object, tenant_id: Optional[str
         return _resolve_admin(common_db, principal, tenant)
 
     return AccessScope.denied(tenant, "unknown principal")
+
+
+def granted_tenants(common_db: Session, admin: Admin) -> list[str]:
+    """The active tenants an admin-table account may sign in to without naming one - each confirmed by
+    `resolve_scope`, the same check every later request makes. A Super Admin's global grant covers
+    every active tenant."""
+    named = {uid for (uid,) in common_db.query(AdminAccess.tenant_uid).filter(AdminAccess.admin_id == admin.id, AdminAccess.active == 1)}
+    active = tenant_repository.list_active_uids(common_db)
+    candidates = active if None in named else [tenant for tenant in active if tenant in named]
+    return [tenant for tenant in candidates if resolve_scope(common_db, admin, tenant).allowed]
 
 
 def granted_companies(scope: AccessScope) -> Optional[frozenset[str]]:

@@ -30,7 +30,7 @@ const generatePassword = () => `TRN${randomDigits(4)}@${new Date().getFullYear()
 
 export function useNewTraineeForm() {
   const router = useRouter();
-  const { adminToken, adminLogout } = useAuth();
+  const { adminToken } = useAuth();
 
   // Corporate Mapping
   const [zone, setZone] = useState("");
@@ -195,11 +195,8 @@ export function useNewTraineeForm() {
       );
       router.back();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 401) {
-        adminLogout();
-        router.replace({ pathname: "/trainer_login", params: { reason: "session_expired" } });
-        return;
-      }
+      // The sign-in ended: api/client.ts has already signed out and opened the login screen.
+      if (err instanceof ApiError && err.status === 401) return;
       setNotice(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);

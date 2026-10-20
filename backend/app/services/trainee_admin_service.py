@@ -12,7 +12,7 @@ from app.models.trainee import Trainee
 from app.repositories import dashboard_repository, trainee_repository
 from app.routers.ws import manager as ws_manager
 from app.schemas.trainee_admin import TraineeAdminIn, TraineeAdminOut, TraineePageResponse
-from app.services import placement_rules, trainee_service
+from app.services import placement_rules, trainee_service, user_registry_service
 from app.services.access_service import resolve_scope
 from app.services.activity_log_service import log_activity
 from app.services.company_ids import company_names, require_tenant_company
@@ -97,7 +97,8 @@ def register_trainee_admin(
     if existing:
         raise bad_request("A trainee with this phone, email or username already exists")
 
-    # The ID is made by the server from the zone (models/uid_events.py) - one the form sent is ignored.
+    # The ID is made by the server from the zone (services/user_registry_service) - one the form sent
+    # is ignored.
     trainee = Trainee(
         name=payload.fullName,
         email=payload.primaryEmail,
@@ -134,11 +135,9 @@ def register_trainee_admin(
         updatedBy=admin.username,
         status="Pending",
     )
-    db.add(trainee)
-    db.flush()  # the ID hook names the trainee
-    if not trainee.username:
-        trainee.username = trainee.traineeUid  # they sign in with the ID the app made
-    trainee = trainee_repository.save(db, trainee)
+    # Saved in the company database and the shared user registry; registered without a username, the
+    # trainee signs in with the ID the app made.
+    trainee = user_registry_service.register_trainee(common_db, db, tenant_id, trainee, username_is_id=True)
 
     background_tasks.add_task(ws_manager.broadcast, tenant_id, {"type": "trainee_created", "traineeUid": trainee.traineeUid})
 

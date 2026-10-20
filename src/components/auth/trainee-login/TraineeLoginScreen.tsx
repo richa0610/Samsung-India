@@ -16,6 +16,7 @@ import { ApiError, loginTrainee } from "@/api/auth";
 import { joinSession } from "@/api/session";
 import RegisterSheet from "@/components/common/RegisterSheet";
 import AppText from "@/components/ui/AppText";
+import { SESSION_EXPIRED_NOTICE } from "@/constants/strings";
 import { useAuth } from "@/hooks/useAuth";
 import { useRequireCompany } from "@/hooks/useCompany";
 import { Colors } from "@/theme/colors";
@@ -31,13 +32,14 @@ export default function TraineeLoginScreen() {
   const router = useRouter();
   useRequireCompany();
   const insets = useSafeAreaInsets();
-  const { join } = useLocalSearchParams<{ join?: string }>();
+  // `reason` e.g. "session_expired" - the app sent the trainee here because their sign-in ended.
+  const { join, reason } = useLocalSearchParams<{ join?: string; reason?: string }>();
   const { setSession } = useAuth();
 
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(reason === "session_expired" ? SESSION_EXPIRED_NOTICE : null);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
 
   const handleContinue = async () => {

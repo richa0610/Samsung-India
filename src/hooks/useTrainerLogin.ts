@@ -7,6 +7,7 @@ import { useState } from "react";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError, loginAdmin } from "@/api/admin";
+import { SESSION_EXPIRED_NOTICE } from "@/constants/strings";
 import { cleanText } from "@/utils/validation";
 
 export function useTrainerLogin(initialReason?: string) {
@@ -16,9 +17,7 @@ export function useTrainerLogin(initialReason?: string) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [notice, setNotice] = useState<string | null>(
-    initialReason === "session_expired"
-      ? "Your session expired. Please log in again."
-      : null,
+    initialReason === "session_expired" ? SESSION_EXPIRED_NOTICE : null,
   );
   const [loading, setLoading] = useState(false);
 
