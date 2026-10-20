@@ -10,10 +10,10 @@ type CompanyGateProps = {
 };
 
 /**
- * The company code is mandatory before signing in (user, 2026-10-18): until this device has a
- * company, the gate shows the company code form instead of `children` (e.g. a QR join preview).
- * Once it has one, it shows the company badge (with Change) above them. The first screen has its
- * own full-page version of this step - CompanyCodeScreen.
+ * Where a company must be known before anyone has signed in - registering without a QR code, or an
+ * old QR code that names none (user, 2026-10-19; signing in finds the company itself): until this
+ * device has a company, the gate shows the company code form instead of `children`. Once it has one,
+ * it shows the company badge (with Change) above them.
  */
 export default function CompanyGate({ children }: CompanyGateProps) {
   const company = useCompany();

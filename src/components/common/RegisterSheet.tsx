@@ -7,6 +7,7 @@ import ProfessionalDetails from "@/components/registration/ProfessionalDetails";
 import RegisterButton from "@/components/registration/RegisterButton";
 import ZoneRegionFields from "@/components/registration/ZoneRegionFields";
 import SecurityFooter from "@/components/common/SecurityFooter";
+import CompanyGate from "@/components/company/CompanyGate";
 import AppModal from "@/components/ui/AppModal";
 import AppText from "@/components/ui/AppText";
 import { useRegisterForm } from "@/hooks/useRegisterForm";
@@ -27,7 +28,9 @@ export default function RegisterSheet({
     const router = useRouter();
     // Registering signs the trainee in (no password to log in with later), so
     // they go straight on - to the scanned session (QR join) or the trainee
-    // home - the same places the login form sends them.
+    // home - the same places the login form sends them. The only place a company
+    // code is still asked (user, 2026-10-19): a new trainee has no account to find
+    // their company from - the QR names it; without one, the form asks first.
     const { control, errors, setValue, onSubmit, loading, error } = useRegisterForm({
         joinCode,
         onSuccess: () => {
@@ -35,6 +38,20 @@ export default function RegisterSheet({
             router.replace(joinCode ? "/session" : ("/session_detail" as any));
         },
     });
+
+    const form = (
+        <>
+            <PersonalDetails control={control} errors={errors} />
+            <ProfessionalDetails control={control} setValue={setValue} errors={errors} />
+            <ZoneRegionFields control={control} setValue={setValue} errors={errors} />
+
+            {error && (
+                <AppText style={styles.error}>{error}</AppText>
+            )}
+
+            <RegisterButton onPress={onSubmit} loading={loading} />
+        </>
+    );
 
     return (
         <AppModal
@@ -55,15 +72,7 @@ export default function RegisterSheet({
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.formContent}
             >
-                <PersonalDetails control={control} errors={errors} />
-                <ProfessionalDetails control={control} setValue={setValue} errors={errors} />
-                <ZoneRegionFields control={control} setValue={setValue} errors={errors} />
-
-                {error && (
-                    <AppText style={styles.error}>{error}</AppText>
-                )}
-
-                <RegisterButton onPress={onSubmit} loading={loading} />
+                {joinCode ? form : <CompanyGate>{form}</CompanyGate>}
 
                 <View style={styles.securityFooter}>
                     <SecurityFooter />

@@ -3,11 +3,8 @@ import { renderHook, waitFor } from "@testing-library/react-native";
 
 import { fetchCurrentCompany } from "@/api/tenants";
 import { Company, getCompany, setCompany } from "@/config/company";
-import { useBackfillCompany, useRequireCompany } from "@/hooks/useCompany";
+import { useBackfillCompany } from "@/hooks/useCompany";
 
-const mockReplace = jest.fn();
-
-jest.mock("expo-router", () => ({ useRouter: () => ({ replace: mockReplace }) }));
 jest.mock("@/api/tenants", () => ({ fetchCurrentCompany: jest.fn() }));
 jest.mock("@/config/company", () => ({
   getCompany: jest.fn(),
@@ -21,7 +18,6 @@ const mockSetCompany = jest.mocked(setCompany);
 const ACME: Company = { tenantId: "acme", companyName: "Acme Retail" };
 
 beforeEach(() => {
-  mockReplace.mockReset();
   mockFetchCurrent.mockReset();
   mockFetchCurrent.mockResolvedValue(ACME);
   mockGetCompany.mockReset();
@@ -47,17 +43,4 @@ test("nothing is asked while signing in is unresolved, signed out, or when the c
     await unmount();
   }
   expect(mockFetchCurrent).not.toHaveBeenCalled();
-});
-
-test("a sign-in screen without a company goes back to the first screen", async () => {
-  const { unmount } = await renderHook(() => useRequireCompany());
-  expect(mockReplace).toHaveBeenCalledWith("/");
-  await unmount();
-});
-
-test("a sign-in screen with a company stays", async () => {
-  mockGetCompany.mockReturnValue(ACME);
-  const { unmount } = await renderHook(() => useRequireCompany());
-  expect(mockReplace).not.toHaveBeenCalled();
-  await unmount();
 });

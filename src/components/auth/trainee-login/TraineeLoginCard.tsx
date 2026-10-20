@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Pressable, StyleSheet, View } from "react-nat
 
 import AppInput from "@/components/ui/AppInput";
 import AppText from "@/components/ui/AppText";
-import { STAFF_LOGIN_TEXT } from "@/constants/strings";
+import { SIGN_IN_ID_TEXT, STAFF_LOGIN_TEXT } from "@/constants/strings";
 import { Colors } from "@/theme/colors";
 import { Radius } from "@/theme/radius";
 import { createShadow } from "@/theme/shadows";
@@ -19,8 +19,8 @@ const cardShadow = createShadow({
   elevation: 4,
 });
 
-// A phone number is 10 digits and a Company ID (Trainee UID, e.g. TRN2610001) 10 characters.
-const LOGIN_ID_MAX_LENGTH = 10;
+// A username, HO ID (e.g. DEMO-EMP-001), Trainee UID (e.g. NORTH2610001) or 10-digit phone number.
+const LOGIN_ID_MAX_LENGTH = 64;
 
 type TraineeLoginCardProps = {
   phone: string;
@@ -64,12 +64,12 @@ export default function TraineeLoginCard({
       {/* Inputs */}
       <View style={styles.fields}>
         <AppInput
-          label="Company ID / Phone No"
-          placeholder="Enter Company ID or Phone No"
+          label={SIGN_IN_ID_TEXT.label}
+          placeholder={SIGN_IN_ID_TEXT.placeholder}
           icon="business-outline"
           value={phone}
           onChangeText={(value) => {
-            // A Company ID (Trainee UID, e.g. TRN2610001) has letters, so not digits-only.
+            // A username, HO ID or Trainee UID has letters, so not digits-only.
             setPhone(value.replace(/\s/g, ""));
             if (error) setError(null);
           }}

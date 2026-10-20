@@ -14,7 +14,7 @@ type CompanyCodeFormProps = {
   onDone?: () => void;
   /** Shown only when there is already a company to go back to. */
   onCancel?: () => void;
-  /** Its own title and explanation (default) - off where the page already says it (CompanyCodeScreen). */
+  /** Its own title and explanation (default) - off where the surrounding page already says it. */
   intro?: boolean;
 };
 

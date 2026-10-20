@@ -1,4 +1,6 @@
 import { apiRequest, apiUpload } from "./client";
+import { Company } from "@/config/company";
+import { getDeviceId, getDeviceName } from "@/config/device";
 
 // Field names mirror the `trainee` table from the legacy database dump.
 export type Trainee = {
@@ -25,6 +27,8 @@ export type AuthSession = {
   access_token: string;
   token_type: string;
   trainee: Trainee;
+  // The company signed in to - set when the sign-in named none (the server found it).
+  company?: Company | null;
 };
 
 export type RegisterPayload = {
@@ -42,23 +46,26 @@ export type RegisterPayload = {
   region?: string;
 };
 
-/** Self-registration (no password) also signs the new trainee in - it returns their session. */
+/** Self-registration (no password) also signs the new trainee in on this device - it returns their
+ *  session. Registers into the phone's company (the QR's, or the code typed on the form). */
 export function registerTrainee(payload: RegisterPayload) {
   return apiRequest<AuthSession>("/trainees/register", {
     method: "POST",
-    body: JSON.stringify({ ...payload, phone: Number(payload.phone) }),
+    body: JSON.stringify({ ...payload, phone: Number(payload.phone), deviceId: getDeviceId(), deviceName: getDeviceName() }),
   });
 }
 
-/** `identifier` is what the trainee typed as Company ID / Phone No: Trainee UID, username or phone. */
+/** `identifier` is what the trainee typed: their username, HO ID, Trainee UID or phone. No company
+ *  code - the server finds their company - and this device, which counts toward their device limit. */
 export function loginTrainee(identifier: string, password: string) {
-  return apiRequest<AuthSession>("/trainees/login", {
-    method: "POST",
-    body: JSON.stringify({ identifier, password }),
-  });
+  return apiRequest<AuthSession>(
+    "/trainees/login",
+    { method: "POST", body: JSON.stringify({ identifier, password, deviceId: getDeviceId(), deviceName: getDeviceName() }) },
+    { company: false },
+  );
 }
 
-/** Signs the trainee out on the server: every token issued for them stops working (all devices). */
+/** Signs the trainee out on the server - on this device only. */
 export function logoutTrainee(token: string) {
   return apiRequest<null>("/trainees/logout", {
     method: "POST",

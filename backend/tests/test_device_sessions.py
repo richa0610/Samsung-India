@@ -15,6 +15,9 @@ from app.core import rate_limit
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.dependencies.auth import SIGNED_IN_ELSEWHERE
+
+# What a device signed out by a newer sign-in is answered: a code for the app, and the words.
+ELSEWHERE = {"code": "SIGNED_IN_ELSEWHERE", "message": SIGNED_IN_ELSEWHERE}
 from app.models.common.login_session import LoginSession
 from app.models.common.user_registry import UserRegistry
 from app.models.trainee import Trainee
@@ -74,7 +77,7 @@ class EachSignInIsADevice(DeviceTestCase):
         self.assertEqual(self.use(first).status_code, 200)   # cached as live before it is signed out
         third = self.sign_in("phone-c")
         refused = self.use(first)
-        self.assertEqual((refused.status_code, refused.json()["detail"]), (401, SIGNED_IN_ELSEWHERE))
+        self.assertEqual((refused.status_code, refused.json()["detail"]), (401, ELSEWHERE))
         self.assertEqual([self.use(token).status_code for token in (second, third)], [200, 200])
         self.assertEqual(self.session(first).end_reason, device_sessions.REPLACED)
 
@@ -120,7 +123,7 @@ class EachSignInIsADevice(DeviceTestCase):
     def test_a_trainer_s_devices_are_limited_the_same_way(self):
         first, _second, _third = self.staff_sign_in("tab-a"), self.staff_sign_in("tab-b"), self.staff_sign_in("tab-c")
         refused = self.use(first, "/admin/profile")
-        self.assertEqual((refused.status_code, refused.json()["detail"]), (401, SIGNED_IN_ELSEWHERE))
+        self.assertEqual((refused.status_code, refused.json()["detail"]), (401, ELSEWHERE))
 
     def test_a_signed_out_device_can_t_reach_files_or_live_updates_either(self):
         first = self.sign_in("phone-a")

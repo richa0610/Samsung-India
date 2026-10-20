@@ -1,5 +1,7 @@
 import { AdminFilters, adminFilterParams } from "./adminFilters";
 import { apiRequest } from "./client";
+import { Company } from "@/config/company";
+import { getDeviceId, getDeviceName } from "@/config/device";
 
 export type AdminAccount = {
   username: string;
@@ -15,13 +17,37 @@ export type AdminAuthSession = {
   access_token: string;
   token_type: string;
   admin: AdminAccount;
+  // The company signed in to - set when the sign-in named none (the server found it).
+  company?: Company | null;
 };
 
+/** What `loginAdmin` answers (409, code CHOOSE_COMPANY) for an admin with access to several
+ *  companies: the list to pick from, and a short-lived ticket for `chooseLoginCompany`. */
+export type CompanyChoice = {
+  code: "CHOOSE_COMPANY";
+  message: string;
+  companies: Company[];
+  ticket: string;
+};
+
+/** A trainer by username, HO ID or phone, or an admin by username - no company code (the server
+ *  finds it) - and this device, which counts toward a trainer's device limit. */
 export function loginAdmin(username: string, password: string) {
-  return apiRequest<AdminAuthSession>("/admin/login", {
-    method: "POST",
-    body: JSON.stringify({ username, password }),
-  });
+  return apiRequest<AdminAuthSession>(
+    "/admin/login",
+    { method: "POST", body: JSON.stringify({ username, password, deviceId: getDeviceId(), deviceName: getDeviceName() }) },
+    { company: false },
+  );
+}
+
+/** Signs in an admin with several companies to the one they picked, with the ticket `loginAdmin`
+ *  answered with. */
+export function chooseLoginCompany(ticket: string, tenantId: string) {
+  return apiRequest<AdminAuthSession>(
+    "/admin/login/company",
+    { method: "POST", body: JSON.stringify({ ticket, tenantId }) },
+    { company: false },
+  );
 }
 
 export type TrainingTypeStatusCount = {

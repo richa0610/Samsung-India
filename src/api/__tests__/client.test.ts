@@ -54,7 +54,7 @@ test("a signed-in request answered 401 reports that sign-in as ended, and still 
     status: 401,
     message: "Invalid or expired session",
   });
-  expect(ended).toHaveBeenCalledWith("old-token");
+  expect(ended).toHaveBeenCalledWith("old-token", undefined);   // no code: an ordinary expired session
 });
 
 test("an upload answered 401 reports it too", async () => {
@@ -62,7 +62,7 @@ test("an upload answered 401 reports it too", async () => {
   setSessionEndedHandler(ended);
   answer(401, "Invalid or expired session");
   await expect(apiUpload("/trainees/me/photo", new FormData(), "old-token")).rejects.toMatchObject({ status: 401 });
-  expect(ended).toHaveBeenCalledWith("old-token");
+  expect(ended).toHaveBeenCalledWith("old-token", undefined);   // no code: an ordinary expired session
 });
 
 test("a wrong password at login is not a sign-in ending - a login carries no token", async () => {
@@ -71,6 +71,27 @@ test("a wrong password at login is not a sign-in ending - a login carries no tok
   answer(401, "Invalid username or password");
   await expect(apiRequest("/admin/login", { method: "POST" })).rejects.toMatchObject({ status: 401 });
   expect(ended).not.toHaveBeenCalled();
+});
+
+test("a sign-out by a sign-in on another device passes the server's code on", async () => {
+  const ended = jest.fn();
+  setSessionEndedHandler(ended);
+  mockFetch.mockResolvedValue({
+    ok: false,
+    status: 401,
+    json: async () => ({ detail: { code: "SIGNED_IN_ELSEWHERE", message: "Signed in elsewhere" } }),
+  } as Response);
+  await expect(apiRequest("/admin/profile", { headers: { Authorization: "Bearer t" } })).rejects.toMatchObject({
+    status: 401,
+    message: "Signed in elsewhere",
+  });
+  expect(ended).toHaveBeenCalledWith("t", "SIGNED_IN_ELSEWHERE");
+});
+
+test("a request that names no company leaves the phone's company out", async () => {
+  mockGetCompany.mockReturnValue(ACME);
+  await apiRequest("/trainees/login", { method: "POST" }, { company: false });
+  expect(sentHeaders()).not.toHaveProperty("X-Tenant-ID");
 });
 
 test("any other refusal of a signed-in request is not either", async () => {

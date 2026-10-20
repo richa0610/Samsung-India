@@ -4,6 +4,7 @@ import * as SecureStore from "expo-secure-store";
 
 import { logoutAdmin } from "@/api/admin";
 import { apiRequest } from "@/api/client";
+import { setCompany } from "@/config/company";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 
 const mockRouter = { replace: jest.fn(), push: jest.fn(), back: jest.fn() };
@@ -18,7 +19,7 @@ jest.mock("@/api/admin", () => ({ logoutAdmin: jest.fn(async () => null) }));
 jest.mock("@/api/auth", () => ({ logoutTrainee: jest.fn(async () => null) }));
 jest.mock("@/api/session", () => ({ clearCachedCurrentSession: jest.fn() }));
 jest.mock("@/hooks/useCompany", () => ({ useBackfillCompany: () => {} }));
-jest.mock("@/config/company", () => ({ getCompany: () => null }));
+jest.mock("@/config/company", () => ({ getCompany: () => null, setCompany: jest.fn() }));
 jest.mock("@/constants/api", () => ({ getApiBaseUrl: () => "http://server", getWsBaseUrl: () => "ws://server" }));
 
 // The staff side keeps a live-events socket open; nothing here needs it to connect.
@@ -117,6 +118,30 @@ test("an admin lands on the admin wording of that screen", async () => {
       params: { reason: "session_expired", portal: "admin" },
     }),
   );
+});
+
+test("a device signed out by a sign-in elsewhere opens the login saying that", async () => {
+  const current = token("trainer1", 3600);
+  save(STAFF_KEY, staff(current));
+  await openApp();
+  mockFetch.mockResolvedValue({
+    ok: false,
+    status: 401,
+    json: async () => ({ detail: { code: "SIGNED_IN_ELSEWHERE", message: "Signed in elsewhere" } }),
+  } as Response);
+
+  await act(() => requestWith(current));
+
+  await waitFor(() =>
+    expect(mockRouter.replace).toHaveBeenCalledWith({ pathname: "/trainer_login", params: { reason: "signed_in_elsewhere" } }),
+  );
+});
+
+test("a sign-in answer that names the company found makes it this phone's company", async () => {
+  const auth = await openApp();
+  const company = { tenantId: "demo", companyName: "Demo Co" };
+  await act(() => auth.current.setAdminSession({ ...staff(token("boss", 3600), "admin"), company } as never));
+  expect(setCompany).toHaveBeenCalledWith(company);
 });
 
 test("a trainee's request answered 401 opens the trainee login, saying why", async () => {

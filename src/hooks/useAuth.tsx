@@ -7,6 +7,7 @@ import { AdminAccount, AdminAuthSession, logoutAdmin } from "@/api/admin";
 import { AuthSession, Trainee, logoutTrainee } from "@/api/auth";
 import { setSessionEndedHandler } from "@/api/client";
 import { clearCachedCurrentSession } from "@/api/session";
+import { setCompany } from "@/config/company";
 import { getWsBaseUrl } from "@/constants/api";
 import { useBackfillCompany } from "@/hooks/useCompany";
 import { emit } from "@/services/liveEvents";
@@ -108,6 +109,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setSession = useCallback((next: AuthSession) => {
+    // A sign-in that named no company is told which one the server found - this phone's from now on.
+    if (next.company) setCompany(next.company);
     setSessionState(next);
     writeStored(AUTH_SESSION_KEY, next);
     setAdminSessionState(null);
@@ -134,6 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [session, forgetSession]);
 
   const setAdminSession = useCallback((next: AdminAuthSession) => {
+    if (next.company) setCompany(next.company);
     setAdminSessionState(next);
     writeStored(ADMIN_SESSION_KEY, next);
     setSessionState(null);
@@ -146,22 +150,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     forgetAdminSession();
   }, [adminSession, forgetAdminSession]);
 
-  // A signed-in request came back 401 (api/client.ts): that sign-in is over - expired, or signed out
-  // on every device. Forget it and open its login screen, saying why: only for the sign-in still in
-  // use (a late answer for an earlier one changes nothing), once however many requests fail
-  // together, and with no server logout - the token is already no good.
+  // A signed-in request came back 401 (api/client.ts): that sign-in is over - expired, signed out,
+  // or pushed out by a sign-in on another device (the device limit). Forget it and open its login
+  // screen, saying why: only for the sign-in still in use (a late answer for an earlier one changes
+  // nothing), once however many requests fail together, and with no server logout - the token is
+  // already no good.
   useEffect(() => {
-    setSessionEndedHandler((endedToken) => {
+    setSessionEndedHandler((endedToken, code) => {
       if (endedToken === endedTokenRef.current) return;
+      const reason = code === "SIGNED_IN_ELSEWHERE" ? "signed_in_elsewhere" : "session_expired";
       if (endedToken === adminSession?.access_token) {
         endedTokenRef.current = endedToken;
         forgetAdminSession();
         const portal = adminSession.admin.role === "admin" ? { portal: "admin" } : {};
-        router.replace({ pathname: "/trainer_login", params: { reason: "session_expired", ...portal } });
+        router.replace({ pathname: "/trainer_login", params: { reason, ...portal } });
       } else if (endedToken === session?.access_token) {
         endedTokenRef.current = endedToken;
         forgetSession();
-        router.replace({ pathname: "/participant_login", params: { reason: "session_expired" } });
+        router.replace({ pathname: "/participant_login", params: { reason } });
       }
     });
     return () => setSessionEndedHandler(null);

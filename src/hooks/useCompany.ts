@@ -1,4 +1,3 @@
-import { useRouter } from "expo-router";
 import { useEffect, useSyncExternalStore } from "react";
 
 import { fetchCurrentCompany } from "@/api/tenants";
@@ -7,16 +6,6 @@ import { Company, getCompany, setCompany, subscribeCompany } from "@/config/comp
 /** The company this device signs in to (src/config/company.ts), re-rendering when it changes. */
 export function useCompany(): Company | null {
   return useSyncExternalStore(subscribeCompany, getCompany, getCompany);
-}
-
-/** For the sign-in screens: opened without a company (e.g. straight from a link), go back to the
- *  first screen, which asks for the company code - nobody signs in to an unnamed company. */
-export function useRequireCompany(): void {
-  const company = useCompany();
-  const router = useRouter();
-  useEffect(() => {
-    if (!company) router.replace("/");
-  }, [company, router]);
 }
 
 /**

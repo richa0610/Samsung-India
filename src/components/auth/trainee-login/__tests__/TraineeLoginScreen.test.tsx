@@ -4,7 +4,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react-nativ
 import { loginTrainee } from "@/api/auth";
 import TraineeLoginScreen from "@/components/auth/trainee-login/TraineeLoginScreen";
 import { setCompany } from "@/config/company";
-import { SESSION_EXPIRED_NOTICE, STAFF_LOGIN_TEXT } from "@/constants/strings";
+import { SESSION_EXPIRED_NOTICE, SIGN_IN_ID_TEXT, SIGNED_IN_ELSEWHERE_NOTICE, STAFF_LOGIN_TEXT } from "@/constants/strings";
 
 const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn(), canGoBack: jest.fn(() => true) };
 const mockSetSession = jest.fn();
@@ -44,6 +44,13 @@ test("sent here because the sign-in ended: says so", async () => {
   expect(screen.getByText(SESSION_EXPIRED_NOTICE)).toBeTruthy();
 });
 
+test("signed out by a sign-in on another device: says that instead", async () => {
+  mockParams = { reason: "signed_in_elsewhere" };
+  await render(<TraineeLoginScreen />);
+  expect(screen.getByText(SIGNED_IN_ELSEWHERE_NOTICE)).toBeTruthy();
+  expect(screen.queryByText(SESSION_EXPIRED_NOTICE)).toBeNull();
+});
+
 test("arriving normally shows no such notice", async () => {
   await render(<TraineeLoginScreen />);
   expect(screen.queryByText(SESSION_EXPIRED_NOTICE)).toBeNull();
@@ -63,17 +70,26 @@ test("renders the brand, hero text, trainee login card, and security badge", asy
 
   expect(screen.getByText("Trainee Login")).toBeTruthy();
   expect(screen.getByText("Enter your credentials to continue")).toBeTruthy();
-  expect(screen.getByText("Company ID / Phone No")).toBeTruthy();
-  expect(screen.getByPlaceholderText("Enter Company ID or Phone No")).toBeTruthy();
+  expect(screen.getByText(SIGN_IN_ID_TEXT.label)).toBeTruthy();
+  expect(screen.getByPlaceholderText(SIGN_IN_ID_TEXT.placeholder)).toBeTruthy();
   expect(screen.getByPlaceholderText("Enter password")).toBeTruthy();
   expect(screen.getByText(STAFF_LOGIN_TEXT.forgot)).toBeTruthy();
   expect(screen.getByLabelText("Login as Trainee")).toBeTruthy();
   expect(screen.getByText("Your information is secure")).toBeTruthy();
 });
 
-test("the Company ID / Phone No field takes at most 10 characters", async () => {
+test("the sign-in ID field takes a username or HO ID longer than a phone number", async () => {
   await render(<TraineeLoginScreen />);
-  expect(screen.getByPlaceholderText("Enter Company ID or Phone No").props.maxLength).toBe(10);
+  expect(screen.getByPlaceholderText(SIGN_IN_ID_TEXT.placeholder).props.maxLength).toBe(64);
+});
+
+test("an HO ID signs in as typed - no company code asked", async () => {
+  mockLogin.mockRejectedValueOnce(new Error("stop here"));
+  await render(<TraineeLoginScreen />);
+  await fireEvent.changeText(screen.getByPlaceholderText(SIGN_IN_ID_TEXT.placeholder), "DEMO-EMP-001");
+  await fireEvent.changeText(screen.getByPlaceholderText("Enter password"), "secret");
+  await fireEvent.press(screen.getByLabelText("Login as Trainee"));
+  expect(mockLogin).toHaveBeenCalledWith("DEMO-EMP-001", "secret");
 });
 
 test("successfully signs in a trainee with company id / phone", async () => {
@@ -99,7 +115,7 @@ test("successfully signs in a trainee with company id / phone", async () => {
 
   await render(<TraineeLoginScreen />);
 
-  const phoneInput = screen.getByPlaceholderText("Enter Company ID or Phone No");
+  const phoneInput = screen.getByPlaceholderText(SIGN_IN_ID_TEXT.placeholder);
   await fireEvent.changeText(phoneInput, "9876543210");
 
   const passwordInput = screen.getByPlaceholderText("Enter password");
@@ -119,7 +135,7 @@ test("a Company ID with letters is kept as typed and sent with the password", as
   mockLogin.mockRejectedValueOnce(new Error("offline"));
   await render(<TraineeLoginScreen />);
 
-  await fireEvent.changeText(screen.getByPlaceholderText("Enter Company ID or Phone No"), " TRN2610001 ");
+  await fireEvent.changeText(screen.getByPlaceholderText(SIGN_IN_ID_TEXT.placeholder), " TRN2610001 ");
   await fireEvent.changeText(screen.getByPlaceholderText("Enter password"), "secret");
   await fireEvent.press(screen.getByLabelText("Login as Trainee"));
 
@@ -131,7 +147,7 @@ test("a Company ID with letters is kept as typed and sent with the password", as
 test("the password is required", async () => {
   await render(<TraineeLoginScreen />);
 
-  await fireEvent.changeText(screen.getByPlaceholderText("Enter Company ID or Phone No"), "9876543210");
+  await fireEvent.changeText(screen.getByPlaceholderText(SIGN_IN_ID_TEXT.placeholder), "9876543210");
   await fireEvent.press(screen.getByLabelText("Login as Trainee"));
 
   expect(await screen.findByText("Enter your password")).toBeTruthy();

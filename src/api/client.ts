@@ -33,24 +33,34 @@ function errorFromResponse(status: number, data: unknown): ApiError {
 }
 
 /** Told the token of a signed-in request the server answered 401 - the one answer it gives a
- *  request carrying a token that's no longer good (expired, or signed out on every device); a wrong
- *  password at login is a 401 too, but a login carries no token. AuthProvider registers this, and
- *  signs that sign-in out once, wherever in the app the request was made. */
-let onSessionEnded: ((token: string) => void) | null = null;
+ *  request carrying a token that's no longer good (expired, signed out, or signed out by a sign-in
+ *  on another device - `code` "SIGNED_IN_ELSEWHERE"); a wrong password at login is a 401 too, but a
+ *  login carries no token. AuthProvider registers this, and signs that sign-in out once, wherever in
+ *  the app the request was made. */
+type SessionEndedHandler = (token: string, code?: string) => void;
+let onSessionEnded: SessionEndedHandler | null = null;
 
-export function setSessionEndedHandler(handler: ((token: string) => void) | null) {
+export function setSessionEndedHandler(handler: SessionEndedHandler | null) {
   onSessionEnded = handler;
+}
+
+function codeOf(body: unknown): string | undefined {
+  const code = (body as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : undefined;
 }
 
 export async function apiRequest<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  // A sign-in names no company (user, 2026-10-19): the server finds it - an old one saved on this
+  // phone must not steer it elsewhere.
+  { company = true }: { company?: boolean } = {},
 ): Promise<T> {
   let response: Response;
   const base = getApiBaseUrl();
   const headers = {
     "Content-Type": "application/json",
-    ...companyHeader(),
+    ...(company ? companyHeader() : {}),
     ...options.headers,
   } as Record<string, string>;
 
@@ -68,8 +78,9 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     const token = headers.Authorization?.startsWith("Bearer ") ? headers.Authorization.slice("Bearer ".length) : null;
-    if (response.status === 401 && token) onSessionEnded?.(token);
-    throw errorFromResponse(response.status, data);
+    const error = errorFromResponse(response.status, data);
+    if (response.status === 401 && token) onSessionEnded?.(token, codeOf(error.body));
+    throw error;
   }
 
   return data as T;
@@ -118,8 +129,9 @@ export async function apiUpload<T>(
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    if (response.status === 401) onSessionEnded?.(token);
-    throw errorFromResponse(response.status, data);
+    const error = errorFromResponse(response.status, data);
+    if (response.status === 401) onSessionEnded?.(token, codeOf(error.body));
+    throw error;
   }
 
   return data as T;

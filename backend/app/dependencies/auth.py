@@ -6,7 +6,7 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.exceptions import forbidden, invalid_session, unauthorized
+from app.core.exceptions import forbidden, invalid_session
 from app.core.security import is_token_current
 from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
 from app.models.admin import Admin
@@ -39,10 +39,14 @@ SIGNED_IN_ELSEWHERE = "You were signed out because this account signed in on ano
 
 def _ensure_live_session(payload: dict, common_db: Session) -> None:
     """A token naming a device session (services/device_sessions) is good only while that session is:
-    a device signed out by a newer sign-in is told so, any other ended session gets the usual 401."""
+    a device signed out by a newer sign-in is told so - with a code the app shows its own notice
+    for - any other ended session gets the usual 401."""
     reason = device_sessions.why_ended(common_db, payload["sid"]) if payload.get("sid") else None
     if reason == device_sessions.REPLACED:
-        raise unauthorized(SIGNED_IN_ELSEWHERE)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "SIGNED_IN_ELSEWHERE", "message": SIGNED_IN_ELSEWHERE},
+        )
     if reason is not None:
         raise invalid_session()
 

@@ -3,13 +3,10 @@ import { act, fireEvent, render, screen } from "@testing-library/react-native";
 
 import LoginLandingScreen from "@/components/auth/LoginLandingScreen";
 import { SLIDE_INTERVAL_MS } from "@/components/auth/login/LoginHero";
-import { Company } from "@/config/company";
+import { getCompany } from "@/config/company";
 import { BRAND, COMPANY_TEXT, LOGIN_ROLE_TEXT, LOGIN_TEXT } from "@/constants/strings";
 
 const mockPush = jest.fn();
-// The phone's company. A made-up one by default, so "no Samsung" below still checks the brand.
-const ACME: Company = { tenantId: "acme", companyName: "Acme Retail" };
-let mockCompany: Company | null = ACME;
 
 jest.mock("expo-router", () => ({
   useRouter: () => ({ push: mockPush, replace: jest.fn(), back: jest.fn() }),
@@ -18,7 +15,6 @@ jest.mock("react-native-safe-area-context", () => ({
   SafeAreaView: require("react-native").View,
   useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
 }));
-jest.mock("@/hooks/useCompany", () => ({ useCompany: () => mockCompany }));
 
 // The first render loads the icon set and svg from scratch; do it once here, so each test below
 // runs within the normal per-test limit.
@@ -29,7 +25,6 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockPush.mockReset();
-  mockCompany = ACME;
   jest.useFakeTimers();
 });
 afterEach(() => {
@@ -115,25 +110,12 @@ test("the carousel has a dot per slide, moves on by itself, and a dot jumps to i
   expect(selectedDot()).toBe(0); // wraps back to the first slide
 });
 
-test("with no company yet, the first page asks only for the company code - no sign-in options", async () => {
-  mockCompany = null;
-  await render(<LoginLandingScreen />);
-  expect(screen.getByText(COMPANY_TEXT.welcome)).toBeTruthy();
-  expect(screen.getByText(COMPANY_TEXT.cardTitle)).toBeTruthy();
-  expect(screen.queryByText(LOGIN_TEXT.title)).toBeNull();
-  expect(screen.queryByLabelText(LOGIN_TEXT.viaQr)).toBeNull();
-  expect(screen.queryByLabelText(COMPANY_TEXT.back)).toBeNull(); // nothing to go back to yet
-});
-
-test("with a company, the sign-in page names it; Change opens the company page, Back returns", async () => {
+test("no company code first: the sign-in options show on a phone with no company saved", async () => {
+  // Signing in finds the company (user, 2026-10-19) - nobody is asked for a code here.
+  expect(getCompany()).toBeNull();
   await render(<LoginLandingScreen />);
   expect(screen.getByText(LOGIN_TEXT.title)).toBeTruthy();
-  expect(screen.getByText("Acme Retail")).toBeTruthy();
-
-  await fireEvent.press(screen.getByLabelText(`${COMPANY_TEXT.change} ${COMPANY_TEXT.current.toLowerCase()}`));
-  expect(screen.getByText(COMPANY_TEXT.welcome)).toBeTruthy();
-  expect(screen.queryByText(LOGIN_TEXT.title)).toBeNull();
-
-  await fireEvent.press(screen.getByLabelText(COMPANY_TEXT.back));
-  expect(screen.getByText(LOGIN_TEXT.title)).toBeTruthy();
+  expect(screen.getByLabelText(LOGIN_TEXT.viaQr)).toBeTruthy();
+  expect(screen.getByLabelText(LOGIN_TEXT.viaUsername)).toBeTruthy();
+  expect(screen.queryByText(COMPANY_TEXT.title)).toBeNull();
 });

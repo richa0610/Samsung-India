@@ -31,8 +31,9 @@ export const LOGIN_TEXT = {
   staffLink: "Login here",
 } as const;
 
-/** The company code step: before anyone signs in, the device is tied to one company by typing its
- *  company code (the company's tenant ID, any letter case). */
+/** The company code: asked only where there is no account to find the company from - registering
+ *  without a QR code, or an old QR code that names no company (user, 2026-10-19). The company's
+ *  tenant ID, any letter case. */
 export const COMPANY_TEXT = {
   title: "Enter your company code",
   body: "Ask your trainer or admin for it. You only need to enter it once on this phone.",
@@ -43,13 +44,6 @@ export const COMPANY_TEXT = {
   required: "Type your company code to continue.",
   current: "Company",
   change: "Change",
-  // The first screen's full-page company step (CompanyCodeScreen).
-  welcome: `Welcome to ${BRAND.name}`,
-  welcomeBody: "",
-  cardTitle: "Your company",
-  cardSubtitle: "Enter the code your trainer or admin shared",
-  help: "Don't have a code? Ask your trainer or admin.",
-  back: "Back",
   // A QR code from another company (useLinkCompany).
   qrBelongsTo: "This training belongs to",
   qrSwitchHint: "Switch this phone to that company to join it?",
@@ -67,8 +61,8 @@ export const STAFF_LOGIN_TEXT = {
     body: "Manage trainings, assessments and participants with ease.",
     cardTitle: "Trainer Login",
     cardSubtitle: "Enter your details to login",
-    idLabel: "Company ID / Phone No",
-    idPlaceholder: "Enter Company ID or Phone No",
+    idLabel: "Username / HO ID / Phone No",
+    idPlaceholder: "Enter username, HO ID or phone",
     submit: "Login as Trainer",
   },
   admin: {
@@ -95,6 +89,30 @@ export const STAFF_LOGIN_TEXT = {
 /** Shown on either sign-in screen when the app sent the user there because their sign-in ended -
  *  expired, or signed out on every device. */
 export const SESSION_EXPIRED_NOTICE = "Your session expired. Please log in again.";
+/** ...and when it ended because the account signed in on another device (the device limit). */
+export const SIGNED_IN_ELSEWHERE_NOTICE = "You were signed out because this account signed in on another device.";
+
+/** The notice for why a sign-in screen was opened (its `reason` route param), or null. */
+export function signInNotice(reason?: string): string | null {
+  if (reason === "signed_in_elsewhere") return SIGNED_IN_ELSEWHERE_NOTICE;
+  return reason === "session_expired" ? SESSION_EXPIRED_NOTICE : null;
+}
+
+/** The ID a trainee or trainer signs in with - no company code (user, 2026-10-19): the server finds
+ *  their company from it. */
+export const SIGN_IN_ID_TEXT = {
+  label: "Username / HO ID / Phone No",
+  placeholder: "Enter username, HO ID or phone",
+  missing: "Enter your username, HO ID or phone number",
+} as const;
+
+/** The page an admin with access to several companies picks one on, after signing in. */
+export const CHOOSE_COMPANY_TEXT = {
+  title: "Choose a company",
+  subtitle: "Your account can sign in to more than one company. Pick the one to open.",
+  expired: "That sign-in has expired. Please sign in again.",
+  back: "Back",
+} as const;
 
 /** The "Login as" sheet that "Login here" opens. */
 export const LOGIN_ROLE_TEXT = {

@@ -33,8 +33,7 @@ const slides = LOGIN_TEXT.slides;
 
 /** The banner's background, as in the design: deep royal blue at the bottom-left into the primary
  *  blue at the top-right, a sky glow low on the right, faint rings, and a curved bottom edge
- *  (lowest in the middle) with a sky-blue wave on the right and a light-blue fade into the page.
- *  Also the company code screen's banner (CompanyCodeScreen). */
+ *  (lowest in the middle) with a sky-blue wave on the right and a light-blue fade into the page. */
 export function HeroBackground({ width: W, height: H }: { width: number; height: number }) {
   // The edge's left half, shared by the sky wave and the fade so they meet the blue in one line.
   const edgeLeft = `M0 ${H - 42} C ${W * 0.2} ${H - 20}, ${W * 0.36} ${H - 10}, ${W * 0.55} ${H - 11}`;

@@ -2,10 +2,10 @@ import { beforeAll, beforeEach, expect, jest, test } from "@jest/globals";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { Alert } from "react-native";
 
-import { loginAdmin } from "@/api/admin";
+import { ApiError, CompanyChoice, loginAdmin } from "@/api/admin";
 import StaffLoginScreen from "@/components/auth/staff-login/StaffLoginScreen";
-import { setCompany } from "@/config/company";
 import { STAFF_LOGIN_TEXT } from "@/constants/strings";
+import { getCompanyChoice, setCompanyChoice } from "@/services/companyChoice";
 
 const mockRouter = { back: jest.fn(), replace: jest.fn(), push: jest.fn(), canGoBack: jest.fn(() => true) };
 const mockSetAdminSession = jest.fn();
@@ -26,7 +26,6 @@ const mockLogin = jest.mocked(loginAdmin);
 // The first render loads the icon set and svg from scratch; do it once here, so each test below
 // runs within the normal per-test limit.
 beforeAll(async () => {
-  setCompany({ tenantId: "acme", companyName: "Acme Retail" }); // sign-in screens need the company first
   const first = await render(<StaffLoginScreen portal="trainer" />);
   await first.unmount();
 }, 30_000);
@@ -71,6 +70,42 @@ test("signing in sends a trainer to the trainer dashboard", async () => {
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith("/trainer_dashboard"));
   expect(mockLogin).toHaveBeenCalledWith("9100000001", "secret");
   expect(mockSetAdminSession).toHaveBeenCalled();
+});
+
+test("an HO ID longer than a phone number reaches the server whole - no company code asked", async () => {
+  mockLogin.mockResolvedValue({ access_token: "t", admin: { role: "trainer" } } as never);
+  await render(<StaffLoginScreen portal="trainer" />);
+
+  await fireEvent.changeText(screen.getByPlaceholderText(STAFF_LOGIN_TEXT.trainer.idPlaceholder), "DEMO-OFF-001");
+  await fireEvent.changeText(screen.getByPlaceholderText(STAFF_LOGIN_TEXT.passwordPlaceholder), "secret");
+  await fireEvent.press(screen.getByLabelText(STAFF_LOGIN_TEXT.trainer.submit));
+
+  await waitFor(() => expect(mockLogin).toHaveBeenCalledWith("DEMO-OFF-001", "secret"));
+});
+
+test("an admin with access to several companies is taken to choose one", async () => {
+  const choice: CompanyChoice = {
+    code: "CHOOSE_COMPANY",
+    message: "Choose the company to sign in to",
+    companies: [{ tenantId: "samsung", companyName: "Samsung India" }, { tenantId: "demo", companyName: "Demo Co" }],
+    ticket: "a-ticket",
+  };
+  setCompanyChoice(null);
+  mockLogin.mockRejectedValue(new ApiError(choice.message, 409, choice));
+  await render(<StaffLoginScreen portal="admin" />);
+
+  await fireEvent.changeText(screen.getByPlaceholderText(STAFF_LOGIN_TEXT.admin.idPlaceholder), "super");
+  await fireEvent.changeText(screen.getByPlaceholderText(STAFF_LOGIN_TEXT.passwordPlaceholder), "secret");
+  await fireEvent.press(screen.getByLabelText(STAFF_LOGIN_TEXT.admin.submit));
+
+  await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith("/choose_company"));
+  expect(getCompanyChoice()).toEqual(choice);
+  expect(mockSetAdminSession).not.toHaveBeenCalled();
+});
+
+test("signed out by a sign-in on another device: the notice says so", async () => {
+  await render(<StaffLoginScreen portal="trainer" reason="signed_in_elsewhere" />);
+  expect(screen.getByText("You were signed out because this account signed in on another device.")).toBeTruthy();
 });
 
 test("an empty form isn't sent; a session-expired notice shows on arrival", async () => {
