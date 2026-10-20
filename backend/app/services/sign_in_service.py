@@ -74,10 +74,15 @@ class _Verified:
 # --- finding and checking the account ----------------------------------------------------------------
 
 
-def _record(db: Session, entry: UserRegistry) -> Trainee | AgencyTeam | None:
-    if entry.user_type == "trainee":
-        return db.query(Trainee).filter(Trainee.traineeUid == entry.user_uid).first()
-    return db.query(AgencyTeam).filter(AgencyTeam.agencyTeamUid == entry.user_uid).first()
+# Where each kind of account's company record is kept - which of the two holds a registry entry's ID is
+# what makes its person a trainee or a trainer (the registry stores no type: user, 2026-10-20).
+_TABLES = {"trainee": (Trainee, Trainee.traineeUid), "trainer": (AgencyTeam, AgencyTeam.agencyTeamUid)}
+_OTHER = {"trainee": "trainer", "trainer": "trainee"}
+
+
+def _record(db: Session, user_uid: str, user_type: str) -> Trainee | AgencyTeam | None:
+    model, uid = _TABLES[user_type]
+    return db.query(model).filter(uid == user_uid).first()
 
 
 def _answers_to(account: user_registry_service.Account, key: str) -> bool:
@@ -87,7 +92,7 @@ def _answers_to(account: user_registry_service.Account, key: str) -> bool:
 
 def _lock(entry: UserRegistry, record: Trainee | AgencyTeam) -> tuple[str, str]:
     """The failure count the company-code sign-in keeps for this account."""
-    if entry.user_type == "trainee":
+    if isinstance(record, Trainee):
         return trainee_service.LOGIN_SCOPE, trainee_service.lock_key(entry.tenant_uid, record)
     return admin_service.LOGIN_SCOPE, f"{entry.tenant_uid}:{record.username}"
 
@@ -102,42 +107,65 @@ def _disable(common_db: Session, entry: UserRegistry, reason: str) -> None:
         logger.exception("Couldn't disable registry row %s", entry.user_uid)
 
 
-def _check(common_db: Session, entry: UserRegistry, key: str, password: str) -> Optional[_Verified]:
-    """The account behind `entry` if it signs in with `password`, else None. Raises 429 for a locked
-    account and 503 when its company's database can't be reached."""
-    if entry.status != "active":
-        return None
-    if entry.user_type == "trainee" and uid_events.is_trainer_uid(entry.user_uid):
-        return None   # a trainer-shaped ID never signs in as a trainee (uid_events.TRAINER_UID_PREFIX)
+def _check(common_db: Session, entry: UserRegistry, key: str, password: str, user_type: str) -> tuple[bool, Optional[_Verified]]:
+    """(whether `entry` is the other kind of account, the account if it signs in as a `user_type` with
+    `password`). The kind is the table its company record is in. Raises 429 for a locked account and
+    503 when its company's database can't be reached."""
+    if user_type == "trainee" and uid_events.is_trainer_uid(entry.user_uid):
+        return True, None   # a trainer-shaped ID never signs in as a trainee (uid_events.TRAINER_UID_PREFIX)
+    if entry.status not in ("active", "pending"):
+        return False, None
     try:
         db = tenant_manager.get_session(entry.tenant_uid, common_db)
     except HTTPException as exc:
         if exc.status_code >= status.HTTP_500_INTERNAL_SERVER_ERROR:
             raise
-        return None   # a suspended or unknown company
+        return False, None   # a suspended or unknown company
     verified = None
     try:
-        record = _record(db, entry)
+        record = _record(db, entry.user_uid, user_type)
         if record is None:
-            _disable(common_db, entry, "no longer in the company database")
-            return None
+            if _record(db, entry.user_uid, _OTHER[user_type]) is not None:
+                return True, None
+            if entry.status == "active":
+                _disable(common_db, entry, "no longer in the company database")
+            return False, None   # a `pending` one: a registration still saving, or one that failed (the sync removes it)
         account = user_registry_service.account_of(record)
-        if not _answers_to(account, key) or account.password_hash != entry.password_hash:
-            # Changed in the company (the PHP system writes there directly): refresh the copy first.
+        if entry.status == "pending" or not _answers_to(account, key) or account.password_hash != entry.password_hash:
+            # Changed in the company (the PHP system writes there directly), or a registration whose
+            # last step failed (the company record is saved): bring the registry row up to date first.
             user_registry_service.sync_account(common_db, entry.tenant_uid, record)
-            if not _answers_to(account, key):
-                return None
+            if entry.status != "active" or not _answers_to(account, key):
+                return False, None
         scope, lock = _lock(entry, record)
         rate_limit.ensure_account_not_locked(scope, lock)
         if not (account.password_hash and verify_password(password, account.password_hash)):
             rate_limit.record_account_failure(scope, lock)
-            return None
+            return False, None
         rate_limit.clear_account_failures(scope, lock)
         verified = _Verified(entry, record, db)
-        return verified
+        return False, verified
     finally:
         if verified is None:
             db.close()
+
+
+def _check_all(common_db: Session, key: Optional[str], password: str, user_type: str) -> tuple[list[_Verified], bool]:
+    """Every account `key` names that `password` opens as a `user_type`, and whether `key` names any
+    account that isn't plainly the other kind (a trainer at the trainee sign-in, or the reverse)."""
+    verified: list[_Verified] = []
+    theirs = False
+    try:
+        for entry in registry.find_for_login(common_db, key):
+            other_kind, match = _check(common_db, entry, key, password, user_type)
+            theirs = theirs or not other_kind
+            if match is not None:
+                verified.append(match)
+    except Exception:
+        for match in verified:
+            match.db.close()
+        raise
+    return verified, theirs
 
 
 def _matching_records(db: Session, key: str, user_type: str) -> list[Trainee | AgencyTeam]:
@@ -176,27 +204,18 @@ def _sign_in(common_db: Session, typed: str, password: str, user_type: str, scop
     whatever went wrong), 409 SHARED_PHONE when the password opens more than one account sharing that
     phone, 429 for a locked account."""
     key = login_key(typed)
-    candidates = registry.find_for_login(common_db, key, user_type)
-    if key and not candidates:
+    verified, theirs = _check_all(common_db, key, password, user_type)
+    if key and not theirs:
+        # Nothing of this kind registered under it - nor any password checked: look in the companies.
         _discover(common_db, key, user_type)
-        candidates = registry.find_for_login(common_db, key, user_type)
-    if not candidates:
+        verified, theirs = _check_all(common_db, key, password, user_type)
+    if not theirs:
         typed_lock = f"*:typed-{key}"
         rate_limit.ensure_account_not_locked(scope, typed_lock)
         verify_password(password, _dummy_hash())
         rate_limit.record_account_failure(scope, typed_lock)
         raise unauthorized(failed)
 
-    verified: list[_Verified] = []
-    try:
-        for entry in candidates:
-            match = _check(common_db, entry, key, password)
-            if match is not None:
-                verified.append(match)
-    except Exception:
-        for match in verified:
-            match.db.close()
-        raise
     if len(verified) == 1:
         return verified[0]
     for match in verified:

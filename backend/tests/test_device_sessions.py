@@ -2,9 +2,11 @@
 in on `max_devices` devices at once (2 unless changed); one more signs out the device used longest
 ago, signing in again on the same device replaces its own session, and Logout ends only that device.
 A token from before devices were tracked - or for an account not in the registry - works as before.
+The sessions are kept in the registry row's `devices` (JSON), not a table of their own (user, 2026-10-20).
 
 Synthetic TenantWorld (in-memory SQLite) only - no real database is touched."""
 
+import json
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
@@ -15,16 +17,19 @@ from app.core import rate_limit
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.dependencies.auth import SIGNED_IN_ELSEWHERE
-
-# What a device signed out by a newer sign-in is answered: a code for the app, and the words.
-ELSEWHERE = {"code": "SIGNED_IN_ELSEWHERE", "message": SIGNED_IN_ELSEWHERE}
-from app.models.common.login_session import LoginSession
 from app.models.common.user_registry import UserRegistry
 from app.models.trainee import Trainee
 from app.services import device_sessions, sign_in_service
 from app.services import user_registry_service as registry_service
 from tests.tenant_fixtures import ALPHA, BETA, PASSWORD
 from tests.test_trainer_authorization import TrainerWorldTestCase
+
+# What a device signed out by a newer sign-in is answered: a code for the app, and the words.
+ELSEWHERE = {"code": "SIGNED_IN_ELSEWHERE", "message": SIGNED_IN_ELSEWHERE}
+
+
+def stamp(moment):
+    return moment.strftime("%Y-%m-%dT%H:%M:%S")
 
 
 class DeviceTestCase(TrainerWorldTestCase):
@@ -54,22 +59,35 @@ class DeviceTestCase(TrainerWorldTestCase):
     def sid(self, token):
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]).get("sid")
 
-    def session(self, token):
+    def entry(self, user_uid="TR-S_N1-0"):
         self.common.expire_all()
-        return self.common.query(LoginSession).filter(LoginSession.session_id == self.sid(token)).one()
+        return self.common.query(UserRegistry).filter(UserRegistry.user_uid == user_uid).one()
+
+    def devices(self, user_uid="TR-S_N1-0"):
+        return json.loads(self.entry(user_uid).devices or "[]")
+
+    def session(self, token, user_uid="TR-S_N1-0"):
+        return next(item for item in self.devices(user_uid) if item["sid"] == self.sid(token))
+
+    def change_session(self, token, user_uid="TR-S_N1-0", **fields):
+        entry = self.entry(user_uid)
+        devices = json.loads(entry.devices)
+        next(item for item in devices if item["sid"] == self.sid(token)).update(fields)
+        entry.devices = json.dumps(devices)
+        self.common.commit()
+        device_sessions._status.clear()
 
     def live(self, user_uid="TR-S_N1-0"):
-        self.common.expire_all()
-        entry = self.common.query(UserRegistry).filter(UserRegistry.user_uid == user_uid).one()
-        return self.common.query(LoginSession).filter(LoginSession.registry_id == entry.id, LoginSession.ended_at.is_(None)).count()
+        return sum(1 for item in self.devices(user_uid) if not item.get("ended"))
 
 
 class EachSignInIsADevice(DeviceTestCase):
     def test_a_sign_in_names_its_device_session(self):
         token = self.sign_in("phone-a")
-        session = self.session(token)
-        self.assertEqual((session.device_id, session.tenant_uid, session.ended_at), ("phone-a", ALPHA, None))
-        self.assertTrue(session.device_name)   # from the user agent when the app sends none
+        session, entry = self.session(token), self.entry()
+        self.assertEqual((session["device"], session.get("ended"), entry.tenant_uid), ("phone-a", None, ALPHA))
+        self.assertTrue(session["name"])   # from the user agent when the app sends none
+        self.assertTrue(self.sid(token).startswith(f"{entry.id}."))   # names the row it is kept in
         self.assertEqual(self.use(token).status_code, 200)
 
     def test_a_third_device_signs_out_the_one_used_longest_ago(self):
@@ -79,13 +97,12 @@ class EachSignInIsADevice(DeviceTestCase):
         refused = self.use(first)
         self.assertEqual((refused.status_code, refused.json()["detail"]), (401, ELSEWHERE))
         self.assertEqual([self.use(token).status_code for token in (second, third)], [200, 200])
-        self.assertEqual(self.session(first).end_reason, device_sessions.REPLACED)
+        self.assertEqual(self.session(first)["ended"], device_sessions.REPLACED)
 
     def test_used_longest_ago_means_last_use_not_first_sign_in(self):
         first, second = self.sign_in("phone-a"), self.sign_in("phone-b")
-        self.session(first).last_seen_at = datetime.utcnow()   # the first phone is the one in use
-        self.session(second).last_seen_at = datetime.utcnow() - timedelta(hours=1)
-        self.common.commit()
+        self.change_session(first, seen=stamp(datetime.utcnow()))   # the first phone is the one in use
+        self.change_session(second, seen=stamp(datetime.utcnow() - timedelta(hours=1)))
         self.sign_in("phone-c")
         self.assertEqual(self.use(first).status_code, 200)
         self.assertEqual(self.use(second).status_code, 401)
@@ -109,10 +126,10 @@ class EachSignInIsADevice(DeviceTestCase):
 
     def test_an_expired_session_takes_no_place(self):
         expired = self.sign_in("phone-a")
-        self.session(expired).expires_at = datetime.utcnow() - timedelta(minutes=1)
-        self.common.commit()
+        self.change_session(expired, expires=stamp(datetime.utcnow() - timedelta(minutes=1)))
         second, third = self.sign_in("phone-b"), self.sign_in("phone-c")
         self.assertEqual([self.use(token).status_code for token in (second, third)], [200, 200])
+        self.assertNotIn(self.sid(expired), [item["sid"] for item in self.devices()])   # dropped from the row
 
     def test_a_sign_in_with_the_company_code_counts_too(self):
         first = self.sign_in("phone-a")
@@ -182,10 +199,38 @@ class EverythingElseKeepsWorking(DeviceTestCase):
         with patch("app.models.uid_events.next_uid", lambda connection, prefix: f"{prefix}2610999"):
             response = self.w.client.post("/trainees/register", json=body, headers={"X-Tenant-ID": ALPHA})
         self.assertEqual(response.status_code, 201, response.text)
-        self.assertEqual(self.session(response.json()["access_token"]).device_id, "phone-n")
+        token = response.json()["access_token"]
+        self.assertEqual(self.session(token, "TRN2610999")["device"], "phone-n")
 
     def test_a_common_database_blip_doesn_t_sign_anyone_out(self):
         token = self.sign_in("phone-a")
         device_sessions._status.clear()
-        with patch.object(self.common, "query", side_effect=OperationalError("SELECT", {}, Exception("blip"))):
+        real = self.common.execute
+
+        def registry_is_down(statement, *args, **kwargs):
+            if "user_registry" in str(statement):
+                raise OperationalError("SELECT", {}, Exception("blip"))
+            return real(statement, *args, **kwargs)
+
+        with patch.object(self.common, "execute", side_effect=registry_is_down):
             self.assertEqual(self.use(token).status_code, 200)
+
+
+class TheRowStaysSmall(DeviceTestCase):
+    def test_a_device_in_use_has_its_last_use_noted_now_and_then(self):
+        token = self.sign_in("phone-a")
+        old = stamp(datetime.utcnow() - device_sessions.SEEN_EVERY - timedelta(minutes=1))
+        self.change_session(token, seen=old)
+        self.assertEqual(self.use(token).status_code, 200)
+        self.assertGreater(self.session(token)["seen"], old)
+
+    def test_only_the_newest_signed_out_sessions_are_kept(self):
+        tokens = [self.sign_in("phone-a") for _ in range(device_sessions.MAX_ENDED + 3)]
+        self.assertEqual(len(self.devices()), device_sessions.MAX_ENDED + 1)   # the live one + the newest ended
+        self.assertEqual(self.use(tokens[0]).status_code, 401)   # one no longer listed is still refused
+        self.assertEqual(self.use(tokens[-1]).status_code, 200)
+
+    def test_a_session_id_from_before_the_move_is_refused(self):
+        phone = self.alpha.query(Trainee).filter_by(traineeUid="TR-S_N1-0").one().phone
+        old = create_access_token(subject=str(phone), tenant_id=ALPHA, role="trainee", session_id="oldStyleSessionId")
+        self.assertEqual(self.use(old).status_code, 401)

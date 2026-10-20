@@ -1,8 +1,9 @@
 """Gives a company's trainees and trainers new IDs and HO IDs that no other company uses, so they can
 join the central user registry (user, 2026-10-20: the demo company's people repeated Samsung's).
 
-New IDs come from the shared counters in the Common DB (services/user_registry_service): a trainee's
-from its zone (or TRN), a trainer's AGT - each above every number any company has used. New HO IDs
+New IDs come from the company's own counters, raised past every ID the central user registry holds
+(services/user_registry_service): a trainee's from its zone (or TRN), a trainer's AGT. Run
+scripts/sync_user_registry.py first, so every company's people are in the registry. New HO IDs
 are <TENANT>-EMP-001... for trainees and <TENANT>-OFF-001... for trainers. Names, usernames, phones and
 passwords stay, and so does everything that names a person by username (a training's trainer, a
 trainee's assigned trainer). Refused for the default company, and for a company that has attendance,
@@ -25,7 +26,6 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 sys.path.insert(0, ".")
@@ -80,9 +80,9 @@ def _check_hoids_free(common_db: Session, hoids: list[str], own_uids: set[str]) 
             raise SystemExit(f"Refused: HO ID {hoid} is already registered to {holder.user_uid}.")
 
 
-def plan_reissue(common_db: Session, tenant_db: Session, tenant_uid: str, open_tenant) -> list[Change]:
-    """The changes --apply would make - reading only: each shared counter's next number (or, for a
-    counter not started yet, the first number no company has used)."""
+def plan_reissue(common_db: Session, tenant_db: Session, tenant_uid: str) -> list[Change]:
+    """The changes --apply would make - reading only: from the first number neither the registry nor
+    this company has used, for each prefix."""
     _refuse_unless_safe(tenant_db, tenant_uid)
     trainees, trainers = _people(tenant_db)
     trainee_hoids, trainer_hoids = _hoids(tenant_uid, trainees, trainers)
@@ -91,8 +91,7 @@ def plan_reissue(common_db: Session, tenant_db: Session, tenant_uid: str, open_t
 
     def preview(prefix: str, column) -> str:
         if prefix not in next_number:
-            current = common_db.execute(text("SELECT next_val FROM uid_sequence WHERE prefix = :p"), {"p": prefix}).scalar()
-            next_number[prefix] = current or user_registry_service.first_unused_in_companies(common_db, prefix, open_tenant, column)
+            next_number[prefix] = user_registry_service.first_unused_number(common_db, tenant_db, prefix, column)
         number, next_number[prefix] = next_number[prefix], next_number[prefix] + 1
         return f"{prefix}{ist_now().year % 100:02d}{number:05d}"
 
@@ -107,20 +106,20 @@ def plan_reissue(common_db: Session, tenant_db: Session, tenant_uid: str, open_t
     ]
 
 
-def apply_reissue(common_db: Session, tenant_db: Session, tenant_uid: str, open_tenant, backup_dir: Path = BACKUPS) -> tuple[list[Change], Path]:
-    """Claims the new IDs from the shared counters, saves every old and new value, then writes them."""
+def apply_reissue(common_db: Session, tenant_db: Session, tenant_uid: str, backup_dir: Path = BACKUPS) -> tuple[list[Change], Path]:
+    """Claims the new IDs from the company's counters, saves every old and new value, then writes them -
+    the claims and the new values in one company transaction."""
     _refuse_unless_safe(tenant_db, tenant_uid)
     trainees, trainers = _people(tenant_db)
     trainee_hoids, trainer_hoids = _hoids(tenant_uid, trainees, trainers)
     _check_hoids_free(common_db, trainee_hoids + trainer_hoids, set())
     changes = [
-        Change("trainee", t.id, t.username, t.traineeUid, t.employee_id, user_registry_service.claim_trainee_uid(common_db, t.zone, open_tenant), hoid)
+        Change("trainee", t.id, t.username, t.traineeUid, t.employee_id, user_registry_service.claim_trainee_uid(common_db, tenant_db, t.zone), hoid)
         for t, hoid in zip(trainees, trainee_hoids)
     ] + [
-        Change("agencyteam", a.id, a.username, a.agencyTeamUid, a.offerId, user_registry_service.claim_trainer_uid(common_db, open_tenant), hoid)
+        Change("agencyteam", a.id, a.username, a.agencyTeamUid, a.offerId, user_registry_service.claim_trainer_uid(common_db, tenant_db), hoid)
         for a, hoid in zip(trainers, trainer_hoids)
     ]
-    common_db.commit()   # the numbers are taken; a failure below only leaves them unused
 
     backup_dir.mkdir(parents=True, exist_ok=True)
     backup = backup_dir / f"{tenant_uid}-people-ids-{datetime.now():%Y%m%d-%H%M%S}.json"
@@ -176,10 +175,9 @@ def main() -> None:
             print(f"{tenant_uid}: restored {undo_reissue(tenant_db, backup)} people. Run scripts/sync_user_registry.py to update the registry.")
             return
         if args.apply:
-            changes, path = apply_reissue(common_db, tenant_db, tenant_uid, open_tenant)
+            changes, path = apply_reissue(common_db, tenant_db, tenant_uid)
         else:
-            changes = plan_reissue(common_db, tenant_db, tenant_uid, open_tenant)
-            common_db.rollback()
+            changes = plan_reissue(common_db, tenant_db, tenant_uid)
         for c in changes:
             print(f"  {c.table:10} {c.username or '-':14} {c.old_uid} -> {c.new_uid}   HO ID {c.old_hoid} -> {c.new_hoid}")
         print(f"applied - old values saved to {path}" if args.apply else "dry run - nothing was written. Run again with --apply.")

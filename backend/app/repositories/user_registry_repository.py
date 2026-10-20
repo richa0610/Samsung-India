@@ -33,15 +33,16 @@ def holder(common_db: Session, field: str, value, exclude_user_uid: Optional[str
     return query.first()
 
 
-def find_for_login(common_db: Session, key: Optional[str], user_type: str) -> list[UserRegistry]:
-    """Every `user_type` entry a sign-in's typed `key` (already `login_key`'d) names: by username, HO
-    ID or ID, or - all digits - by phone. More than one only for a phone two people share."""
+def find_for_login(common_db: Session, key: Optional[str]) -> list[UserRegistry]:
+    """Every entry a sign-in's typed `key` (already `login_key`'d) names: by username, HO ID or ID, or
+    - all digits - by phone; trainees and trainers alike (their company record says which). More than
+    one only for a phone two people share."""
     if not key:
         return []
     conditions = [UserRegistry.username == key, UserRegistry.hoid == key, func.lower(UserRegistry.user_uid) == key]
     if key.isascii() and key.isdigit() and len(key) <= 15:   # fits the BIGINT column
         conditions.append(UserRegistry.phone == int(key))
-    return common_db.query(UserRegistry).filter(UserRegistry.user_type == user_type, or_(*conditions)).all()
+    return common_db.query(UserRegistry).filter(or_(*conditions)).all()
 
 
 def list_all(common_db: Session) -> list[UserRegistry]:

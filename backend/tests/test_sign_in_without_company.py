@@ -85,12 +85,17 @@ class TraineesSignInWithoutACompanyCode(SignInTestCase):
                 response = self.trainee_sign_in(identifier, password)
                 self.assertEqual((response.status_code, response.json()["detail"]), (401, trainee_service.LOGIN_FAILED))
 
-    def test_a_disabled_or_pending_entry_can_t_sign_in(self):
-        for status in ("disabled", "pending"):
-            with self.subTest(status=status):
-                self.entry("TR-S_N1-0").status = status
-                self.common.commit()
-                self.assertEqual(self.trainee_sign_in("user1").status_code, 401)
+    def test_a_disabled_entry_can_t_sign_in(self):
+        self.entry("TR-S_N1-0").status = "disabled"
+        self.common.commit()
+        self.assertEqual(self.trainee_sign_in("user1").status_code, 401)
+
+    def test_a_pending_entry_whose_company_record_is_saved_is_finished_and_signs_in(self):
+        # A registration whose last step failed (user, 2026-10-20: entries in both databases).
+        self.entry("TR-S_N1-0").status = "pending"
+        self.common.commit()
+        self.assertEqual(self.trainee_sign_in("user1").status_code, 200)
+        self.assertEqual(self.entry("TR-S_N1-0").status, "active")
 
     def test_an_entry_whose_company_record_is_gone_is_refused_and_disabled(self):
         self.alpha.delete(self.trainee(self.alpha, "TR-S_N1-1"))

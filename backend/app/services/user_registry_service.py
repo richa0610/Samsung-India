@@ -3,10 +3,11 @@ the shared Common Database (models/common/user_registry.py), so a person can sig
 username and password and the server still knows their company.
 
 Registering someone touches two databases no single transaction covers, so it runs in this order:
-  1. take the person's ID from the shared counter (it never repeats across companies) and reserve a
-     `pending` registry row - one Common DB transaction. Its unique columns refuse a username, HO ID
-     or ID another account holds, even when two registrations race;
-  2. save the company record;
+  1. take the person's ID from their company's own counter - first raised past every ID the registry
+     holds, so it never repeats another company's - and reserve a `pending` registry row. Its unique
+     columns refuse a username, HO ID or ID another account holds, even when two registrations race:
+     an ID another company took at the same moment is given up for the next one;
+  2. save the company record (and the counter claim with it);
   3. read it back, then mark the registry row `active`.
 A failure in 2 releases the reservation. A crash between 2 and 3 leaves a `pending` row that
 `reconcile_tenant` settles: record there -> active, else removed. Accounts changed outside this app
@@ -14,11 +15,11 @@ A failure in 2 releases the reservation. A crash between 2 and 3 leaves a `pendi
 
 import logging
 from dataclasses import dataclass, field
-from datetime import timedelta
+from itertools import chain
 from typing import Callable, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -48,15 +49,16 @@ NOT_READY = (
 # The start of a `remarks` the sync writes when it disables a row - the only disabled rows a later
 # sync may enable again (one an admin disabled stays disabled).
 SYNC_REMARK = "sync: "
-# How long a reservation may stay `pending` before a sync treats its registration as abandoned.
-PENDING_GRACE = timedelta(minutes=5)
+# How many IDs a registration tries when other companies keep taking the one it claimed meanwhile.
+ID_ATTEMPTS = 3
 
 OpenTenant = Callable[[str], Session]
 
 
 @dataclass(frozen=True)
 class Account:
-    """The registry's view of one company record."""
+    """The registry's view of one company record. `user_type` is the table it came from - read, never
+    stored."""
 
     user_type: str
     user_uid: Optional[str]
@@ -97,59 +99,39 @@ def ensure_available(common_db: Session, *, username=None, hoid=None, exclude_us
         raise bad_request(HOID_TAKEN)
 
 
-def claim_trainee_uid(common_db: Session, zone, open_tenant: Optional[OpenTenant] = None) -> str:
-    """The next trainee ID from the shared counter, inside `common_db`'s transaction - committed with
-    the reservation, rolled back with it. A prefix the shared counter has never issued starts above
-    every number any company has used for it."""
-    _ensure_shared_counter(common_db, uid_events.trainee_uid_prefix(zone), Trainee.traineeUid, open_tenant)
-    return uid_events.new_trainee_uid(common_db.connection(), zone)
+def claim_trainee_uid(common_db: Session, db: Session, zone) -> str:
+    """The next trainee ID for a trainee of `db`'s company, inside `db`'s transaction - committed with
+    the company record, rolled back with it (`first_unused_number` says where it starts)."""
+    prefix = uid_events.trainee_uid_prefix(zone)
+    uid_utils.raise_counter_floor(db.connection(), prefix, first_unused_number(common_db, db, prefix, Trainee.traineeUid))
+    return uid_events.new_trainee_uid(db.connection(), zone)
 
 
-def claim_trainer_uid(common_db: Session, open_tenant: Optional[OpenTenant] = None) -> str:
-    """The next trainer ID (AGT...) from the shared counter, inside `common_db`'s transaction. This app
-    never creates trainers (the PHP system does); a maintenance script uses this to give a company's
-    trainers IDs no other company has (scripts/reissue_people_ids.py)."""
+def claim_trainer_uid(common_db: Session, db: Session) -> str:
+    """The next trainer ID (AGT...) for `db`'s company, inside `db`'s transaction. This app never
+    creates trainers (the PHP system does); a maintenance script uses this to give a company's trainers
+    IDs no other company has (scripts/reissue_people_ids.py)."""
     prefix = uid_events.TRAINER_UID_PREFIX
-    _ensure_shared_counter(common_db, prefix, AgencyTeam.agencyTeamUid, open_tenant)
-    return uid_events.next_uid(common_db.connection(), prefix)
+    uid_utils.raise_counter_floor(db.connection(), prefix, first_unused_number(common_db, db, prefix, AgencyTeam.agencyTeamUid))
+    return uid_events.next_uid(db.connection(), prefix)
 
 
-def _ensure_shared_counter(common_db: Session, prefix: str, column, open_tenant: Optional[OpenTenant]) -> None:
-    connection = common_db.connection()
-    if not uid_utils.counter_exists(connection, prefix):
-        floor = first_unused_in_companies(common_db, prefix, open_tenant or _open_tenant(common_db), column)
-        uid_utils.raise_counter_floor(connection, prefix, floor)
+def first_unused_number(common_db: Session, db: Session, prefix: str, column=Trainee.traineeUid) -> int:
+    """The first number for `prefix` that neither the registry (every company's people) nor `db`'s
+    company has used: past that company's own counter and every ID in `column` (a trainee's, or a
+    trainer's) it carries - one the sync hasn't brought into the registry yet included."""
+    counter = db.execute(select(UidSequence.next_val).where(UidSequence.prefix == prefix)).scalar()
+    own = db.execute(select(column).where(column.like(f"{prefix}%"))).scalars()
+    registered = common_db.execute(select(UserRegistry.user_uid).where(UserRegistry.user_uid.like(f"{prefix}%"))).scalars()
+    serials = [serial for serial in (uid_utils.serial_of(uid, prefix) for uid in chain(own, registered)) if serial is not None]
+    return max(uid_utils.START, counter or uid_utils.START, max(serials, default=0) + 1)
 
 
-def first_unused_in_companies(common_db: Session, prefix: str, open_tenant: OpenTenant, column=Trainee.traineeUid) -> int:
-    """The first number no active company has used for `prefix`: past each one's own counter and every
-    ID in `column` (a trainee's, or a trainer's) it carries. A company that can't be read refuses
-    (503) rather than risk issuing an ID it already has. Each session opened here is closed here."""
-    floor = uid_utils.START
-    for tenant_uid in tenant_repository.list_active_uids(common_db):
-        try:
-            tenant_db = open_tenant(tenant_uid)
-        except HTTPException:
-            logger.exception("Can't read tenant '%s' to start the shared '%s' counter", tenant_uid, prefix)
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=UNAVAILABLE)
-        try:
-            counter = tenant_db.execute(select(UidSequence.next_val).where(UidSequence.prefix == prefix)).scalar()
-            uids = tenant_db.execute(select(column).where(column.like(f"{prefix}%"))).scalars()
-            serials = [serial for serial in (uid_utils.serial_of(uid, prefix) for uid in uids) if serial is not None]
-        except SQLAlchemyError:
-            logger.exception("Can't read tenant '%s' to start the shared '%s' counter", tenant_uid, prefix)
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=UNAVAILABLE)
-        finally:
-            tenant_db.close()
-        floor = max(floor, counter or uid_utils.START, max(serials, default=0) + 1)
-    return floor
-
-
-def _reserve(common_db: Session, tenant_uid: str, account: Account) -> UserRegistry:
-    """Commits a `pending` row (and the counter claim before it). The unique columns refuse what
-    another account took meanwhile - a 400 naming it, with nothing kept."""
+def _reserve(common_db: Session, tenant_uid: str, account: Account) -> Optional[UserRegistry]:
+    """Commits a `pending` row. The unique columns refuse what another account took meanwhile: an ID
+    -> None (the caller claims the next); a username or HO ID -> a 400 naming it. Nothing is kept."""
     entry = UserRegistry(
-        tenant_uid=tenant_uid, user_type=account.user_type, user_uid=account.user_uid, username=account.username,
+        tenant_uid=tenant_uid, user_uid=account.user_uid, username=account.username,
         hoid=account.hoid, phone=account.phone, password_hash=account.password_hash, status="pending",
     )
     common_db.add(entry)
@@ -157,6 +139,8 @@ def _reserve(common_db: Session, tenant_uid: str, account: Account) -> UserRegis
         common_db.commit()
     except IntegrityError:
         common_db.rollback()
+        if registry.get_by_uid(common_db, account.user_uid) is not None:
+            return None
         ensure_available(common_db, username=account.username, hoid=account.hoid)
         raise bad_request(ALREADY_REGISTERED)
     return entry
@@ -185,10 +169,22 @@ def register_trainee(
     docstring gives; the trainee comes back saved. `username_is_id`: a trainee registered without a
     username signs in with the ID the app made."""
     ensure_available(common_db, username=trainee.username, hoid=trainee.employee_id)
-    trainee.traineeUid = claim_trainee_uid(common_db, trainee.zone)
-    if username_is_id and not trainee.username:
-        trainee.username = trainee.traineeUid
-    entry = _reserve(common_db, tenant_uid, account_of(trainee))
+    username_is_id = username_is_id and not trainee.username
+    try:
+        for _attempt in range(ID_ATTEMPTS):
+            trainee.traineeUid = claim_trainee_uid(common_db, db, trainee.zone)
+            if username_is_id:
+                trainee.username = trainee.traineeUid
+            entry = _reserve(common_db, tenant_uid, account_of(trainee))
+            if entry is not None:
+                break
+            db.rollback()   # gives the claimed number back; the next claim starts past the taken ID
+        else:
+            logger.error("Registry kept refusing new '%s' IDs - registration refused", trainee.traineeUid)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=UNAVAILABLE)
+    except Exception:
+        db.rollback()
+        raise
 
     try:
         trainee = trainee_repository.create(db, trainee)
@@ -225,7 +221,7 @@ def sync_account(common_db: Session, tenant_uid: Optional[str], record: Trainee 
         if entry is None:
             if not tenant_uid:
                 return
-            entry = UserRegistry(tenant_uid=tenant_uid, user_type=account.user_type, user_uid=account.user_uid)
+            entry = UserRegistry(tenant_uid=tenant_uid, user_uid=account.user_uid)
             common_db.add(entry)
         elif entry.tenant_uid != tenant_uid:
             logger.warning("Registry row %s belongs to tenant '%s', not '%s' - left alone", account.user_uid, entry.tenant_uid, tenant_uid)
@@ -306,7 +302,6 @@ def _apply(entry: UserRegistry, account: Account, holders: dict, report: Reconci
         if value:
             holders[attr][value] = entry
         put(attr, value)
-    put("user_type", account.user_type)
     put("phone", account.phone)
     put("password_hash", account.password_hash)
 
@@ -352,7 +347,7 @@ def reconcile_tenant(
             report.skipped.append((account.user_uid, f"ID already registered to company {entry.tenant_uid}"))
             continue
         if entry is None:
-            entry = UserRegistry(tenant_uid=tenant_uid, user_type=account.user_type, user_uid=account.user_uid)
+            entry = UserRegistry(tenant_uid=tenant_uid, user_uid=account.user_uid)
             _apply(entry, account, holders, report)
             common_db.add(entry)
             by_uid[key] = entry
@@ -363,16 +358,16 @@ def reconcile_tenant(
         else:
             report.unchanged += 1
 
-    now = common_db.execute(select(func.now())).scalar()
     for entry in list(rows):
         if entry.tenant_uid != tenant_uid or entry.user_uid.lower() in seen:
             continue
         if entry.status == "pending":
-            if entry.created_at is not None and entry.created_at <= now - PENDING_GRACE:
-                common_db.delete(entry)
-                rows.remove(entry)
-                by_uid.pop(entry.user_uid.lower(), None)
-                report.removed += 1
+            # No company record: a registration that failed. One still saving it at this very moment
+            # finds its reservation gone - it answers NOT_READY, and the next sync adds the row back.
+            common_db.delete(entry)
+            rows.remove(entry)
+            by_uid.pop(entry.user_uid.lower(), None)
+            report.removed += 1
         elif entry.status == "active":
             entry.status = "disabled"
             entry.remarks = f"{SYNC_REMARK}no longer in the company database"

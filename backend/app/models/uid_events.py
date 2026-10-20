@@ -99,15 +99,16 @@ def trainee_uid_prefix(zone) -> str:
 
 
 def new_trainee_uid(connection, zone) -> str:
-    """The next trainee ID from the counter on `connection`. The app's registrations pass the Common
-    Database's, so no two companies ever issue the same ID (services/user_registry_service)."""
+    """The next trainee ID from the counter on `connection` - the company database's. The app's
+    registrations raise that counter past every ID the central user registry holds first, so no two
+    companies issue the same ID (services/user_registry_service)."""
     return next_uid(connection, trainee_uid_prefix(zone))
 
 
 @event.listens_for(Trainee, "before_insert")
 def _fill_trainee_uid(mapper, connection, target):
-    """Only for a trainee saved without an ID - the app's registrations set one first, from the shared
-    counter; a script's insert falls back to its company's own counter."""
+    """Only for a trainee saved without an ID - the app's registrations set one first, one no other
+    company has; a script's insert takes its company's next number as it is."""
     if not target.traineeUid:
         target.traineeUid = new_trainee_uid(connection, target.zone)
 

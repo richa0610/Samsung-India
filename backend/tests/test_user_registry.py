@@ -4,14 +4,14 @@ with each company by the sync. Login doesn't use it yet (Phase 2).
 
 Synthetic TenantWorld (in-memory SQLite) only - no real database is touched."""
 
-from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
-from fastapi import HTTPException
+from sqlalchemy import delete
 from sqlalchemy.exc import OperationalError
 
 from app.core import rate_limit
 from app.core.security import create_access_token, hash_password, verify_password
+from app.database.connection import CommonBase
 from app.database.tenant import tenant_manager
 from app.models.agency_team import AgencyTeam
 from app.models.common.user_registry import UserRegistry
@@ -28,7 +28,7 @@ class RegistryTestCase(TrainerWorldTestCase):
         super().setUp()
         rate_limit.reset()
         self.addCleanup(rate_limit.reset)
-        # The world stubs ID generation; these tests need the real counters, the shared one included.
+        # The world stubs ID generation; these tests need the real counters.
         real_ids = patch("app.models.uid_events.next_uid", uid_utils.next_uid)
         real_ids.start()
         self.addCleanup(real_ids.stop)
@@ -65,7 +65,7 @@ class RegistryTestCase(TrainerWorldTestCase):
         return db.query(Trainee).filter(Trainee.traineeUid == user_uid).one_or_none()
 
     def add_entry(self, **fields):
-        row = UserRegistry(**{"tenant_uid": BETA, "user_type": "trainee", "status": "active", **fields})
+        row = UserRegistry(**{"tenant_uid": BETA, "status": "active", **fields})
         self.common.add(row)
         self.common.commit()
         return row
@@ -81,8 +81,8 @@ class RegistrationWritesTheRegistry(RegistryTestCase):
         uid = response.json()["traineeUid"]
         record, entry = self.record(self.alpha, uid), self.entry(uid)
         self.assertEqual(
-            (entry.tenant_uid, entry.user_type, entry.username, entry.phone, entry.status, entry.max_devices),
-            (ALPHA, "trainee", "placement.one", record.phone, "active", 2),
+            (entry.tenant_uid, entry.username, entry.phone, entry.status, entry.max_devices),
+            (ALPHA, "placement.one", record.phone, "active", 2),
         )
         self.assertEqual(entry.password_hash, record.password)
 
@@ -99,33 +99,58 @@ class RegistrationWritesTheRegistry(RegistryTestCase):
 
 
 class IdsNeverRepeatAcrossCompanies(RegistryTestCase):
-    def test_two_companies_take_consecutive_ids_from_the_shared_counter(self):
+    def year(self):
+        return f"{uid_utils.ist_now().year % 100:02d}"
+
+    def test_a_company_s_next_id_starts_past_every_id_the_registry_holds(self):
         first = self.self_register(ALPHA).json()["trainee"]["traineeUid"]
-        second = self.self_register(BETA).json()["trainee"]["traineeUid"]
+        second = self.self_register(BETA).json()["trainee"]["traineeUid"]   # BETA's own counter is new
         self.assertNotEqual(first, second)
         self.assertEqual(uid_utils.serial_of(second, "TRN"), uid_utils.serial_of(first, "TRN") + 1)
 
-    def test_the_shared_counter_starts_above_every_company_s_numbers(self):
-        self.alpha.add(UidSequence(prefix="TRN", next_val=10050))   # ALPHA's own counter
-        self.alpha.commit()
-        self.beta.add(Trainee(traineeUid="TRN2610077", name="B", email="b77@example.test", phone=9_600_000_077))  # an ID BETA carries
-        self.beta.commit()
+    def test_an_id_another_company_registered_is_never_issued_again(self):
+        self.add_entry(user_uid=f"TRN{self.year()}10077")   # BETA's, in the registry
         uid = self.self_register(ALPHA).json()["trainee"]["traineeUid"]
         self.assertEqual(uid_utils.serial_of(uid, "TRN"), 10078)
 
-    def test_a_company_that_can_t_be_read_refuses_the_first_registration(self):
-        real = tenant_manager.get_session
+    def test_the_company_s_own_counter_and_ids_count_too(self):
+        self.alpha.add(UidSequence(prefix="TRN", next_val=10050))
+        self.alpha.add(Trainee(traineeUid=f"TRN{self.year()}10060", name="A", email="a60@example.test", phone=9_600_000_060))
+        self.alpha.commit()   # an ID the sync hasn't brought into the registry yet
+        uid = self.self_register(ALPHA).json()["trainee"]["traineeUid"]
+        self.assertEqual(uid_utils.serial_of(uid, "TRN"), 10061)
 
-        def beta_is_down(tenant_uid, common_db=None):
-            if tenant_uid == BETA:
-                raise HTTPException(status_code=503, detail="down")
-            return real(tenant_uid, common_db)
+    def another_company_takes(self, times):
+        """Patches the ID claim so that BETA registers the number ALPHA is about to take, `times` times."""
+        real, taken = registry_service.first_unused_number, []
 
-        with patch.object(tenant_manager, "get_session", side_effect=beta_is_down):
+        def first_unused_number(common_db, db, prefix, column):
+            number = real(common_db, db, prefix, column)
+            if len(taken) < times:
+                taken.append(self.add_entry(user_uid=f"{prefix}{self.year()}{number:05d}").user_uid)
+            return number
+        return patch.object(registry_service, "first_unused_number", side_effect=first_unused_number), taken
+
+    def test_an_id_another_company_takes_at_the_same_moment_is_given_up_for_the_next(self):
+        patched, taken = self.another_company_takes(1)
+        with patched:
+            response = self.self_register(ALPHA)
+        self.assertEqual(response.status_code, 201, response.text)
+        uid = response.json()["trainee"]["traineeUid"]
+        self.assertEqual(uid_utils.serial_of(uid, "TRN"), uid_utils.serial_of(taken[0], "TRN") + 1)
+        self.assertEqual((self.entry(uid).tenant_uid, self.entry(uid).status), (ALPHA, "active"))
+        self.alpha.expire_all()
+        self.assertEqual(self.alpha.query(UidSequence).filter_by(prefix="TRN").one().next_val, uid_utils.serial_of(uid, "TRN") + 1)
+
+    def test_ids_taken_every_time_refuse_the_registration_and_save_nothing(self):
+        patched, taken = self.another_company_takes(registry_service.ID_ATTEMPTS)
+        with patched:
             response = self.self_register(ALPHA)
         self.assertEqual(response.status_code, 503, response.text)
-        self.assertEqual(self.entries(), [])
+        self.assertEqual(sorted(entry.user_uid for entry in self.entries()), sorted(taken))
+        self.alpha.expire_all()
         self.assertIsNone(self.alpha.query(Trainee).filter(Trainee.email == "new1@example.com").first())
+        self.assertIsNone(self.alpha.query(UidSequence).filter_by(prefix="TRN").first())   # no number used up
 
 
 class ClashesAreRefusedBeforeAnythingIsSaved(RegistryTestCase):
@@ -150,7 +175,7 @@ class ClashesAreRefusedBeforeAnythingIsSaved(RegistryTestCase):
         def another_registration_wins(common_db, **kwargs):
             if not calls:   # this request checked just before the other one saved
                 calls.append(1)
-                common_db.add(UserRegistry(tenant_uid=BETA, user_type="trainee", user_uid="TRN-OTHER", username="racer", status="active"))
+                common_db.add(UserRegistry(tenant_uid=BETA, user_uid="TRN-OTHER", username="racer", status="active"))
                 common_db.commit()
                 return
             return real(common_db, **kwargs)
@@ -184,12 +209,46 @@ class HalfFinishedRegistrationsRecover(RegistryTestCase):
         self.sync()
         self.assertEqual(self.entry(entry.user_uid).status, "active")
 
-    def test_the_sync_removes_a_reservation_that_never_finished_and_keeps_a_fresh_one(self):
-        self.add_entry(tenant_uid=ALPHA, user_uid="TRN2699998", status="pending", created_at=datetime.utcnow() - timedelta(minutes=10))
-        self.add_entry(tenant_uid=ALPHA, user_uid="TRN2699999", status="pending")
+    def test_a_failed_activation_is_finished_by_the_first_sign_in(self):
+        down = OperationalError("UPDATE", {}, Exception("common database blipped"))
+        with patch.object(registry_service, "_activate", side_effect=down):
+            self.assertEqual(self.staff_register().status_code, 503)
+        # No company code: the registry alone finds the company, even before any sync has run.
+        response = self.w.client.post("/trainees/login", json={"identifier": "placement1", "password": "Correct-Horse-9"})
+        self.assertEqual(response.status_code, 200, response.text)
+        (entry,) = self.entries()
+        self.assertEqual((entry.tenant_uid, entry.status), (ALPHA, "active"))
+        self.assertIsNotNone(entry.devices)   # signed in on a device, like any active account
+
+    def test_a_reservation_whose_company_record_isn_t_saved_yet_is_left_to_the_sync(self):
+        self.add_entry(tenant_uid=ALPHA, user_uid="TRN2699997", username="halfway", password_hash=hash_password("Correct-Horse-9"), status="pending")
+        response = self.w.client.post("/trainees/login", json={"identifier": "halfway", "password": "Correct-Horse-9"})
+        self.assertEqual(response.status_code, 401, response.text)
+        self.assertEqual(self.entry("TRN2699997").status, "pending")   # not disabled: it may still be saving
+
+    def test_the_sync_removes_a_reservation_whose_company_record_was_never_saved(self):
+        self.add_entry(tenant_uid=ALPHA, user_uid="TRN2699998", status="pending")
         self.assertEqual(self.sync().removed, 1)
         self.assertIsNone(self.entry("TRN2699998"))
-        self.assertEqual(self.entry("TRN2699999").status, "pending")
+
+    def test_a_registration_whose_reservation_the_sync_removed_meanwhile_says_not_ready(self):
+        real = registry_service._activate
+
+        def sync_runs_first(common_db, entry):
+            # A sync in another process, between the company save and the activation.
+            common_db.execute(delete(UserRegistry.__table__).where(UserRegistry.__table__.c.id == entry.id))
+            common_db.commit()
+            real(common_db, entry)
+
+        with patch.object(registry_service, "_activate", side_effect=sync_runs_first):
+            response = self.staff_register()
+        self.assertEqual(response.status_code, 503, response.text)
+        self.assertEqual(response.json()["detail"], registry_service.NOT_READY)
+        self.assertEqual(self.entries(), [])
+        self.common.expunge_all()   # the removed row's object - SQLite gives the next row its id again
+        self.sync()
+        (entry,) = [entry for entry in self.entries() if entry.username == "placement1"]
+        self.assertEqual(entry.status, "active")
 
 
 class ProfileChangesReachTheRegistry(RegistryTestCase):
@@ -219,7 +278,7 @@ class ProfileChangesReachTheRegistry(RegistryTestCase):
         response = self.w.client.patch("/admin/profile", json={"password": "Brand-New-7"}, headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 200, response.text)
         entry = self.entry("g1")
-        self.assertEqual((entry.tenant_uid, entry.user_type, entry.status), (ALPHA, "trainer", "active"))
+        self.assertEqual((entry.tenant_uid, entry.status), (ALPHA, "active"))
         self.assertTrue(verify_password("Brand-New-7", entry.password_hash))
 
 
@@ -238,7 +297,7 @@ class TheSyncMatchesEachCompany(RegistryTestCase):
         self.assertEqual(len(entries), self.company_accounts())
         self.assertEqual({entry.tenant_uid for entry in entries}, {ALPHA})
         trainer = self.entry("g1")
-        self.assertEqual((trainer.user_type, trainer.username, trainer.hoid, trainer.status), ("trainer", "trainer1", "off1", "active"))
+        self.assertEqual((trainer.username, trainer.hoid, trainer.status), ("trainer1", "off1", "active"))
         self.assertEqual(self.entry("TR-S_N1-0").password_hash, self.record(self.alpha, "TR-S_N1-0").password)
 
         again = self.sync()
@@ -323,9 +382,19 @@ class CompanySessionsAreClosed(RegistryTestCase):
         self.assertEqual({report.tenant_uid for report in reports}, {ALPHA, BETA})
         self.assertTrue(sessions and all(session.close.called for _uid, session in sessions))
 
-    def test_starting_the_shared_counter_closes_the_company_sessions_it_reads(self):
+    def test_a_registration_reads_no_other_company_s_database(self):
         sessions = []
         with patch.object(tenant_manager, "get_session", side_effect=self.tracked(sessions)):
             self.assertEqual(self.self_register(ALPHA).status_code, 201)
-        self.assertIn(BETA, [uid for uid, _session in sessions])   # every company was read
-        self.assertTrue(all(session.close.called for _uid, session in sessions))
+        self.assertNotIn(BETA, [uid for uid, _session in sessions])   # the registry stands for them
+
+
+class TheCommonDatabaseKeepsOnlyTheRegistry(RegistryTestCase):
+    def test_no_type_or_time_columns_and_no_counter_or_session_table(self):
+        # user, 2026-10-20: the type is read from the company table; devices live in the row.
+        self.assertEqual(
+            set(UserRegistry.__table__.columns.keys()),
+            {"id", "tenant_uid", "user_uid", "username", "hoid", "phone", "password_hash", "max_devices", "status",
+             "remarks", "devices"},
+        )
+        self.assertFalse({"uid_sequence", "login_sessions"} & set(CommonBase.metadata.tables))

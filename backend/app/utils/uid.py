@@ -9,8 +9,9 @@ Assessment answers and results follow the other system's style instead (user, 20
 The running counter per prefix lives in the ``uid_sequence`` table so every
 insert path shares one source of truth - the ORM ``before_insert`` hooks in
 ``app/models/uid_events.py``, seed scripts, and the one-off
-``scripts/migrate_uids.py``. Each company database has one; the Common Database has one too, for the
-IDs that must never repeat across companies (a trainee's - services/user_registry_service).
+``scripts/migrate_uids.py``. Each company database has one (the Common Database has none). A trainee's
+ID must never repeat across companies: the app's registrations raise their company's counter past every
+ID the central user registry holds first (services/user_registry_service).
 """
 
 import re

@@ -1,6 +1,7 @@
 """scripts/reissue_people_ids.py (user, 2026-10-20): gives a company's people IDs and HO IDs no other
 company uses, so they can join the central user registry - the demo company's repeated Samsung's.
-BETA plays the demo company here, ALPHA the company whose IDs it repeats.
+BETA plays the demo company here, ALPHA the company whose IDs it repeats - already in the registry, as
+the sync puts it there before the script runs.
 
 Synthetic TenantWorld (in-memory SQLite) and a temporary backup folder only."""
 
@@ -10,11 +11,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.core.config import settings
-from app.database.tenant import tenant_manager
 from app.models.agency_team import AgencyTeam
 from app.models.attendance import Attendance
 from app.models.quiz import AssessmentResult
 from app.models.trainee import Trainee
+from app.models.uid_sequence import UidSequence
 from app.services import user_registry_service as registry_service
 from app.utils import uid as uid_utils
 from scripts import reissue_people_ids as reissue
@@ -32,7 +33,10 @@ class ReissueTestCase(TrainerWorldTestCase):
         # ALPHA already uses these numbers; BETA repeats them (as Demo repeated Samsung).
         self.alpha.add(Trainee(traineeUid="TRN2610007", name="A", email="a7@example.test", phone=9_300_000_007, employee_id="EMP26007"))
         self.alpha.add(AgencyTeam(agencyTeamUid="AGT2610005", username="alpha.trainer", password="x", role="trainer", offerId="OFF26005"))
+        # Only ALPHA has this one - BETA learns of it from the registry alone.
+        self.alpha.add(AgencyTeam(agencyTeamUid="AGT2610009", username="alpha.trainer2", password="x", role="trainer", offerId="OFF26009"))
         self.alpha.commit()
+        registry_service.reconcile_tenant(self.common, self.alpha, ALPHA)
         for model in (Attendance, AssessmentResult):   # nothing recorded against BETA's old IDs
             self.beta.query(model).delete()
         self.beta.add(Trainee(traineeUid="TRN2610007", name="B", email="b7@example.test", phone=9_400_000_007, employee_id="EMP26007"))
@@ -40,32 +44,27 @@ class ReissueTestCase(TrainerWorldTestCase):
         self.beta.commit()
         self.backups = Path(tempfile.mkdtemp())
 
-    def open_tenant(self, tenant_uid):
-        return tenant_manager.get_session(tenant_uid, self.common)
-
     def alpha_uids(self):
         return {uid for (uid,) in self.alpha.query(Trainee.traineeUid)} | {uid for (uid,) in self.alpha.query(AgencyTeam.agencyTeamUid)}
 
 
 class TheDryRun(ReissueTestCase):
-    def test_new_ids_start_above_every_company_s_numbers_and_nothing_is_written(self):
+    def test_new_ids_start_past_every_registered_id_and_nothing_is_written(self):
         before = [(t.traineeUid, t.employee_id) for t in self.beta.query(Trainee).order_by(Trainee.id)]
-        changes = reissue.plan_reissue(self.common, self.beta, BETA, self.open_tenant)
-        self.common.rollback()
+        changes = reissue.plan_reissue(self.common, self.beta, BETA)
         by_old = {change.old_uid: change for change in changes}
-        self.assertEqual(by_old["AGT2610005"].new_uid, f"AGT{uid_utils.ist_now().year % 100:02d}10006")
+        self.assertEqual(by_old["AGT2610005"].new_uid, f"AGT{uid_utils.ist_now().year % 100:02d}10010")
         self.assertEqual(by_old["TRN2610007"].new_hoid, "BETA-EMP-003")
         self.assertFalse({change.new_uid for change in changes} & self.alpha_uids())
         self.beta.expire_all()
         self.assertEqual([(t.traineeUid, t.employee_id) for t in self.beta.query(Trainee).order_by(Trainee.id)], before)
-        self.assertEqual(self.common.execute(reissue.text("SELECT COUNT(*) FROM uid_sequence")).scalar(), 0)
+        self.assertEqual(self.beta.query(UidSequence).count(), 0)   # no counter touched
 
 
 class Applying(ReissueTestCase):
     def test_the_people_get_the_planned_ids_a_backup_is_kept_and_the_registry_takes_them_all(self):
-        planned = reissue.plan_reissue(self.common, self.beta, BETA, self.open_tenant)
-        self.common.rollback()
-        changes, backup = reissue.apply_reissue(self.common, self.beta, BETA, self.open_tenant, self.backups)
+        planned = reissue.plan_reissue(self.common, self.beta, BETA)
+        changes, backup = reissue.apply_reissue(self.common, self.beta, BETA, self.backups)
         self.assertEqual([c.new_uid for c in changes], [c.new_uid for c in planned])
 
         self.beta.expire_all()
@@ -80,7 +79,7 @@ class Applying(ReissueTestCase):
         self.assertEqual(report.skipped, [])
 
     def test_undo_puts_back_the_old_ids_on_rows_unchanged_since(self):
-        changes, backup = reissue.apply_reissue(self.common, self.beta, BETA, self.open_tenant, self.backups)
+        changes, backup = reissue.apply_reissue(self.common, self.beta, BETA, self.backups)
         moved = self.beta.query(Trainee).filter_by(traineeUid=changes[0].new_uid).one()
         moved.traineeUid = "CHANGED-SINCE"
         self.beta.commit()
@@ -93,14 +92,14 @@ class Applying(ReissueTestCase):
 class WhatIsRefused(ReissueTestCase):
     def test_the_default_company(self):
         with patch.object(settings, "DEFAULT_TENANT_ID", BETA), self.assertRaises(SystemExit):
-            reissue.plan_reissue(self.common, self.beta, BETA, self.open_tenant)
+            reissue.plan_reissue(self.common, self.beta, BETA)
 
     def test_a_company_with_attendance_recorded_against_the_old_ids(self):
         with self.assertRaises(SystemExit):
-            reissue.plan_reissue(self.common, self.alpha, ALPHA, self.open_tenant)   # ALPHA has attendance
+            reissue.plan_reissue(self.common, self.alpha, ALPHA)   # ALPHA has attendance
 
     def test_a_new_ho_id_another_company_already_holds(self):
-        self.common.add(registry_service.UserRegistry(tenant_uid=ALPHA, user_type="trainee", user_uid="X1", hoid="beta-emp-001", status="active"))
+        self.common.add(registry_service.UserRegistry(tenant_uid=ALPHA, user_uid="X1", hoid="beta-emp-001", status="active"))
         self.common.commit()
         with self.assertRaises(SystemExit):
-            reissue.plan_reissue(self.common, self.beta, BETA, self.open_tenant)
+            reissue.plan_reissue(self.common, self.beta, BETA)
