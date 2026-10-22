@@ -251,3 +251,23 @@ test("without location the action still goes ahead, just with no position", asyn
   expect(getCurrentCoordinates).not.toHaveBeenCalledWith(1000);   // never asks for a fix it may not take
   await unmount();
 });
+
+test("the Live Studio refreshes the moment the live question's time is up, not at the next poll", async () => {
+  const running = (timerEndsAt: number, serverNowMs: number) =>
+    ({
+      conferenceUid: "CONF-1",
+      conferenceStatus: "Ongoing",
+      liveStudio: { state: "QUESTION_LIVE", timerRemainingMs: null, timerEndsAt, serverNowMs },
+    }) as never;
+  mockFetch.mockResolvedValueOnce(running(1_000_000 + 3_000, 1_000_000));   // 3 s left
+  mockFetch.mockResolvedValue({ conferenceUid: "CONF-1", conferenceStatus: "Ongoing", liveStudio: { state: "IDLE" } } as never);
+  const { result, unmount } = await renderHook(() => useSessionDashboardScreen());
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+
+  await act(async () => jest.advanceTimersByTime(3_400));
+  expect(mockFetch).toHaveBeenCalledTimes(1);   // not yet - the time isn't up
+  await act(async () => jest.advanceTimersByTime(200));
+  expect(mockFetch).toHaveBeenCalledTimes(2);   // 3.5 s: well before the 5 s poll
+  expect(result.current.data?.liveStudio?.state).toBe("IDLE");
+  await unmount();
+});

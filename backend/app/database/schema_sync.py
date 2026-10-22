@@ -52,6 +52,43 @@ def _add_column(engine: Engine, table_name: str, column: Column) -> None:
         logger.exception("Schema sync: failed to add %s.%s", table_name, column.name)
 
 
+def relax_columns(engine: Engine, table_name: str, wanted: dict[str, tuple[bool, str | None]]) -> list[str]:
+    """Loosens existing MySQL columns to `wanted` - {column: (may be NULL, DEFAULT clause or None)} -
+    for a model that relaxed a column after its table went live (create_all and the column sync never
+    alter one). Only ever loosens: a NOT NULL column may become NULL, a column without a default gets
+    one; each keeps its live type and collation. A column already as wanted is left alone, so this is
+    safe on every startup; one failure is logged and the rest still run. Returns what it changed."""
+    if engine.dialect.name != "mysql":
+        return []
+    changed = []
+    with engine.connect() as conn:
+        live = {row.COLUMN_NAME: row for row in conn.execute(text(
+            "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLLATION_NAME FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = :t"), {"t": table_name})}
+    for column, (nullable, default) in wanted.items():
+        row = live.get(column)
+        if row is None:
+            continue
+        needs_null = nullable and row.IS_NULLABLE == "NO"
+        needs_default = default is not None and row.COLUMN_DEFAULT is None
+        if not (needs_null or needs_default):
+            continue
+        ddl = f"ALTER TABLE {table_name} MODIFY {column} {row.COLUMN_TYPE}"
+        if row.COLLATION_NAME:
+            ddl += f" COLLATE {row.COLLATION_NAME}"
+        ddl += " NULL" if nullable or row.IS_NULLABLE == "YES" else " NOT NULL"
+        if default is not None:
+            ddl += f" DEFAULT {default}"
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
+            changed.append(column)
+            logger.warning("Schema sync: relaxed %s.%s", table_name, column)
+        except Exception:
+            logger.exception("Schema sync: failed to relax %s.%s", table_name, column)
+    return changed
+
+
 def sync_missing_indexes(engine: Engine, base) -> None:
     """Same idea as sync_missing_columns, for indexes: `create_all()` never adds
     an index to a table that already exists, so an `Index(...)` declared on a

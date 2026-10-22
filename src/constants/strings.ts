@@ -45,11 +45,10 @@ export const COMPANY_TEXT = {
   current: "Company",
   change: "Change",
   // A QR code from another company (useLinkCompany).
-  qrBelongsTo: "This training belongs to",
-  qrSwitchHint: "Switch this phone to that company to join it?",
-  qrSwitch: "Switch company",
   qrSignedInElsewhere: "This training belongs to another company. Sign out, then scan the QR code again to join it.",
   qrUnknownCompany: "This QR code's company isn't available. Ask your trainer for a new QR code.",
+  // A QR code that names no company - made before QR codes carried it.
+  qrOutOfDate: "This QR code is out of date. Ask your trainer to show the training's QR code again.",
 } as const;
 
 /** The trainer / admin sign-in screen (one screen, worded for the role picked in "Login as"). */

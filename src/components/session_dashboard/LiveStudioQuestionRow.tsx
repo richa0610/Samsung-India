@@ -21,7 +21,9 @@ export default function LiveStudioQuestionRow({
   isBroadcasting = false,
   anyBroadcasting = false,
 }: Props) {
-  const isButtonDisabled = q.isActive || isBroadcasting || anyBroadcasting;
+  // Already went live and is over: marked Broadcasted, not offered again (user, 2026-10-22).
+  const done = !q.isActive && !!q.wasBroadcast;
+  const isButtonDisabled = q.isActive || done || isBroadcasting || anyBroadcasting;
 
   return (
     <View style={[styles.row, q.isActive && styles.rowActive, isBroadcasting && styles.rowBroadcasting]}>
@@ -46,6 +48,7 @@ export default function LiveStudioQuestionRow({
         style={[
           styles.broadcastBtn,
           q.isActive && styles.broadcastBtnActive,
+          done && styles.broadcastBtnDone,
           isBroadcasting && styles.broadcastBtnLoading,
           !q.isActive && !isBroadcasting && anyBroadcasting && styles.broadcastBtnDisabled,
         ]}
@@ -59,8 +62,8 @@ export default function LiveStudioQuestionRow({
           </>
         ) : (
           <>
-            <Ionicons name={q.isActive ? "radio" : "play"} size={10} color={Colors.white} />
-            <AppText style={styles.broadcastBtnText}>{q.isActive ? "Live" : "Broadcast"}</AppText>
+            <Ionicons name={q.isActive ? "radio" : done ? "checkmark-done" : "play"} size={10} color={Colors.white} />
+            <AppText style={styles.broadcastBtnText}>{q.isActive ? "Live" : done ? "Broadcasted" : "Broadcast"}</AppText>
           </>
         )}
       </Pressable>
@@ -109,6 +112,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   broadcastBtnActive: { backgroundColor: Colors.statusGreen },
+  broadcastBtnDone: { backgroundColor: Colors.gray400 },
   broadcastBtnLoading: { backgroundColor: Colors.blueAccent, paddingHorizontal: 7 },
   broadcastBtnDisabled: { opacity: 0.45 },
   broadcastBtnText: { fontSize: 8.5, fontWeight: "700", color: Colors.white },

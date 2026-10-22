@@ -46,6 +46,9 @@ class TraineeLogin(BaseModel):
     # older app sends neither - each of its sign-ins then counts as a new device.
     deviceId: Optional[str] = Field(default=None, max_length=100)
     deviceName: Optional[str] = Field(default=None, max_length=255)
+    # Signing in to join a training from its QR code: the company (tenant ID) the QR names. The
+    # account signed in to must be there, else 403 "No training access" (user, 2026-10-22).
+    company: Optional[str] = Field(default=None, max_length=100)
 
     @field_validator("identifier")
     @classmethod

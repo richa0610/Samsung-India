@@ -13,10 +13,10 @@ export default function LockedViolationCard() {
       </View>
       <View style={styles.lockedTextColumn}>
         <AppText variant="caption" color={Colors.red} weight={FontWeight.bold}>
-          Security Violation
+          {"You're locked"}
         </AppText>
         <AppText variant="overline" color="#B91C1C">
-          Test was locked due to proctoring violation.
+          Your test was locked for a proctoring violation. Ask your trainer to unlock you.
         </AppText>
       </View>
     </View>

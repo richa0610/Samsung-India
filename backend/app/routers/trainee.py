@@ -52,7 +52,8 @@ def login_trainee(
     device = _device(payload, request)
     if db is None:
         return sign_in_service.sign_in_trainee(
-            common_db, payload.identifier, payload.password, ip_address=client_ip(request), device=device
+            common_db, payload.identifier, payload.password, ip_address=client_ip(request), device=device,
+            company=payload.company,
         )
     tenant_id = get_tenant_id_from_request(request)
     return trainee_service.login(db, payload, tenant_id, ip_address=client_ip(request), common_db=common_db, device=device)

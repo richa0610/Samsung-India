@@ -56,11 +56,16 @@ export function registerTrainee(payload: RegisterPayload) {
 }
 
 /** `identifier` is what the trainee typed: their username, HO ID, Trainee UID or phone. No company
- *  code - the server finds their company - and this device, which counts toward their device limit. */
-export function loginTrainee(identifier: string, password: string) {
+ *  code - the server finds their company - and this device, which counts toward their device limit.
+ *  `company`: signing in to join a training from its QR code, the company the QR names - an account
+ *  of another company is refused with "No training access". */
+export function loginTrainee(identifier: string, password: string, company?: string) {
   return apiRequest<AuthSession>(
     "/trainees/login",
-    { method: "POST", body: JSON.stringify({ identifier, password, deviceId: getDeviceId(), deviceName: getDeviceName() }) },
+    {
+      method: "POST",
+      body: JSON.stringify({ identifier, password, company, deviceId: getDeviceId(), deviceName: getDeviceName() }),
+    },
     { company: false },
   );
 }

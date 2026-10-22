@@ -78,18 +78,23 @@ class HomeSummaryMatchesTheOldCounting(unittest.TestCase):
                 with self.subTest(trainer=trainer, start=start, end=end):
                     self.assertEqual(self.sql(trainer, start, end), legacy.trainer_counts(self.db, trainer, start, end))
 
-    def test_ongoing_counts_every_running_training_whatever_the_range(self):
-        for trainer in TRAINERS:
-            running = self.db.scalar(
-                select(func.count()).where(
-                    Conference.trainerEmployeeId == trainer,
-                    func.lower(Conference.conferenceStatus).in_(("ongoing", "live")),
-                )
-            )
-            self.assertGreater(running, 0)
-            for start, end in [(None, None), ("2099-01-01", "2099-12-31"), (self.today.isoformat(), self.today.isoformat())]:
-                with self.subTest(trainer=trainer, start=start, end=end):
-                    self.assertEqual(self.sql(trainer, start, end)["ongoing"], running)
+    def test_total_counts_each_training_in_a_card_once(self):
+        today = self.today.isoformat()
+        for uid, conference_status, approval in [
+            ("X1", "Ongoing", "Pending"),     # in two cards - Ongoing and Pending approval - counted once
+            ("X2", "Completed", "Approved"),
+            ("X3", "Scheduled", "Approved"),  # Pending
+            ("X4", "Scheduled", "Rejected"),  # in no card - not counted
+            ("X5", "Cancelled", "Pending"),   # cancelled - not counted
+        ]:
+            self.db.add(Conference(conferenceUid=uid, trainerEmployeeId="t9", conferenceDate=today,
+                                   conferenceStatus=conference_status, status=approval))
+        self.db.commit()
+        for start, end in [(None, None), (today, today)]:
+            with self.subTest(start=start, end=end):
+                c = self.sql("t9", start, end)
+                self.assertEqual((c["ongoing"], c["pendingApproval"], c["completed"], c["pending"]), (1, 1, 1, 1))
+                self.assertEqual(c["totalSessions"], 3)
 
     def test_the_counts_take_two_statements_whatever_the_history(self):
         seen = []

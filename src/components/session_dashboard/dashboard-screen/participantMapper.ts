@@ -52,5 +52,7 @@ export function participantsFromTrainees(trainees: TraineeRow[]): ParticipantIte
           maxUnlocks: t.proctoringMaxUnlocks ?? 2,
         }
       : undefined,
+    // Shown beside the Controls buttons whether or not they're locked now (user, 2026-10-22).
+    unlocks: { used: t.proctoringUnlocks ?? 0, max: t.proctoringMaxUnlocks ?? 2 },
   }));
 }

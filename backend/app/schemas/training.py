@@ -491,6 +491,9 @@ class LiveStudioQuestionOut(BaseModel):
     points: int
     responseCount: int
     isActive: bool
+    # Already went live and is over (user, 2026-10-22): it has answers or time-up rows, or it was
+    # the last one broadcast. The app shows it as "Broadcasted" instead of offering Broadcast.
+    wasBroadcast: bool = False
 
 
 class LiveStudioOut(BaseModel):

@@ -107,6 +107,17 @@ def _timer_expired(conference: Conference) -> bool:
     return ends_ms is not None and _now_ms() >= ends_ms
 
 
+def live_state(conference: Conference) -> str:
+    """The Live Quiz state the trainer and the trainees are shown: a question whose time is up is
+    no longer live - the quiz is back in the lobby, waiting for the trainer's next question (user,
+    2026-10-22). Not written back: the stored question stays the last one broadcast, so a late
+    timeout report or reveal still finds it, and the trainer's next action replaces it."""
+    state = quiz_state(conference)
+    if state == LIVE_QUIZ_STATE_QUESTION_LIVE and _timer_expired(conference):
+        return LIVE_QUIZ_STATE_IDLE
+    return state
+
+
 def _broadcast_ms(conference: Conference, question: Question) -> Optional[int]:
     """When the current question went live = its deadline minus its duration."""
     ends_ms = timer_ends_ms(conference)
@@ -182,21 +193,24 @@ def build_live_studio(db: Session, conference: Conference) -> Optional[LiveStudi
     participants = sum(
         1 for a in attendance_repository.list_for_conference(db, conference.conferenceUid) if a.status == "Present"
     )
-    active_qid = int(conference.liveQuestionId) if conference.liveQuestionId else None
+    state = live_state(conference)
+    live = state == LIVE_QUIZ_STATE_QUESTION_LIVE
+    active_qid = int(conference.liveQuestionId) if live and conference.liveQuestionId else None
 
     return LiveStudioOut(
         suiteUid=suite_uid,
         suiteTitle=_quiz_title(suite),
-        state=quiz_state(conference),
+        state=state,
         activeQuestionId=active_qid,
         # While paused, liveTimerEndsAt is stale (frozen at whatever it was
         # when Stop Timer was pressed) - the client must use
         # timerRemainingMs as the frozen display value instead of counting
         # down from this.
-        timerEndsAt=timer_ends_ms(conference),
-        timerRemainingMs=conference.liveTimerRemainingMs if _timer_paused(conference) else None,
+        timerEndsAt=timer_ends_ms(conference) if live else None,
+        timerRemainingMs=conference.liveTimerRemainingMs if live and _timer_paused(conference) else None,
         serverNowMs=_now_ms(),
         participants=participants,
+        # The last question broadcast - still counted once its time is up, until the next one.
         totalResponses=responders.get(conference.liveQuestionId or "", 0),
         questions=[
             LiveStudioQuestionOut(
@@ -207,6 +221,8 @@ def build_live_studio(db: Session, conference: Conference) -> Optional[LiveStudi
                 points=q.points or 0,
                 responseCount=responders.get(str(q.id), 0),
                 isActive=q.id == active_qid,
+                wasBroadcast=q.id != active_qid
+                and (responders.get(str(q.id), 0) > 0 or conference.liveQuestionId == str(q.id)),
             )
             for q in questions
         ],
@@ -436,7 +452,7 @@ def finish_quiz(db: Session, conference: Conference) -> None:
 def get_live_quiz_view(db: Session, trainee: Trainee, conference_uid: str) -> LiveQuizView:
     conference, _attendance = trainee_access.present_conference(db, trainee, conference_uid)
 
-    state = quiz_state(conference)
+    state = live_state(conference)   # a question whose time is up is gone - the app waits for the next
     suite_uid = live_quiz_suite_uid(conference)
 
     question_out: Optional[LiveQuestionOut] = None

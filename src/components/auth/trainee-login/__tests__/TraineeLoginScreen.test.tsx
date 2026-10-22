@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, expect, jest, test } from "@jest/globals";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 
-import { loginTrainee } from "@/api/auth";
+import { ApiError, loginTrainee } from "@/api/auth";
 import TraineeLoginScreen from "@/components/auth/trainee-login/TraineeLoginScreen";
 import { setCompany } from "@/config/company";
 import { SESSION_EXPIRED_NOTICE, SIGN_IN_ID_TEXT, SIGNED_IN_ELSEWHERE_NOTICE, STAFF_LOGIN_TEXT } from "@/constants/strings";
@@ -142,6 +142,20 @@ test("a Company ID with letters is kept as typed and sent with the password", as
   await waitFor(() => {
     expect(mockLogin).toHaveBeenCalledWith("TRN2610001", "secret");
   });
+});
+
+test("from a training QR code the sign-in names its company, and another company's account is told so", async () => {
+  mockParams = { join: "CONF2600001.SIG", company: "demo" };
+  mockLogin.mockRejectedValueOnce(new ApiError("No training access", 403));
+  await render(<TraineeLoginScreen />);
+  await fireEvent.changeText(screen.getByPlaceholderText(SIGN_IN_ID_TEXT.placeholder), "user13");
+  await fireEvent.changeText(screen.getByPlaceholderText("Enter password"), "secret");
+  await fireEvent.press(screen.getByLabelText("Login as Trainee"));
+
+  expect(await screen.findByText("No training access")).toBeTruthy();
+  expect(mockLogin).toHaveBeenCalledWith("user13", "secret", "demo");
+  expect(mockSetSession).not.toHaveBeenCalled();
+  expect(mockRouter.replace).not.toHaveBeenCalled();
 });
 
 test("the password is required", async () => {

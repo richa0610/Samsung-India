@@ -1,7 +1,7 @@
 import { StyleSheet, View } from "react-native";
 
 import ProctoringPanel from "@/components/proctoring/OnDeviceProctoringPanel";
-import { SecurityViolationType } from "@/components/proctoring/violations";
+import { PROCTORING_ENABLED, SecurityViolationType } from "@/components/proctoring/violations";
 import TimeProgress from "@/components/ui/TimeProgress";
 import { Colors } from "@/theme/colors";
 import { createShadow } from "@/theme/shadows";
@@ -41,17 +41,21 @@ export default function TestProgressRow({
           size={120}
         />
       </View>
-      <View style={styles.proctorColumn}>
-        <ProctoringPanel
-          token={token}
-          active={isActive}
-          paused={paused}
-          warningsCount={violationCount}
-          latestViolation={currentViolation}
-          onViolation={onViolation}
-          onWarning={onWarning}
-        />
-      </View>
+      {/* Proctoring off for the company (Tenant.live_proctoring_enabled): no camera at all - it is
+          never opened, nor its permission asked (user, 2026-10-22). */}
+      {PROCTORING_ENABLED && (
+        <View style={styles.proctorColumn}>
+          <ProctoringPanel
+            token={token}
+            active={isActive}
+            paused={paused}
+            warningsCount={violationCount}
+            latestViolation={currentViolation}
+            onViolation={onViolation}
+            onWarning={onWarning}
+          />
+        </View>
+      )}
     </View>
   );
 }

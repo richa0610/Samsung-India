@@ -17,7 +17,7 @@ from app.core.log_redaction import install_token_redaction
 from app.core.media import MAX_REQUEST_BYTES, MEDIA_ROOT
 from app.database.common import CommonSessionLocal, common_engine
 from app.database.connection import CommonBase, TenantBase
-from app.database.schema_sync import sync_missing_columns, sync_missing_indexes
+from app.database.schema_sync import relax_columns, sync_missing_columns, sync_missing_indexes
 from app.database.tenant import tenant_manager
 
 # Import all models
@@ -33,7 +33,7 @@ from app.routers.trainee import router as trainee_router
 from app.routers.trainer import router as trainer_router
 from app.routers.training import router as training_router
 from app.routers.ws import router as ws_router
-from app.services import user_registry_service
+from app.services import tenant_setup, user_registry_service
 
 logger = logging.getLogger("main")
 
@@ -53,6 +53,9 @@ if not settings.TESTING:
         # live deployment) never appears there on its own. This stack has no
         # migration framework, so this best-effort additive sync is it.
         sync_missing_columns(common_engine, CommonBase)
+        # A company row may be added with just its name (services/tenant_setup): loosen the live
+        # `tenants` columns such a row leaves out - once; a no-op on every later startup.
+        relax_columns(common_engine, "tenants", tenant_setup.SHORT_ROW_COLUMNS)
     except Exception as e:
         logger.warning("Could not automatically create Common DB tables on startup: %s", e)
 
@@ -148,6 +151,7 @@ async def _db_keepalive_loop() -> None:
 
 
 _registry_sync_task: "asyncio.Task | None" = None
+_tenant_setup_task: "asyncio.Task | None" = None
 
 
 def _sync_user_registry() -> None:
@@ -168,19 +172,39 @@ async def _user_registry_sync_loop(minutes: int) -> None:
         await asyncio.to_thread(_sync_user_registry)
 
 
+def _set_up_new_tenants() -> None:
+    common_db = CommonSessionLocal()
+    try:
+        tenant_setup.set_up_pending(common_db)
+    except Exception:
+        logger.exception("Automatic company setup failed")
+    finally:
+        common_db.close()
+
+
+async def _tenant_setup_loop(minutes: int) -> None:
+    """Sets up the company rows added with just a name (services/tenant_setup) - at once, then every
+    `minutes` - on a worker thread: it calls cPanel and creates tables, which takes seconds."""
+    while True:
+        await asyncio.to_thread(_set_up_new_tenants)
+        await asyncio.sleep(minutes * 60)
+
+
 @app.on_event("startup")
 async def on_startup():
-    global _keepalive_task, _registry_sync_task
+    global _keepalive_task, _registry_sync_task, _tenant_setup_task
     if settings.TESTING:
         return
     _keepalive_task = asyncio.create_task(_db_keepalive_loop())
     if settings.USER_REGISTRY_SYNC_MINUTES > 0:
         _registry_sync_task = asyncio.create_task(_user_registry_sync_loop(settings.USER_REGISTRY_SYNC_MINUTES))
+    if settings.TENANT_AUTO_SETUP_MINUTES > 0:
+        _tenant_setup_task = asyncio.create_task(_tenant_setup_loop(settings.TENANT_AUTO_SETUP_MINUTES))
 
 
 @app.on_event("shutdown")
 def on_shutdown():
-    for task in (_keepalive_task, _registry_sync_task):
+    for task in (_keepalive_task, _registry_sync_task, _tenant_setup_task):
         if task:
             task.cancel()
     tenant_manager.close_all()

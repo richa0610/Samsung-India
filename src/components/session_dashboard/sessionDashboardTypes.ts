@@ -16,6 +16,8 @@ export type LiveStudioQuestion = {
   points: number;
   responseCount: number;
   isActive: boolean;
+  /** Already went live and is over. */
+  wasBroadcast?: boolean;
 };
 
 export type LiveQuizControls = {
@@ -61,4 +63,6 @@ export type ParticipantItem = {
   /** Green when it passes, red when it doesn't; null without a score. */
   scorePassed: boolean | null;
   proctoring?: ProctoringStatus;
+  /** Times a trainer has unlocked them in this training, and the most allowed - locked or not. */
+  unlocks?: { used: number; max: number };
 };

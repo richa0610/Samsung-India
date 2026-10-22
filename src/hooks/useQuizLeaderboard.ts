@@ -39,6 +39,16 @@ export type RankLiveState = "none" | "in_progress" | "submitted" | "live" | "ran
 // Re-poll the board this often while the quiz is still running.
 const LIVE_POLL_MS = 5000;
 
+// The last board shown (per sign-in and training): coming back to Rank shows it at once while it
+// refreshes, instead of an empty page first.
+let lastResults: { token: string; conferenceUid: string; results: LiveQuizResults } | null = null;
+
+function remembered(token: string | null, conferenceUid: string | null): LiveQuizResults | null {
+  return lastResults && lastResults.token === token && lastResults.conferenceUid === conferenceUid
+    ? lastResults.results
+    : null;
+}
+
 export function useQuizLeaderboard() {
   const insets = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
@@ -50,7 +60,9 @@ export function useQuizLeaderboard() {
     () => params.conferenceUid ?? getCachedCurrentSession(token)?.conferenceUid ?? null,
   );
   const [session, setSession] = useState<CurrentSession | null>(() => getCachedCurrentSession(token));
-  const [results, setResults] = useState<LiveQuizResults | null>(null);
+  const [results, setResults] = useState<LiveQuizResults | null>(() => remembered(token, conferenceUid));
+  // Until the first answer arrives the page shows a spinner - never "no results" (user, 2026-10-22).
+  const [loaded, setLoaded] = useState(false);
   // Same confirm-before-logout flow as Home/Dashboard/Profile's power
   // button - opening the popup is separate from actually logging out,
   // which only happens on confirm.
@@ -72,11 +84,15 @@ export function useQuizLeaderboard() {
       const uid = params.conferenceUid ?? current.conferenceUid ?? conferenceUid;
       if (uid) {
         setConferenceUid(uid);
-        setResults(await getLiveQuizResults(token, uid));
+        const fresh = await getLiveQuizResults(token, uid);
+        lastResults = { token, conferenceUid: uid, results: fresh };
+        setResults(fresh);
       }
     } catch {
       setSession(null);
       setResults(null);
+    } finally {
+      setLoaded(true);
     }
   }, [token, params.conferenceUid, conferenceUid]);
 
@@ -158,6 +174,7 @@ export function useQuizLeaderboard() {
     insets,
     screenWidth,
     session,
+    loading: !!token && !loaded && results == null,
     isTrainingLive,
     liveState,
     showResults,

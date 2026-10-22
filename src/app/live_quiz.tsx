@@ -8,8 +8,6 @@ import { isModuleLeft, markModuleLeft, submitLiveQuiz } from "@/api/session";
 import { QuizLiveHeader, QuizWaiting } from "@/components/quiz";
 import { AssessmentMap, QuestionRecapSheet } from "@/components/quiz/assessment-map";
 import LiveQuizQuestionView from "@/components/quiz/LiveQuizQuestionView";
-import QuizResult from "@/components/quiz/QuizResult";
-import { QuizQuestionData } from "@/components/quiz/QuizQuestionCard";
 import AppText from "@/components/ui/AppText";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useAuth } from "@/hooks/useAuth";
@@ -17,16 +15,10 @@ import { LiveQuizFeedback, useLiveQuiz } from "@/hooks/useLiveQuiz";
 import { useLiveQuizSummary } from "@/hooks/useLiveQuizSummary";
 import { Colors } from "@/theme/colors";
 
-function toQuestionData(f: LiveQuizFeedback): QuizQuestionData {
-  return {
-    id: f.question.id,
-    question: f.question.text,
-    options: f.question.options,
-    currentQuestion: f.question.order || 1,
-    totalQuestions: f.question.total || f.question.order || 1,
-    correctAnswer: f.correctOptionId,
-    explanation: f.explanation,
-  };
+/** The waiting screen's words once the trainee is done with a question. */
+function doneMessage(f: LiveQuizFeedback): string {
+  const done = f.kind === "timeout" ? "Time's up for this question." : "Your answer is saved.";
+  return `${done}\nThe next question will appear when the trainer sends it.`;
 }
 
 export default function LiveQuizScreen() {
@@ -143,18 +135,13 @@ export default function LiveQuizScreen() {
             onSelect={selectOption}
           />
         ) : phase === "feedback" && feedback ? (
-          <View style={styles.feedbackWrap}>
-            <QuizResult
-              type={feedback.kind}
-              question={toQuestionData(feedback)}
-              selectedOptionId={feedback.selectedOptionId}
-              correctOptionId={feedback.correctOptionId}
-              explanation={feedback.explanation}
-            />
-            <AppText style={styles.waitHint} color={Colors.gray600} align="center">
-              Waiting for the trainer to move to the next question…
-            </AppText>
-          </View>
+          // Answered or timed out: the waiting screen until the trainer sends the next question
+          // (user, 2026-10-22) - right / wrong is on the Assessment Map at the end.
+          <QuizWaiting
+            onSyncNow={refetch}
+            message={doneMessage(feedback)}
+            nextQuestionNumber={(feedback.question.order || 0) + 1}
+          />
         ) : phase === "finished" ? (
           <Centered>
             <ActivityIndicator color={Colors.headerBlue} />
@@ -193,9 +180,7 @@ function Centered({ children }: { children: React.ReactNode }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
   body: { flex: 1, minHeight: 0 },
-  feedbackWrap: { flex: 1, minHeight: 0 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 10, paddingHorizontal: 24 },
   retry: { backgroundColor: Colors.headerBlue, paddingHorizontal: 20, paddingVertical: 8, borderRadius: 8 },
-  waitHint: { fontSize: 12, paddingHorizontal: 24, paddingBottom: 12 },
   exit: { alignSelf: "center", paddingVertical: 10 },
 });

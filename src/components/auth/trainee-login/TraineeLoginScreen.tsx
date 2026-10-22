@@ -31,8 +31,8 @@ export default function TraineeLoginScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   // `reason` e.g. "session_expired" / "signed_in_elsewhere" - the app sent the trainee here because
-  // their sign-in ended.
-  const { join, reason } = useLocalSearchParams<{ join?: string; reason?: string }>();
+  // their sign-in ended. `join` + `company`: a scanned training QR code's join code and company.
+  const { join, company, reason } = useLocalSearchParams<{ join?: string; company?: string; reason?: string }>();
   const { setSession } = useAuth();
 
   const [phone, setPhone] = useState("");
@@ -55,7 +55,10 @@ export default function TraineeLoginScreen() {
     setLoading(true);
     setError(null);
     try {
-      const session = await loginTrainee(trimmed, password);
+      // From a QR code: only an account of the training's company signs in ("No training access").
+      const session = join && company
+        ? await loginTrainee(trimmed, password, company)
+        : await loginTrainee(trimmed, password);
       setSession(session);
       if (join) {
         try {

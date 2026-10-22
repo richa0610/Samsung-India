@@ -154,6 +154,43 @@ class TwoPeopleSharingAPhone(SignInTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(self.claims(response)["tenant_id"], ALPHA)
 
+    def test_from_a_training_qr_code_its_company_says_which_account(self):
+        for company in (ALPHA, BETA):
+            with self.subTest(company=company):
+                response = self.w.client.post(
+                    "/trainees/login", json={"identifier": "9000000001", "password": PASSWORD, "company": company}
+                )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(self.claims(response)["tenant_id"], company)
+
+
+class SigningInFromATrainingQrCode(SignInTestCase):
+    """The sign-in names the company the scanned QR code is for: only an account there signs in
+    (user, 2026-10-22)."""
+
+    def qr_sign_in(self, identifier, company, password=PASSWORD):
+        return self.w.client.post("/trainees/login", json={"identifier": str(identifier), "password": password, "company": company})
+
+    def test_a_trainee_of_that_company_signs_in_there_in_any_letter_case(self):
+        for company in (ALPHA, ALPHA.upper(), "   "):   # blank names no company
+            with self.subTest(company=company):
+                response = self.qr_sign_in("user1", company)
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(self.claims(response)["tenant_id"], ALPHA)
+
+    def test_another_company_s_trainee_gets_no_training_access_and_is_not_signed_in(self):
+        response = self.qr_sign_in("user13", ALPHA)   # BETA's trainee
+        self.assertEqual((response.status_code, response.json()["detail"]), (403, sign_in_service.NO_TRAINING_ACCESS))
+        self.assertIsNone(self.entry("TR-B_N1-0").devices)   # no device slot taken
+        self.assertEqual(self.qr_sign_in("user13", BETA).status_code, 200)   # as signing in does take one
+        self.assertIsNotNone(self.entry("TR-B_N1-0").devices)
+
+    def test_a_wrong_password_gets_the_usual_answer_whatever_the_company(self):
+        for identifier in ("user1", "user13"):
+            with self.subTest(identifier=identifier):
+                response = self.qr_sign_in(identifier, ALPHA, password="wrong")
+                self.assertEqual((response.status_code, response.json()["detail"]), (401, trainee_service.LOGIN_FAILED))
+
 
 class StaffSignInWithoutACompanyCode(SignInTestCase):
     def choose(self, ticket, tenant_id):

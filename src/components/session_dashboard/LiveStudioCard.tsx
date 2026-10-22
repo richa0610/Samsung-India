@@ -78,6 +78,7 @@ export default function LiveStudioCard({
               points: q.points,
               responseCount: q.responseCount,
               isActive: q.isActive,
+              wasBroadcast: q.wasBroadcast,
             }}
             secondsLeft={q.isActive ? secondsLeft : undefined}
             onBroadcast={controls.onBroadcast}

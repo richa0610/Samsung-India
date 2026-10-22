@@ -216,6 +216,8 @@ export type LiveStudioQuestion = {
   points: number;
   responseCount: number;
   isActive: boolean;
+  /** Already went live and is over - shown as "Broadcasted", not offered again. */
+  wasBroadcast?: boolean;
 };
 
 export type LiveStudio = {

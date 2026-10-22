@@ -29,10 +29,12 @@ def find_by_code(common_db: Session, code: Optional[str]) -> Optional[Tenant]:
 
 
 def list_uids(common_db: Session) -> list[str]:
-    """Every registered tenant ID - the registry holds one row per client company, so it is small."""
-    return [uid for (uid,) in common_db.query(Tenant.tenant_uid)]
+    """Every registered tenant ID - the registry holds one row per client company, so it is small. A
+    row still waiting for its setup has none yet."""
+    return [uid for (uid,) in common_db.query(Tenant.tenant_uid) if uid]
 
 
 def list_active_uids(common_db: Session) -> list[str]:
-    """The IDs of the tenants whose status is active (`Tenant.is_active`)."""
-    return [tenant.tenant_uid for tenant in common_db.query(Tenant).all() if tenant.is_active]
+    """The IDs of the tenants that are active and set up (`Tenant.is_ready`) - a row still waiting
+    for its database (services/tenant_setup) isn't one yet."""
+    return [tenant.tenant_uid for tenant in common_db.query(Tenant).all() if tenant.is_ready]

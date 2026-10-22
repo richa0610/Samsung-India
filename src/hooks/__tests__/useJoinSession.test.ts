@@ -1,5 +1,5 @@
 import { beforeEach, expect, jest, test } from "@jest/globals";
-import { renderHook, waitFor } from "@testing-library/react-native";
+import { act, renderHook, waitFor } from "@testing-library/react-native";
 
 import { getSessionJoinInfo } from "@/api/session";
 import { Company } from "@/config/company";
@@ -7,11 +7,12 @@ import { useJoinSession } from "@/hooks/useJoinSession";
 
 let mockAuth: { token: string | null; restoring: boolean } = { token: null, restoring: false };
 let mockCompany: Company | null = null;
-let mockParams: { code: string; company?: string } = { code: "CONF2600001.SIG" };
+let mockParams: { code: string; company?: string } = { code: "CONF2600001.SIG", company: "acme" };
+const mockReplace = jest.fn();
 
 jest.mock("expo-router", () => ({
   useLocalSearchParams: () => mockParams,
-  useRouter: () => ({ replace: jest.fn() }),
+  useRouter: () => ({ replace: mockReplace }),
 }));
 jest.mock("@/api/tenants", () => ({ lookupCompany: jest.fn(() => new Promise(() => {})) }));
 jest.mock("@/hooks/useAuth", () => ({ useAuth: () => mockAuth }));
@@ -23,14 +24,36 @@ const mockJoinInfo = jest.mocked(getSessionJoinInfo);
 beforeEach(() => {
   mockAuth = { token: null, restoring: false };
   mockCompany = null;
-  mockParams = { code: "CONF2600001.SIG" };
+  mockParams = { code: "CONF2600001.SIG", company: "acme" };
+  mockReplace.mockReset();
   mockJoinInfo.mockReset();
   mockJoinInfo.mockResolvedValue({ title: "Training" } as Awaited<ReturnType<typeof getSessionJoinInfo>>);
 });
 
-test("signed out, the preview waits for the company code - a QR code opens only in its company", async () => {
-  const { unmount } = await renderHook(() => useJoinSession());
+test("signed out on a phone with no company, the preview waits for the QR's company to be confirmed", async () => {
+  const { result, unmount } = await renderHook(() => useJoinSession());
+  expect(result.current.linkCompany.kind).toBe("checking");
   expect(mockJoinInfo).not.toHaveBeenCalled();
+  await unmount();
+});
+
+test("a QR code naming no company is out of date - nothing loads, even on a phone with a company", async () => {
+  mockCompany = { tenantId: "acme", companyName: "Acme Retail" };
+  mockParams = { code: "CONF2600001.SIG" };
+  const { result, unmount } = await renderHook(() => useJoinSession());
+  expect(result.current.linkCompany.kind).toBe("out-of-date");
+  expect(mockJoinInfo).not.toHaveBeenCalled();
+  await unmount();
+});
+
+test("signed out, Continue to Login carries the code and the QR's company to the sign-in", async () => {
+  mockCompany = { tenantId: "acme", companyName: "Acme Retail" };
+  const { result, unmount } = await renderHook(() => useJoinSession());
+  await act(() => result.current.handleJoin());
+  expect(mockReplace).toHaveBeenCalledWith({
+    pathname: "/participant_login",
+    params: { join: "CONF2600001.SIG", company: "acme" },
+  });
   await unmount();
 });
 

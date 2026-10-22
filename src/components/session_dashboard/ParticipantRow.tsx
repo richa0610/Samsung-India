@@ -152,6 +152,19 @@ export default function ParticipantRow({
           >
             <Ionicons name="close" size={11} color={canEdit ? Colors.red : Colors.gray400} />
           </Pressable>
+          {/* How many times the trainer has unlocked them, of the most allowed (user, 2026-10-22). */}
+          {!!item.unlocks?.used && (
+            <View
+              style={styles.unlockCount}
+              accessible
+              accessibilityLabel={`Unlocked ${item.unlocks.used} of ${item.unlocks.max} times`}
+            >
+              <Ionicons name="lock-open" size={9} color="#B45309" />
+              <AppText style={styles.unlockCountText}>
+                {item.unlocks.used}/{item.unlocks.max}
+              </AppText>
+            </View>
+          )}
         </View>
       </View>
     </View>
@@ -211,4 +224,16 @@ const styles = StyleSheet.create({
   iconBtnDanger: { backgroundColor: Colors.dangerBgSoft, borderColor: "#FECACA" },
   iconBtnWarning: { backgroundColor: "#FEF3C7", borderColor: "#FDE68A" },
   iconBtnDisabled: { backgroundColor: Colors.gray100, borderColor: Colors.gray200, opacity: 0.6 },
+  unlockCount: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    height: 17,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    backgroundColor: "#FEF3C7",
+    borderRadius: 4,
+    paddingHorizontal: 3,
+  },
+  unlockCountText: { fontSize: 8, fontWeight: "700", color: "#B45309" },
 });

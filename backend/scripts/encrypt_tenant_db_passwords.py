@@ -23,8 +23,10 @@ from app.models.common.tenant_registry import Tenant  # noqa: E402
 
 
 def plan(common_db: Session) -> list[tuple[Tenant, str]]:
-    """(tenant row, "encrypt" | "re-encrypt") for every registry row."""
-    return [(row, "re-encrypt" if is_encrypted(row.database_password) else "encrypt") for row in common_db.query(Tenant)]
+    """(tenant row, "encrypt" | "re-encrypt") for every registry row with a password - a row still
+    waiting for its automatic setup has none yet (services/tenant_setup)."""
+    return [(row, "re-encrypt" if is_encrypted(row.database_password) else "encrypt")
+            for row in common_db.query(Tenant) if row.database_password]
 
 
 def apply(common_db: Session, rows: list[tuple[Tenant, str]]) -> None:

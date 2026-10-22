@@ -1,5 +1,5 @@
 import { beforeEach, expect, jest, test } from "@jest/globals";
-import { act, renderHook, waitFor } from "@testing-library/react-native";
+import { renderHook, waitFor } from "@testing-library/react-native";
 
 import { ApiError } from "@/api/client";
 import { lookupCompany } from "@/api/tenants";
@@ -24,8 +24,8 @@ beforeEach(() => {
   mockSetCompany.mockReset();
 });
 
-test("a link naming this phone's company - in any letter case - or no company carries on", async () => {
-  for (const link of [null, "samsung", "SAMSUNG"]) {
+test("a link naming this phone's company - in any letter case - carries on", async () => {
+  for (const link of ["samsung", "SAMSUNG"]) {
     const { result, unmount } = await renderHook(() => useLinkCompany(link, false, false));
     expect(result.current.state).toEqual({ kind: "same" });
     await unmount();
@@ -33,14 +33,21 @@ test("a link naming this phone's company - in any letter case - or no company ca
   expect(mockLookup).not.toHaveBeenCalled();
 });
 
-test("signed out on another company: the person is asked, and only switching changes it", async () => {
-  // (While the server is asked the state is "checking" - see useJoinSession.test.ts.)
-  const { result, unmount } = await renderHook(() => useLinkCompany("demo", false, false));
-  await waitFor(() => expect(result.current.state).toEqual({ kind: "switch", company: DEMO }));
+test("a link naming no company is out of date - signed in or out, nothing is looked up or saved", async () => {
+  for (const signedIn of [false, true]) {
+    const { result, unmount } = await renderHook(() => useLinkCompany(null, signedIn, false));
+    expect(result.current.state).toEqual({ kind: "out-of-date" });
+    await unmount();
+  }
+  expect(mockLookup).not.toHaveBeenCalled();
   expect(mockSetCompany).not.toHaveBeenCalled();
+});
 
-  await act(() => result.current.switchCompany());
-  expect(mockSetCompany).toHaveBeenCalledWith(DEMO);
+test("signed out on another company: the phone takes the QR's once the server confirms it - nothing asked", async () => {
+  const { result, unmount } = await renderHook(() => useLinkCompany("demo", false, false));
+  expect(result.current.state).toEqual({ kind: "checking" });
+  await waitFor(() => expect(mockSetCompany).toHaveBeenCalledWith(DEMO));
+  expect(mockSetCompany).toHaveBeenCalledTimes(1);
   await unmount();
 });
 
@@ -63,7 +70,6 @@ test("a company the server doesn't know is never saved", async () => {
 test("signed in to another company: sign out first - nothing is looked up or switched", async () => {
   const { result, unmount } = await renderHook(() => useLinkCompany("demo", true, false));
   expect(result.current.state).toEqual({ kind: "signed-in-elsewhere" });
-  await act(() => result.current.switchCompany());
   expect(mockLookup).not.toHaveBeenCalled();
   expect(mockSetCompany).not.toHaveBeenCalled();
   await unmount();

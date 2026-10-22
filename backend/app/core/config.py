@@ -94,6 +94,31 @@ class Settings(BaseSettings):
     # the default, so a deploy never starts writing the registry until it is switched on.
     USER_REGISTRY_SYNC_MINUTES: int = Field(default=0, ge=0)
 
+    # Automatic company setup (user, 2026-10-22; services/tenant_setup): a `tenants` row added with
+    # just a company name gets its own database on Bluehost - made through cPanel's API - its tables,
+    # and its connection details filled in. Minutes between looks for such rows; 0 = off, the default.
+    TENANT_AUTO_SETUP_MINUTES: int = Field(default=0, ge=0)
+    # cPanel's API: its address (https://<server>:2083), the cPanel account and an API token made in
+    # cPanel (Manage API Tokens). Secrets - set on the server, never in the code.
+    CPANEL_URL: str = ""
+    CPANEL_USER: str = ""
+    CPANEL_API_TOKEN: str = ""
+    # Off only for a cPanel address without a valid certificate (e.g. a bare IP) - prefer the
+    # server's own host name, whose certificate checks out.
+    CPANEL_VERIFY_TLS: bool = True
+    # The MySQL server the company databases live on and the ONE login every company database
+    # uses (user, 2026-10-22). A new database is named TENANT_DB_NAME_PREFIX + the company's ID in
+    # lower case - the prefix starts with the cPanel account's own ("mmtbtwob_"), as cPanel requires.
+    TENANT_DB_HOST: str = ""
+    TENANT_DB_PORT: int = 3306
+    TENANT_DB_USER: str = ""
+    TENANT_DB_PASSWORD: str = ""
+    TENANT_DB_NAME_PREFIX: str = ""
+    # TLS to that server - its own, never DB_SSL_CA (Aiven's certificate wouldn't check out there):
+    # the CA file to check its certificate with; empty = still encrypted when the server offers it,
+    # without checking the certificate (database/connection.build_connect_args).
+    TENANT_DB_SSL_CA: str = ""
+
     # Fallback warning count for tenants whose registry row has no explicit
     # proctoring_max_warnings value.
     DEFAULT_PROCTORING_MAX_WARNINGS: int = 3

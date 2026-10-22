@@ -1,9 +1,11 @@
 """Which company (tenant) the app is talking to: the company code a person types before signing in,
 and the company a signed-in account belongs to - both answered from the tenant registry (Common DB)."""
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.exceptions import not_found
+from app.database.tenant import NOT_SET_UP
 from app.models.common.tenant_registry import Tenant
 from app.repositories import tenant_repository
 from app.schemas.tenant import TenantOut
@@ -22,6 +24,8 @@ def lookup(common_db: Session, code: str) -> TenantOut:
     tenant = tenant_repository.find_by_code(common_db, code)
     if tenant is None or not tenant.is_active:
         raise not_found(UNKNOWN_COMPANY)
+    if not tenant.is_set_up:   # added moments ago - its automatic setup hasn't finished (services/tenant_setup)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=NOT_SET_UP)
     return _out(tenant)
 
 

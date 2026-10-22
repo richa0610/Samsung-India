@@ -12,12 +12,12 @@ import { useLinkCompany } from "@/hooks/useLinkCompany";
  * deep link (from a scanned session QR) lands on.
  *
  * Fetches the public training preview - from the signed-in account's
- * company, or, signed out, from the company this device chose (the screen
- * asks for the company code first, or offers to switch to the company the
- * QR names - useLinkCompany; a QR code only opens in its own company) -
+ * company, or, signed out, from the company the QR names (the phone switches
+ * to it - useLinkCompany; a QR code only opens in its own company) -
  * then on "Join": if the trainee is already signed in, binds them to the
  * session and goes to `/session`; otherwise hands off to the login screen
- * carrying the code so it can finish the bind after auth.
+ * carrying the code and the QR's company, so the sign-in admits only an
+ * account of that company ("No training access") and finishes the bind.
  */
 export function useJoinSession() {
   const { code, company: linkTenant } = useLocalSearchParams<{ code: string; company?: string }>();
@@ -55,7 +55,7 @@ export function useJoinSession() {
 
   const handleJoin = async () => {
     if (!token) {
-      router.replace({ pathname: "/participant_login", params: { join: code } });
+      router.replace({ pathname: "/participant_login", params: linkTenant ? { join: code, company: linkTenant } : { join: code } });
       return;
     }
     setJoining(true);
@@ -79,7 +79,6 @@ export function useJoinSession() {
     isLoggedIn: !!token,
     restoring,
     linkCompany: linkCompany.state,
-    switchCompany: linkCompany.switchCompany,
     handleJoin,
     onBack: () => router.replace("/"),
   };

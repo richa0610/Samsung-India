@@ -144,6 +144,64 @@ class AClockStoppedWithNoTimeLeftIsTimeUp(LiveQuizPauseTestCase):
         self.assertEqual(self.reveal_status(), 200)
 
 
+class AQuestionWhoseTimeIsUpStopsBeingLive(LiveQuizPauseTestCase):
+    """When a question's timer runs out it stops being broadcast by itself: the trainer's Live Studio
+    and the trainees' quiz are back in the lobby until the next question (user, 2026-10-22)."""
+
+    def studio(self):
+        response = self.get("trainer1", f"/admin/trainings/{S_N1}")
+        self.assertEqual(response.status_code, 200, response.text)
+        return response.json()["liveStudio"]
+
+    def test_both_sides_see_it_live_until_its_time_is_up_then_the_lobby(self):
+        self.broadcast()
+        self.wait(DURATION_MS - 1)
+        self.assertEqual(self.trainee_view()["state"], "QUESTION_LIVE")
+        self.assertEqual(self.studio()["activeQuestionId"], self.question.id)
+
+        self.wait(1)
+        view = self.trainee_view()
+        self.assertEqual((view["state"], view["question"], view["timerEndsAt"]), ("IDLE", None, None))
+        studio = self.studio()
+        self.assertEqual((studio["state"], studio["activeQuestionId"], studio["timerEndsAt"]), ("IDLE", None, None))
+        self.assertFalse(any(q["isActive"] for q in studio["questions"]))
+
+    def test_its_responses_still_show_and_a_late_time_up_is_still_recorded_for_it(self):
+        self.broadcast()
+        self.wait(DURATION_MS + 1_000)
+        response = self.as_trainee(PRESENT, "POST", "/sessions/live-quiz/timeout",
+                                   json={"conferenceUid": S_N1, "questionId": self.question.id})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertIsNotNone(self.stored_answer())
+        self.assertEqual(self.studio()["totalResponses"], 1)
+        self.assertEqual(self.reveal_status(), 200)
+
+    def test_a_stopped_clock_keeps_the_question_live(self):
+        self.broadcast()
+        self.wait(5_000)
+        self.trainer("stop-timer", {"paused": True})
+        self.wait(DURATION_MS * 3)
+        self.assertEqual(self.trainee_view()["state"], "QUESTION_LIVE")
+        self.assertEqual(self.studio()["state"], "QUESTION_LIVE")
+
+    def test_a_question_that_went_live_is_marked_broadcasted_once_its_time_is_up(self):
+        broadcasted = lambda: {q["id"]: (q["isActive"], q["wasBroadcast"]) for q in self.studio()["questions"]}
+        first, second = self.questions[0].id, self.questions[1].id
+        self.assertEqual((broadcasted()[first], broadcasted()[second]), ((False, False), (False, False)))
+        self.broadcast()
+        self.assertEqual(broadcasted()[first], (True, False))   # live, not yet done
+        self.wait(DURATION_MS + 1_000)
+        self.assertEqual((broadcasted()[first], broadcasted()[second]), ((False, True), (False, False)))
+
+    def test_the_next_broadcast_is_live_again(self):
+        self.broadcast()
+        self.wait(DURATION_MS + 1_000)
+        self.question = self.questions[1]
+        self.broadcast()
+        view = self.trainee_view()
+        self.assertEqual((view["state"], view["question"]["id"]), ("QUESTION_LIVE", self.question.id))
+
+
 class StopAndPlayDoWhatTheButtonSays(LiveQuizPauseTestCase):
     """The app sends the button pressed, so a press from a stale screen - or a second trainer/admin
     pressing the same button - can't flip the clock the other way."""

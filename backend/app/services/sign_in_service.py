@@ -49,6 +49,8 @@ from app.services.device_sessions import Device
 logger = logging.getLogger("sign_in")
 
 SHARED_PHONE = "This phone number is used by more than one account. Please log in with your HO ID or username."
+# Signing in from a training's QR code to an account of another company (user, 2026-10-22).
+NO_TRAINING_ACCESS = "No training access"
 CHOOSE_COMPANY = "Choose the company to sign in to"
 TICKET_EXPIRED = "That sign-in has expired. Please sign in again."
 TICKET_MINUTES = 2
@@ -199,10 +201,13 @@ def _discover(common_db: Session, key: str, user_type: str) -> None:
         _not_found.set((user_type, key), True)
 
 
-def _sign_in(common_db: Session, typed: str, password: str, user_type: str, scope: str, failed: str) -> _Verified:
+def _sign_in(
+    common_db: Session, typed: str, password: str, user_type: str, scope: str, failed: str, company: Optional[str] = None
+) -> _Verified:
     """The one account `typed` + `password` sign in to, or the refusal: 401 `failed` (the same words
     whatever went wrong), 409 SHARED_PHONE when the password opens more than one account sharing that
-    phone, 429 for a locked account."""
+    phone, 429 for a locked account. `company` (the company of a scanned training QR code) keeps only
+    the accounts there - none left is 403 NO_TRAINING_ACCESS, said only once the password is right."""
     key = login_key(typed)
     verified, theirs = _check_all(common_db, key, password, user_type)
     if key and not theirs:
@@ -215,6 +220,15 @@ def _sign_in(common_db: Session, typed: str, password: str, user_type: str, scop
         verify_password(password, _dummy_hash())
         rate_limit.record_account_failure(scope, typed_lock)
         raise unauthorized(failed)
+
+    wanted = (company or "").strip().lower()
+    if wanted and verified:
+        elsewhere = [match for match in verified if match.entry.tenant_uid.lower() != wanted]
+        for match in elsewhere:
+            match.db.close()
+        verified = [match for match in verified if match not in elsewhere]
+        if not verified:
+            raise forbidden(NO_TRAINING_ACCESS)
 
     if len(verified) == 1:
         return verified[0]
@@ -229,9 +243,12 @@ def _sign_in(common_db: Session, typed: str, password: str, user_type: str, scop
 
 
 def sign_in_trainee(
-    common_db: Session, identifier: str, password: str, ip_address: Optional[str] = None, device: Optional[Device] = None
+    common_db: Session, identifier: str, password: str, ip_address: Optional[str] = None, device: Optional[Device] = None,
+    company: Optional[str] = None,
 ) -> TokenResponse:
-    found = _sign_in(common_db, identifier, password, "trainee", trainee_service.LOGIN_SCOPE, trainee_service.LOGIN_FAILED)
+    found = _sign_in(
+        common_db, identifier, password, "trainee", trainee_service.LOGIN_SCOPE, trainee_service.LOGIN_FAILED, company
+    )
     try:
         session = trainee_service.signed_in(
             found.db, found.record, found.entry.tenant_uid, ip_address, common_db=common_db, device=device

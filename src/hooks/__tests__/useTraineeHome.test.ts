@@ -28,21 +28,22 @@ jest.mock("@/hooks/useLocationPermission", () => ({
 const mockGetSession = jest.mocked(getCurrentSession);
 const mockVerify = jest.mocked(verifyLocation);
 
+const module = (key: string, extra: object) => ({
+  key,
+  name: key,
+  time: null,
+  endTime: null,
+  duration: null,
+  isMissed: false,
+  completedAt: null,
+  score: null,
+  assessmentSuiteUid: null,
+  ...extra,
+});
+
 /** A started training, attendance done, with the trainer running the Live Quiz. Each test uses its
  *  own training: the "already taken into the quiz once" marker is per training and outlives a test. */
 function liveQuizSession(conferenceUid: string, attendanceGeoFencing: boolean) {
-  const module = (key: string, extra: object) => ({
-    key,
-    name: key,
-    time: null,
-    endTime: null,
-    duration: null,
-    isMissed: false,
-    completedAt: null,
-    score: null,
-    assessmentSuiteUid: null,
-    ...extra,
-  });
   return {
     conferenceUid,
     title: "Training",
@@ -53,6 +54,23 @@ function liveQuizSession(conferenceUid: string, attendanceGeoFencing: boolean) {
     modules: [
       module("ATTENDANCE", { isLive: false, isCompleted: true }),
       module("LIVE_QUIZ", { isLive: true, isCompleted: false }),
+    ],
+  } as never;
+}
+
+/** A started training, attendance done, with the trainer running the Post Test. */
+function postTestSession(conferenceUid: string, proctoringLocked: boolean) {
+  return {
+    conferenceUid,
+    title: "Training",
+    started: true,
+    sessionClosed: false,
+    attendanceStatus: "Present",
+    attendanceGeoFencing: false,
+    proctoringLocked,
+    modules: [
+      module("ATTENDANCE", { isLive: false, isCompleted: true }),
+      module("STANDARD_TEST", { isLive: true, isCompleted: false, assessmentSuiteUid: "ASM1" }),
     ],
   } as never;
 }
@@ -73,7 +91,7 @@ beforeEach(() => {
   mockRequestLocation.mockResolvedValue({ coords: { latitude: 12.97, longitude: 77.59 }, status: "granted" });
 });
 
-test("on a geofenced training the Live Quiz asks for the location check before entering", async () => {
+test("on a geofenced training the Live Quiz asks for the location check, then the trainee enters", async () => {
   mockGetSession.mockResolvedValue(liveQuizSession("CONF-GEO", true));
   mockVerify.mockResolvedValue({ withinRadius: true, distanceMeters: 20, radiusMeters: 100, venueLabel: null });
   const { result, unmount } = await renderHook(() => useTraineeHome());
@@ -84,6 +102,9 @@ test("on a geofenced training the Live Quiz asks for the location check before e
   await act(async () => result.current.handleCheckInToModule("LIVE_QUIZ"));
   expect(mockVerify).toHaveBeenCalledWith("trainee-token", "CONF-GEO", 12.97, 77.59);
   expect(liveQuizCard(result)?.locationGateStatus).toBe("verified");
+  expect(enteredLiveQuiz("CONF-GEO")).toBe(false);   // the card now offers Enter Session
+
+  await act(async () => result.current.handleEnterLiveQuiz());
   expect(enteredLiveQuiz("CONF-GEO")).toBe(true);
   await unmount();
 });
@@ -116,12 +137,29 @@ test("a trainee who refuses location permission stays out of the Live Quiz", asy
   await unmount();
 });
 
-test("on a training without geofencing the trainee goes straight into the Live Quiz", async () => {
+test("on a training without geofencing the trainee enters the Live Quiz with Enter Session - never by itself", async () => {
   mockGetSession.mockResolvedValue(liveQuizSession("CONF-OPEN", false));
   const { result, unmount } = await renderHook(() => useTraineeHome());
 
-  expect(liveQuizCard(result)?.locationGateEnabled).toBe(false);
+  expect(liveQuizCard(result)).toMatchObject({ isLive: true, locationGateEnabled: false });
+  expect(enteredLiveQuiz("CONF-OPEN")).toBe(false);
+
+  await act(async () => result.current.handleEnterLiveQuiz());
   expect(enteredLiveQuiz("CONF-OPEN")).toBe(true);
   expect(mockVerify).not.toHaveBeenCalled();
   await unmount();
+});
+
+test("a trainee locked by proctoring sees the Post Test card locked until the trainer unlocks them", async () => {
+  const postTestCard = (result: { current: ReturnType<typeof useTraineeHome> }) =>
+    result.current.activities.find((a) => a.key === "STANDARD_TEST");
+  mockGetSession.mockResolvedValue(postTestSession("CONF-LOCKED", true));
+  const { result, unmount } = await renderHook(() => useTraineeHome());
+  expect(postTestCard(result)).toMatchObject({ isLocked: true, isLive: false });
+  await unmount();
+
+  mockGetSession.mockResolvedValue(postTestSession("CONF-LOCKED", false));   // the trainer unlocked them
+  const unlocked = await renderHook(() => useTraineeHome());
+  expect(postTestCard(unlocked.result)).toMatchObject({ isLocked: false, isLive: true });
+  await unlocked.unmount();
 });

@@ -203,6 +203,21 @@ export function useSessionDashboardScreen() {
   // without waiting for the 5s poll.
   useLiveQuizChannel(conferenceUid, adminToken, () => loadData("silent"));
 
+  // A live question stops being broadcast when its time is up (the server then answers the lobby -
+  // live_quiz_service.live_state): refetch at that moment rather than at the next poll, so the Live
+  // Studio drops its "Live" at once. A stopped clock never runs out.
+  const liveStudio = data?.liveStudio;
+  const msUntilTimeUp =
+    liveStudio?.state === "QUESTION_LIVE" && liveStudio.timerRemainingMs == null &&
+    liveStudio.timerEndsAt != null && liveStudio.serverNowMs != null
+      ? liveStudio.timerEndsAt - liveStudio.serverNowMs
+      : null;
+  useEffect(() => {
+    if (msUntilTimeUp == null) return;
+    const timeUp = setTimeout(() => loadDataRef.current("silent"), Math.max(0, msUntilTimeUp) + 500);
+    return () => clearTimeout(timeUp);
+  }, [msUntilTimeUp]);
+
   const [broadcastingQuestionId, setBroadcastingQuestionId] = useState<number | null>(null);
   const [stoppingTimer, setStoppingTimer] = useState(false);
   const [showingLeaderboard, setShowingLeaderboard] = useState(false);

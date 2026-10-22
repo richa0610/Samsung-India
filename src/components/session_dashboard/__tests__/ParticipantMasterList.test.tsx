@@ -163,6 +163,22 @@ const locked = (unlocksUsed: number) =>
     row({ isLocked: true, proctoringStrikes: 3, proctoringUnlocks: unlocksUsed, proctoringMaxUnlocks: 2 }),
   ]);
 
+test("beside the controls each trainee shows how many times the trainer unlocked them - locked now or not", async () => {
+  await render(
+    <ParticipantAttendanceCard
+      participants={participantsFromTrainees([
+        row({ traineeUid: "TR-1", name: "Sumit", proctoringUnlocks: 1, proctoringMaxUnlocks: 2 }),
+        row({ traineeUid: "TR-2", name: "Asha", isLocked: true, proctoringStrikes: 3, proctoringUnlocks: 2, proctoringMaxUnlocks: 2 }),
+        row({ traineeUid: "TR-3", name: "Ravi" }),
+      ])}
+      canEdit
+    />,
+  );
+  expect(screen.getByLabelText("Unlocked 1 of 2 times")).toBeTruthy();
+  expect(screen.getByLabelText("Unlocked 2 of 2 times")).toBeTruthy();
+  expect(screen.getAllByLabelText(/^Unlocked \d of \d times$/)).toHaveLength(2);   // never unlocked: nothing shown
+});
+
 test("with an unlock left, the unlock form says only 2 are allowed and which one this is", async () => {
   await render(<ParticipantAttendanceCard participants={locked(1)} canEdit />);
 

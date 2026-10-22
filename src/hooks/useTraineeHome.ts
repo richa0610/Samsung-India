@@ -26,6 +26,13 @@ import { canNavigate } from "@/utils/navigationGuard";
 
 export type TraineeTab = "rank" | "dashboard" | "home" | "profile";
 
+/** The Post Test's proctoring lock (3 strikes), until the trainer unlocks the trainee from the
+ *  Participant Master List: the backend's `proctoringLocked`, or - from an older backend that sends
+ *  none - the nav param that first flagged the lockout. */
+function isPostTestLocked(proctoringLocked: boolean | undefined, postTestParam: string | undefined): boolean {
+  return proctoringLocked === true || (postTestParam === "security_locked" && proctoringLocked !== false);
+}
+
 // Card headline: the question set name the trainer picked for
 // tests/quizzes/surveys, or a plain description for Attendance. Empty (no
 // heading rendered) when there is nothing real to show.
@@ -68,11 +75,6 @@ export type ModuleLocationGateStatus = "idle" | "checking" | "verified";
 function locationGateKey(conferenceUid: string | undefined, moduleKey: SessionModuleKey): string {
   return `${conferenceUid}:${moduleKey}`;
 }
-
-// Which conference's Live Quiz this trainee has already been pulled into (or
-// left). Module scope so it survives `session_detail` remounting - the trainee
-// gets auto-routed to the quiz room ONCE, and Leave stays Leave.
-let autoEnteredLiveQuiz: string | null = null;
 
 export function useTraineeHome() {
   const router = useRouter();
@@ -167,10 +169,7 @@ export function useTraineeHome() {
         if (data.proctoringLocked === false && data.conferenceUid) {
           resetSessionViolations(data.conferenceUid);
         }
-        const postTestLocked =
-          data.proctoringLocked === true ||
-          (params.postTest === "security_locked" && data.proctoringLocked !== false);
-        if (postTestLocked) {
+        if (isPostTestLocked(data.proctoringLocked, params.postTest)) {
           data.modules = data.modules.map((m) =>
             m.key === "STANDARD_TEST"
               ? {
@@ -320,28 +319,6 @@ export function useTraineeHome() {
 
   const attendanceRecorded = backendAttendanceDone || justCheckedIn;
 
-  // Auto-enter the Live Quiz room the moment the trainer makes it the live
-  // module, so the trainee is on the "waiting" screen BEFORE the first
-  // question is broadcast - otherwise Q1's timer (anchored to broadcast time)
-  // has already run out by the time they tap "Enter Live Quiz". Q2+ are fine
-  // because they're already in the room. One-shot per conference; the manual
-  // button and Leave still work.
-  // On a geofenced training the Live Quiz asks for the same location check as
-  // every other module first: the card shows "Check-In to Enter", and the
-  // trainee is taken into the room as soon as that check passes.
-  useEffect(() => {
-    const uid = session?.conferenceUid;
-    if (!uid || sessionClosed || notStarted || !attendanceRecorded) return;
-    if (autoEnteredLiveQuiz === uid || isModuleLeft(uid, "LIVE_QUIZ", currentTraineeUid)) return;
-    if (session?.attendanceGeoFencing && moduleLocationStatus[locationGateKey(uid, "LIVE_QUIZ")] !== "verified") return;
-    const liveQuiz = session?.modules.find(
-      (m) => m.key === "LIVE_QUIZ" && m.isLive && !m.isCompleted,
-    );
-    if (!liveQuiz) return;
-    autoEnteredLiveQuiz = uid;
-    router.push({ pathname: "/live_quiz", params: { conferenceUid: uid } });
-  }, [session, sessionClosed, notStarted, attendanceRecorded, moduleLocationStatus, router, currentTraineeUid]);
-
   const currentFlow: SessionFlowState = attendanceRecorded
     ? "ATTENDANCE_RECORDED"
     : paramsMatchThisConfAndTrainee &&
@@ -352,6 +329,8 @@ export function useTraineeHome() {
       : session?.flowState ||
         (confUid ? getSessionFlowState(confUid, currentTraineeUid) : undefined) ||
         "SECURE_CHECKIN";
+
+  const postTestLocked = isPostTestLocked(session?.proctoringLocked, params.postTest);
 
   const activities: SessionActivityData[] = (session?.modules ?? []).map(
     (module) => {
@@ -383,11 +362,11 @@ export function useTraineeHome() {
         isLive: notStarted ? false : isLiveModule,
         isCompleted: isAttendance ? isAttendanceCompleted : module.isCompleted,
         isMissed: module.isMissed,
-        // `isLocked` here is only the security-violation lock (that path
-        // builds its own activities array). The admission gate is carried
-        // by `lockReason` instead, so the module keeps its LIVE badge while
-        // its action is blocked.
-        isLocked: isLeft ? true : false,
+        // `isLocked` here is only the security-violation lock - the Post
+        // Test's proctoring lock, or a module the trainee left. The
+        // admission gate is carried by `lockReason` instead, so the module
+        // keeps its LIVE badge while its action is blocked.
+        isLocked: isLeft || (module.key === "STANDARD_TEST" && postTestLocked),
         lockReason: isLeft ? "You left this module and cannot rejoin." : (module.lockReason ?? null),
         completedAt: module.completedAt,
         score: module.score,
@@ -510,14 +489,15 @@ export function useTraineeHome() {
     }
   };
 
+  // The trainee enters the Live Quiz room themselves, from its card's "Enter Session" - on a
+  // geofenced training once its location check has passed (user, 2026-10-22). Inside, the room
+  // waits for the trainer until a question is live.
   const handleEnterLiveQuiz = () => {
     blurActiveElement();
     if (session?.conferenceUid && isModuleLeft(session.conferenceUid, "LIVE_QUIZ", currentTraineeUid)) {
       Alert.alert("Module Left", "You have left this module and cannot rejoin.");
       return;
     }
-    // Mark it entered so leaving the quiz doesn't get auto-routed straight back.
-    if (session?.conferenceUid) autoEnteredLiveQuiz = session.conferenceUid;
     router.push({
       pathname: "/live_quiz",
       params: { conferenceUid: session?.conferenceUid ?? "" },

@@ -25,6 +25,10 @@ logger = logging.getLogger("tenant_manager")
 _SPELLINGS = "spellings"
 
 
+# A company row added without its database (services/tenant_setup) isn't served until it is set up.
+NOT_SET_UP = "This company is still being set up. Please try again in a few minutes."
+
+
 def _inactive_tenant_error() -> HTTPException:
     """The one refusal for a tenant whose registry status isn't "active" (suspended, inactive, ...)."""
     return HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant account is suspended or inactive")
@@ -209,6 +213,8 @@ class TenantConnectionManager:
     def _registry_url(self, tenant_uid: str, tenant_record: Tenant) -> URL:
         """The connection URL from an active tenant's registry row, its password decrypted."""
         self._remember_status(tenant_uid, tenant_record)
+        if not tenant_record.is_set_up:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=NOT_SET_UP)
         try:
             database_password = decrypt_secret(tenant_record.database_password)
         except SecretUnavailable:

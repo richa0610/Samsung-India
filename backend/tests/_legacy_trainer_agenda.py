@@ -63,12 +63,16 @@ def trainer_counts(db: Session, username: str, start: Optional[str], end: Option
     def is_past(c):
         return bool(c.conferenceDate) and c.conferenceDate < today_ist
 
-    scoped = _all_for_trainer(db, username) if is_default_view else counted
+    scoped = counted
     pending = sum(1 for c in not_started_approved(scoped) if not is_past(c))
     missed = sum(1 for c in not_started_approved(counted) if is_past(c))
     pending_approval = sum(1 for c in counted if title_status(c.status) == "Pending")
-    # Changed on purpose since (2026-10-05): Ongoing counts every running training, whatever the range.
-    ongoing = sum(1 for c in _all_for_trainer(db, username) if title_status(c.conferenceStatus) in ("Ongoing", "Live"))
+    ongoing = sum(1 for c in counted if title_status(c.conferenceStatus) in ("Ongoing", "Live"))
+    in_a_card = {c.conferenceUid for c in not_started_approved(counted)} | {
+        c.conferenceUid for c in counted
+        if title_status(c.conferenceStatus) in ("Completed", "Ongoing", "Live") or title_status(c.status) == "Pending"
+    }
+    total_sessions = len(in_a_card)
     pending_total = pending + pending_approval
     return {
         "totalTrainees": total_trainees,

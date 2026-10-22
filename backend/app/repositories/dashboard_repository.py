@@ -155,7 +155,9 @@ def trainer_summary_counts(
     is the reference they're proven equal to):
 
       listed        today's trainings (no range given - the default view), else those in start..end
-      totalSessions listed, not cancelled                     completed  ... of those, Completed
+      totalSessions the listed, not cancelled trainings that are in at least one card below - each
+                    counted once, even when it is in two cards (e.g. Ongoing and Pending approval)
+      completed     ... of those, Completed
       pending       approved, not yet started / finished, not past - across ALL the trainer's
                     trainings on the default view, else across the counted range
       missed        approved, never started, date already past - within the counted range
@@ -178,18 +180,20 @@ def trainer_summary_counts(
     counted = and_(listed, status != "cancelled")
     not_started_approved = and_(approval == "approved", status.notin_(("ongoing", "live", "completed", "cancelled")))
     past = and_(func.coalesce(Conference.conferenceDate, "") != "", Conference.conferenceDate < today_ist)
-    scoped = true() if default_view else counted
 
     def how_many(condition):
         return func.coalesce(func.sum(case((condition, 1), else_=0)), 0)
 
+    # Pending and Missed between them are every not_started_approved training.
+    in_a_card = or_(status.in_(("completed", "ongoing", "live")), not_started_approved, approval == "pending")
+
     total, completed, pending, missed, ongoing, pending_approval = db.execute(
         select(
-            how_many(counted),
+            how_many(and_(counted, in_a_card)),
             how_many(and_(counted, status == "completed")),
-            how_many(and_(scoped, not_started_approved, not_(past))),
+            how_many(and_(counted, not_started_approved, not_(past))),
             how_many(and_(counted, not_started_approved, past)),
-            how_many(status.in_(("ongoing", "live"))),
+            how_many(and_(counted, status.in_(("ongoing", "live")))),
             how_many(and_(counted, approval == "pending")),
         ).where(owned)
     ).one()

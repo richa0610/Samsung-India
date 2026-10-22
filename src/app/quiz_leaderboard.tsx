@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AccuracyScoreCard, GlobalLeaderboardCard, ResultsHero } from "@/components/quiz/leaderboard";
@@ -16,6 +16,7 @@ export default function QuizLeaderboardScreen() {
   const {
     insets,
     screenWidth,
+    loading,
     isTrainingLive,
     liveState,
     showResults,
@@ -55,7 +56,11 @@ export default function QuizLeaderboardScreen() {
 
       <QuizLiveHeader onSync={() => {}} onRefresh={() => {}} isConnected={true} />
 
-      {!showResults ? (
+      {loading ? (
+        <View style={styles.pendingWrap}>
+          <ActivityIndicator color={Colors.headerBlue} accessibilityLabel="Loading your results" />
+        </View>
+      ) : !showResults ? (
         <View style={styles.pendingWrap}>
           <AppText style={styles.pendingTitle} weight={FontWeight.bold}>
             {emptyCopy.title}
