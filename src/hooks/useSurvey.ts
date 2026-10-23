@@ -90,7 +90,7 @@ export function useSurvey(suiteUid?: string, conferenceUid?: string, isRetest?: 
     } finally {
       setSubmitting(false);
     }
-  }, [token, suiteUid, conferenceUid, submitting, questions, answers]);
+  }, [token, suiteUid, conferenceUid, submitting, questions, answers, isRetest]);
 
   const surveyQuestions: SurveyQuestion[] = useMemo(() => {
     return questions.map((q) => ({

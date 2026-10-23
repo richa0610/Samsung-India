@@ -67,3 +67,30 @@ test("triggers onGoDashboard when View Dashboard is pressed", async () => {
   fireEvent.press(dashBtn);
   expect(onGoDashboard).toHaveBeenCalledTimes(1);
 });
+
+test("renders retest items for missed session and triggers onRetest", async () => {
+  const onRetest = jest.fn();
+  await render(
+    <StatusNoticeCard
+      status="Missed"
+      title="Session Missed"
+      message="You missed this training."
+      onBack={jest.fn()}
+      retestItems={[
+        { key: "STANDARD_TEST", name: "Standard Test", suiteUid: "SUITE-1", done: false, score: null },
+        { key: "SURVEY", name: "Survey Module", suiteUid: "SURVEY-1", done: true, score: null },
+      ]}
+      onRetest={onRetest}
+    />,
+  );
+
+  expect(screen.getByText("Retest & Survey Retake")).toBeTruthy();
+  expect(screen.getByText("Standard Test")).toBeTruthy();
+  expect(screen.getByText("Survey Module")).toBeTruthy();
+  expect(screen.getByText("Completed")).toBeTruthy();
+
+  const startRetestBtn = screen.getByText("Start Retest");
+  expect(startRetestBtn).toBeTruthy();
+  fireEvent.press(startRetestBtn);
+  expect(onRetest).toHaveBeenCalledWith("STANDARD_TEST", "SUITE-1");
+});

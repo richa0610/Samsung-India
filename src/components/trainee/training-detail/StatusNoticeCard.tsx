@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { Pressable, ScrollView, StyleSheet, View } from "react-native";
 
+import { RetestModule } from "@/api/session";
 import AppButton from "@/components/ui/AppButton";
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
@@ -20,6 +21,8 @@ export type StatusNoticeCardProps = {
   trainerName?: string | null;
   onBack: () => void;
   onGoDashboard?: () => void;
+  retestItems?: RetestModule[];
+  onRetest?: (moduleKey: string, suiteUid: string) => void;
 };
 
 export default function StatusNoticeCard({
@@ -32,6 +35,8 @@ export default function StatusNoticeCard({
   trainerName,
   onBack,
   onGoDashboard,
+  retestItems,
+  onRetest,
 }: StatusNoticeCardProps) {
   const isMissed = status === "Missed";
   const isAbsent = status === "Absent";
@@ -42,7 +47,9 @@ export default function StatusNoticeCard({
     ? "#DC2626"
     : isAbsent || isIncomplete
       ? "#D97706"
-      : "#2563EB";
+      : isOngoing
+        ? "#2563EB"
+        : Colors.blueAccent;
 
   const statusHaloBg = isMissed
     ? "#FEE2E2"
@@ -224,6 +231,79 @@ export default function StatusNoticeCard({
           </View>
         ) : null}
       </View>
+
+      {/* Available Retests & Survey Card */}
+      {retestItems && retestItems.length > 0 && (
+        <View style={styles.retestCard}>
+          <View style={styles.cardHeaderRow}>
+            <View style={[styles.headerIconWrap, { backgroundColor: Colors.blue50 }]}>
+              <Ionicons name="refresh-circle-outline" size={17} color={Colors.blueAccent} />
+            </View>
+            <AppText variant="label" weight={FontWeight.bold} color={Colors.black} style={styles.cardHeaderText}>
+              Retest & Survey Retake
+            </AppText>
+            <View style={[styles.statusMiniPill, { backgroundColor: "#E0F2FE" }]}>
+              <AppText variant="tiny" weight={FontWeight.bold} color={Colors.blueAccent}>
+                Available
+              </AppText>
+            </View>
+          </View>
+
+          <View style={styles.divider} />
+
+          <AppText variant="tiny" color={Colors.gray500} style={styles.retestDescription}>
+            You may take the Post-Test and Survey for this missed session once. Your retest result will be recorded with your profile.
+          </AppText>
+
+          <View style={styles.retestList}>
+            {retestItems.map((item) => {
+              const isStandardTest = item.key === "STANDARD_TEST";
+              const iconName: keyof typeof Ionicons.glyphMap = isStandardTest ? "document-text-outline" : "clipboard-outline";
+
+              return (
+                <View key={item.key} style={styles.retestItemRow}>
+                  <View style={styles.retestItemInfo}>
+                    <View style={styles.retestIconWrap}>
+                      <Ionicons name={iconName} size={16} color={Colors.blueAccent} />
+                    </View>
+                    <View style={styles.retestTextCol}>
+                      <AppText variant="bodySmall" weight={FontWeight.semiBold} color={Colors.black}>
+                        {item.name}
+                      </AppText>
+                      {item.done && item.score && (
+                        <AppText variant="tiny" weight={FontWeight.bold} color={Colors.successTeal}>
+                          Score: {item.score}
+                        </AppText>
+                      )}
+                    </View>
+                  </View>
+
+                  {item.done ? (
+                    <View style={styles.retestDoneBadge}>
+                      <Ionicons name="checkmark-done" size={13} color={Colors.successTeal} />
+                      <AppText variant="tiny" weight={FontWeight.bold} color={Colors.successTeal}>
+                        {item.score ? `Retested (${item.score})` : "Completed"}
+                      </AppText>
+                    </View>
+                  ) : (
+                    <Pressable
+                      style={styles.retestActionButton}
+                      onPress={() => onRetest?.(item.key, item.suiteUid)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Start ${item.name}`}
+                    >
+                      <Ionicons name={isStandardTest ? "reload-outline" : "create-outline"} size={13} color={Colors.white} />
+                      <AppText variant="tiny" weight={FontWeight.bold} color={Colors.white}>
+                        {isStandardTest ? "Start Retest" : "Take Survey"}
+                      </AppText>
+                    </Pressable>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
 
       {/* Helpful Guidance Notice Card */}
       <View style={styles.guidanceCard}>
@@ -420,5 +500,65 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.white,
     borderWidth: 1,
     borderColor: "#CBD5E1",
+  },
+  retestCard: {
+    backgroundColor: Colors.white,
+    borderRadius: Radius.card,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    ...Shadows.card,
+  },
+  retestDescription: {
+    lineHeight: 18,
+    marginBottom: 10,
+  },
+  retestList: {
+    gap: 2,
+  },
+  retestItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: Colors.slate100,
+    gap: 8,
+  },
+  retestItemInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: 10,
+  },
+  retestIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: Colors.blue50,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  retestTextCol: {
+    flex: 1,
+    gap: 1,
+  },
+  retestDoneBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: Colors.successBgSoft,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: Radius.sm,
+  },
+  retestActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Colors.blueAccent,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: Radius.sm,
   },
 });

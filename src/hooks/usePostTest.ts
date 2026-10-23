@@ -131,7 +131,7 @@ export function usePostTest(
     return () => {
       ignore = true;
     };
-  }, [token, suiteUid, conferenceUid, reloadKey]);
+  }, [token, suiteUid, conferenceUid, reloadKey, isRetest]);
 
   const current = questions[questionIndex];
   const selectedOption = answers[questionIndex] ?? null;
@@ -166,7 +166,7 @@ export function usePostTest(
       terminatingRef.current = false;
       setTestStatus("active");
     }
-  }, [token, suiteUid, conferenceUid, questions, answers]);
+  }, [token, suiteUid, conferenceUid, questions, answers, isRetest]);
 
   // Security violation termination
   const handleViolationTermination = useCallback(

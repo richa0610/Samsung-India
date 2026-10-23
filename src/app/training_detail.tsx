@@ -89,6 +89,8 @@ export default function TrainingDetailScreen() {
           trainerName={detail.trainerName}
           onBack={onBack}
           onGoDashboard={() => router.replace("/trainee_dashboard")}
+          retestItems={detail.retest}
+          onRetest={(key, suiteUid) => handleRetest(key, suiteUid)}
         />
       ) : detail.status === "Absent" ? (
         <StatusNoticeCard
