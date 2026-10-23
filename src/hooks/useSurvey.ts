@@ -16,7 +16,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 const FREE_TEXT_TYPES = new Set(["short_answer", "paragraph", "text"]);
 
-export function useSurvey(suiteUid?: string, conferenceUid?: string) {
+export function useSurvey(suiteUid?: string, conferenceUid?: string, isRetest?: boolean) {
   const { token } = useAuth();
 
   const [questions, setQuestions] = useState<AssessmentQuestion[]>([]);
@@ -37,7 +37,7 @@ export function useSurvey(suiteUid?: string, conferenceUid?: string) {
       setLoading(true);
       setError(null);
       try {
-        const data = await getAssessmentQuestions(token, suiteUid, conferenceUid);
+        const data = await getAssessmentQuestions(token, suiteUid, conferenceUid, isRetest);
         if (!ignore) {
           setQuestions(data.questions);
           setSurveyTitle(data.title);
@@ -58,7 +58,7 @@ export function useSurvey(suiteUid?: string, conferenceUid?: string) {
     return () => {
       ignore = true;
     };
-  }, [token, suiteUid, reloadKey, conferenceUid]);
+  }, [token, suiteUid, reloadKey, conferenceUid, isRetest]);
 
   const handleAnswerChange = useCallback(
     (questionId: string | number, value: string) => {
@@ -80,6 +80,7 @@ export function useSurvey(suiteUid?: string, conferenceUid?: string) {
           questionId: question.id,
           selectedOption: answers[question.id] ?? null,
         })),
+        isRetest,
       );
       setSubmittedAt(new Date());
     } catch (err) {

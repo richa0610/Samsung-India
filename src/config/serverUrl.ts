@@ -10,7 +10,7 @@ import { persistedText } from "./persistedText";
  * request, so a change takes effect without an app restart.
  */
 
-const DEFAULT_HOST = "10.239.162.53";
+const DEFAULT_HOST = "129.121.73.181";
 export const DEFAULT_API_URL = process.env.EXPO_PUBLIC_API_URL
   ? normalize(process.env.EXPO_PUBLIC_API_URL)
   : `http://${DEFAULT_HOST}:8000`;

@@ -18,7 +18,7 @@ def build_connect_args(host: Optional[str] = None) -> dict:
     `host`: where the engine connects. The server automatically set-up companies live on
     (TENANT_DB_HOST - Bluehost, user 2026-10-22) takes its own TLS setting, TENANT_DB_SSL_CA:
     DB_SSL_CA is the main server's (Aiven's) certificate and would fail there."""
-    connect_args: dict = {"connect_timeout": 5, "read_timeout": 10, "write_timeout": 10}
+    connect_args: dict = {"connect_timeout": 10, "read_timeout": 30, "write_timeout": 30}
     if host and settings.TENANT_DB_HOST and host == settings.TENANT_DB_HOST and host != settings.DB_HOST:
         # Checked against its own CA when one is given; otherwise still encrypted whenever the server
         # offers TLS, without checking its certificate.

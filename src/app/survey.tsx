@@ -6,11 +6,13 @@ import { useSurvey } from "@/hooks/useSurvey";
 
 export default function SurveyScreen() {
   const router = useRouter();
-  const { conferenceUid, suiteUid } = useLocalSearchParams<{
+  const { conferenceUid, suiteUid, retest } = useLocalSearchParams<{
     conferenceUid: string;
     suiteUid: string;
+    retest?: string;
   }>();
 
+  const isRetest = retest === "true";
   const {
     questions,
     surveyQuestions,
@@ -25,7 +27,7 @@ export default function SurveyScreen() {
     handleAnswerChange,
     handleSubmit,
     retry,
-  } = useSurvey(suiteUid, conferenceUid);
+  } = useSurvey(suiteUid, conferenceUid, isRetest);
 
   if (loading) {
     return <SurveyLoadingView />;
@@ -42,6 +44,10 @@ export default function SurveyScreen() {
         thankYouText="Your feedback has been submitted successfully."
         rows={buildSurveySubmissionRows({ headerTitle, questions, answers, startedAt, submittedAt })}
         onGoToDashboard={() => {
+          if (isRetest && conferenceUid) {
+            router.replace({ pathname: "/training_detail", params: { conferenceUid } });
+            return;
+          }
           router.replace({ pathname: "/session_detail", params: { survey: "completed" } });
         }}
       />

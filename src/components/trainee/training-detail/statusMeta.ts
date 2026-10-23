@@ -7,6 +7,7 @@ export type StatusMeta = { icon: keyof typeof Ionicons.glyphMap; color: string; 
 // status pill, so the two always agree on what each status looks like.
 export const STATUS_META: Record<string, StatusMeta> = {
   Completed: { icon: "checkmark-circle-outline", color: "#059669", bg: Colors.successBgSoft },
+  Incomplete: { icon: "alert-circle-outline", color: "#D97706", bg: "#FEF3C7" },
   Ongoing: { icon: "radio-outline", color: Colors.blueAccent, bg: Colors.blue50 },
   Scheduled: { icon: "time-outline", color: "#EA580C", bg: "#FFF7ED" },
   Missed: { icon: "close-circle-outline", color: Colors.danger, bg: Colors.dangerBgSoft },

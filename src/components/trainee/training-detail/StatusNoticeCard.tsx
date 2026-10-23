@@ -36,28 +36,29 @@ export default function StatusNoticeCard({
   const isMissed = status === "Missed";
   const isAbsent = status === "Absent";
   const isOngoing = status === "Ongoing";
+  const isIncomplete = status === "Incomplete";
 
   const statusColor = isMissed
     ? "#DC2626"
-    : isAbsent
+    : isAbsent || isIncomplete
       ? "#D97706"
       : "#2563EB";
 
   const statusHaloBg = isMissed
     ? "#FEE2E2"
-    : isAbsent
+    : isAbsent || isIncomplete
       ? "#FEF3C7"
       : "#DBEAFE";
 
   const statusBorderColor = isMissed
     ? "#FCA5A5"
-    : isAbsent
+    : isAbsent || isIncomplete
       ? "#FCD34D"
       : "#93C5FD";
 
   const statusIconName: keyof typeof Ionicons.glyphMap = isMissed
     ? "close"
-    : isAbsent
+    : isAbsent || isIncomplete
       ? "alert-circle-outline"
       : "time-outline";
 
@@ -65,15 +66,25 @@ export default function StatusNoticeCard({
     ? "MISSED SESSION"
     : isAbsent
       ? "MARKED ABSENT"
-      : "IN PROGRESS";
+      : isIncomplete
+        ? "INCOMPLETE SESSION"
+        : "IN PROGRESS";
 
-  const statusLabel = isMissed ? "Missed" : isAbsent ? "Absent" : "In Progress";
+  const statusLabel = isMissed
+    ? "Missed"
+    : isAbsent
+      ? "Absent"
+      : isIncomplete
+        ? "Incomplete"
+        : "In Progress";
 
   const guidanceText = isMissed
     ? "Attendance and verification are required while a training is live. You can review your overall record and upcoming schedules from your dashboard."
     : isAbsent
       ? "You were marked absent for this training. If you believe this was an error, please reach out to your session trainer or coordinator."
-      : "This training is currently running. All module scores, question breakdowns, and results will appear here once the trainer ends the session.";
+      : isIncomplete
+        ? "You attended this training, but some required modules were not completed before the session ended."
+        : "This training is currently running. All module scores, question breakdowns, and results will appear here once the trainer ends the session.";
 
   return (
     <ScrollView

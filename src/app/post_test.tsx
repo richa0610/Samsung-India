@@ -11,13 +11,15 @@ import ProctoringScreen from "@/components/proctoring/ProctoringScreen";
 import { usePostTest } from "@/hooks/usePostTest";
 
 export default function PostTestScreen() {
-  const { conferenceUid, suiteUid, proctored } = useLocalSearchParams<{
+  const { conferenceUid, suiteUid, proctored, retest } = useLocalSearchParams<{
     conferenceUid: string;
     suiteUid: string;
     proctored?: string;
+    retest?: string;
   }>();
 
-  const postTest = usePostTest(conferenceUid, suiteUid, proctored);
+  const isRetest = retest === "true";
+  const postTest = usePostTest(conferenceUid, suiteUid, proctored, isRetest);
   const {
     readyToStart,
     setReadyToStart,

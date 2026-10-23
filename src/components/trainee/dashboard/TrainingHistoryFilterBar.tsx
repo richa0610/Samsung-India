@@ -10,6 +10,7 @@ import { FontWeight } from "@/theme/fontWeight";
 const STATUS_OPTIONS: SelectOption[] = [
   { label: "All Status", value: "" },
   { label: "Completed", value: "Completed" },
+  { label: "Incomplete", value: "Incomplete" },
   { label: "Ongoing", value: "Ongoing" },
   { label: "Not Started", value: "Scheduled" },
   { label: "Missed", value: "Missed" },

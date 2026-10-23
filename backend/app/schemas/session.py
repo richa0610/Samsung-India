@@ -106,6 +106,10 @@ class TrainingModuleDetail(BaseModel):
     completedAt: Optional[str] = None
     # Populated for STANDARD_TEST / LIVE_QUIZ / SURVEY only - empty for ATTENDANCE.
     questions: List[TrainingQuestionAttempt] = []
+    assessmentSuiteUid: Optional[str] = None
+    canRetest: bool = False
+    retestDone: bool = False
+    retestScore: Optional[str] = None
 
 
 class TrainingDetailOut(BaseModel):
@@ -121,6 +125,23 @@ class TrainingDetailOut(BaseModel):
     trainerName: Optional[str] = None
     status: str
     modules: List[TrainingModuleDetail] = []
+    # A missed session's Standard Test and Survey the trainee may retake, in run order - empty
+    # unless they missed a session that ran (trainee_access.is_retestable).
+    retest: List["RetestModule"] = []
+
+
+class RetestModule(BaseModel):
+    """One test of a missed session the trainee may retake once (user, 2026-10-22)."""
+
+    key: str
+    name: str
+    suiteUid: str
+    done: bool = False
+    # Their retest score ("3/5") once done; a Survey is never scored - None.
+    score: Optional[str] = None
+
+
+TrainingDetailOut.model_rebuild()
 
 
 class SessionHistoryItem(BaseModel):

@@ -20,6 +20,29 @@ export default function TrainingDetailScreen() {
   const { onBack, detail, loading, error, reload, expandedKeys, toggleModule } = useTrainingDetail();
   const overallMeta = detail ? statusMetaFor(detail.status) : null;
 
+  const handleRetest = (moduleKey: string, suiteUid?: string | null) => {
+    if (!detail) return;
+    if (moduleKey === "STANDARD_TEST") {
+      router.push({
+        pathname: "/post_test",
+        params: {
+          conferenceUid: detail.conferenceUid,
+          ...(suiteUid ? { suiteUid } : {}),
+          retest: "true",
+        },
+      });
+    } else if (moduleKey === "SURVEY") {
+      router.push({
+        pathname: "/survey",
+        params: {
+          conferenceUid: detail.conferenceUid,
+          ...(suiteUid ? { suiteUid } : {}),
+          retest: "true",
+        },
+      });
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={["bottom"]}>
       <ScreenBanner backgroundColor={Colors.mainColour1} statusBarStyle="light" style={[styles.banner, { paddingTop: insets.top + 12 }]}>
@@ -148,6 +171,11 @@ export default function TrainingDetailScreen() {
                 module={module}
                 expanded={expandedKeys.has(module.key)}
                 onToggle={() => toggleModule(module.key)}
+                onRetest={
+                  module.canRetest && module.assessmentSuiteUid
+                    ? () => handleRetest(module.key, module.assessmentSuiteUid)
+                    : undefined
+                }
               />
             ))
           )}

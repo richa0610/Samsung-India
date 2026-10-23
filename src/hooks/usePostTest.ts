@@ -40,6 +40,7 @@ export function usePostTest(
   conferenceUid?: string,
   suiteUid?: string,
   proctored?: string,
+  isRetest?: boolean,
 ) {
   const router = useRouter();
   const { token } = useAuth();
@@ -100,7 +101,7 @@ export function usePostTest(
       setLoading(true);
       setError(null);
       try {
-        const data = await getAssessmentQuestions(token, suiteUid, conferenceUid);
+        const data = await getAssessmentQuestions(token, suiteUid, conferenceUid, isRetest);
         if (!ignore) {
           setQuestions(data.questions);
           setSuiteTitle(data.title ?? null);
@@ -153,6 +154,7 @@ export function usePostTest(
           questionId: question.id,
           selectedOption: answers[index] ?? null,
         })),
+        isRetest,
       );
       setAssessmentResult(res);
       setSubmittedAt(new Date());
@@ -346,6 +348,13 @@ export function usePostTest(
   };
 
   const handleGoToDashboard = () => {
+    if (isRetest && conferenceUid) {
+      router.replace({
+        pathname: "/training_detail",
+        params: { conferenceUid },
+      });
+      return;
+    }
     const attempted = Object.keys(answers).length;
     const elapsedSeconds = Math.max(totalSeconds - remainingSeconds, 0);
     const hh = String(Math.floor(elapsedSeconds / 3600)).padStart(2, "0");

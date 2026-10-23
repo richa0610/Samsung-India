@@ -8,7 +8,7 @@ import { Shadows } from "@/theme/shadows";
 import { FontWeight } from "@/theme/typography";
 import { trainingStatusLabel } from "@/utils/trainingStatusLabel";
 
-export type TrainingStatus = "Completed" | "Ongoing" | "Scheduled" | "Missed" | "Absent";
+export type TrainingStatus = "Completed" | "Incomplete" | "Ongoing" | "Scheduled" | "Missed" | "Absent";
 
 export type TrainingRowData = {
   id: string;
@@ -25,6 +25,7 @@ export type TrainingRowData = {
 
 const STATUS_META: Record<TrainingStatus, { icon: keyof typeof Ionicons.glyphMap; color: string; bg: string }> = {
   Completed: { icon: "checkmark-circle-outline", color: "#059669", bg: Colors.successBgSoft },
+  Incomplete: { icon: "alert-circle-outline", color: "#D97706", bg: "#FEF3C7" },
   Ongoing: { icon: "radio-outline", color: Colors.blueAccent, bg: Colors.blue50 },
   Scheduled: { icon: "time-outline", color: "#EA580C", bg: "#FFF7ED" },
   Missed: { icon: "close-circle-outline", color: Colors.danger, bg: Colors.dangerBgSoft },

@@ -86,7 +86,7 @@ def _build_training_rows(
         # The trainee's own outcome for this training, not the raw conference
         # lifecycle: a session that ran and ended while the trainee only
         # "Joined" (never checked in) is "Missed" for them, not "Completed".
-        status = _trainee_status_for(conf, attendance_by_conf.get(conf.conferenceUid))
+        status = _trainee_status_for(conf, attendance_by_conf.get(conf.conferenceUid), conf_results)
 
         rank_label = None
         if post and conf.postAssessmentUid:

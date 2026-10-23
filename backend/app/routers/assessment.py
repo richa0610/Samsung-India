@@ -15,10 +15,12 @@ router = APIRouter(prefix="/assessments", tags=["assessments"])
 def get_questions(
     suite_uid: str,
     conference_uid: IdStr = Query(..., alias="conferenceUid"),
+    # A missed session's test taken afterwards (trainee_access.open_retest).
+    retest: bool = False,
     db: Session = Depends(get_db),
     trainee: Trainee = Depends(get_current_trainee),
 ):
-    return assessment_service.get_questions(db, trainee, suite_uid, conference_uid)
+    return assessment_service.get_questions(db, trainee, suite_uid, conference_uid, retest)
 
 
 @router.post("/{suite_uid}/submit", response_model=SubmitResult)

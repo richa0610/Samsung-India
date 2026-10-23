@@ -32,6 +32,8 @@ class AnswerIn(BaseModel):
 class SubmitRequest(BaseModel):
     conferenceUid: IdStr
     answers: Annotated[List[AnswerIn], Field(max_length=500)]
+    # A missed session's test taken afterwards (assessment_service.submit_assessment).
+    retest: bool = False
 
 
 class SubmitResult(BaseModel):

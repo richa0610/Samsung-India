@@ -3,9 +3,10 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from app.core.constants import RESULT_COMPLETED, RESULT_STARTED
-from app.core.exceptions import bad_request, not_found
+from app.core.constants import RESULT_COMPLETED, RESULT_RETEST, RESULT_STARTED
+from app.core.exceptions import bad_request, conflict, not_found
 from app.core.request_context import caller_device
+from app.models.conference import Conference
 from app.models.quiz import Assessment, AssessmentResult
 from app.models.trainee import Trainee
 from app.repositories import assessment_repository
@@ -71,12 +72,32 @@ def _seconds_between(started_at, ended_at) -> int:
     return max(0, int((ended_at - started_at).total_seconds())) if started_at else 0
 
 
-def get_questions(db: Session, trainee: Trainee, suite_uid: str, conference_uid: str) -> AssessmentQuestionsOut:
+ALREADY_RETAKEN = "You've already retaken this."
+
+
+def _open(db: Session, trainee: Trainee, conference_uid: str, suite_uid: str, retest: bool) -> tuple[Conference, str]:
+    """The session and module key the trainee may take `suite_uid` in, its attendance row locked: a
+    module open in their running session, or - `retest` - a missed session's test taken afterwards
+    (trainee_access.open_retest)."""
+    if retest:
+        return trainee_access.open_retest(db, trainee, conference_uid, suite_uid, lock=True)
+    return trainee_access.open_assessment(db, trainee, conference_uid, suite_uid, lock=True)
+
+
+def get_questions(
+    db: Session, trainee: Trainee, suite_uid: str, conference_uid: str, retest: bool = False
+) -> AssessmentQuestionsOut:
     """The questions of a test the trainee is taking right now (trainee_access.open_assessment:
     Present, the suite is that session's Standard Test or Survey, and that module is open) - never
-    another session's test, and never before it opens. Correct answers are never included.
-    Opening them is when the trainee starts the test (see record_start)."""
-    conference, _ = trainee_access.open_assessment(db, trainee, conference_uid, suite_uid, lock=True)
+    another session's test, and never before it opens. `retest`: a missed session's test, once
+    (trainee_access.open_retest). Correct answers are never included. Opening them is when the
+    trainee starts the test (see record_start)."""
+    conference, _ = _open(db, trainee, conference_uid, suite_uid, retest)
+    if retest and (
+        assessment_repository.get_retest_result(db, conference.conferenceUid, trainee.traineeUid, suite_uid)
+        or assessment_repository.get_latest_result(db, conference.conferenceUid, trainee.traineeUid, suite_uid)
+    ):
+        raise conflict(ALREADY_RETAKEN)
     questions = assessment_repository.list_questions_for_suite(db, suite_uid)
     if not questions:
         raise not_found("No questions found for this assessment")
@@ -184,13 +205,23 @@ def submit_assessment(db: Session, trainee: Trainee, suite_uid: str, payload: Su
     One submission per trainee, session and test - the session screen never offers a completed
     module again (session_service's isLive). A repeat (a double tap, or a retry after a lost
     response) returns the stored result instead of saving a second attempt; the trainee's
-    attendance row is locked for the transaction, so concurrent repeats run one after another."""
-    conference, module_key = trainee_access.open_assessment(db, trainee, payload.conferenceUid, suite_uid, lock=True)
+    attendance row is locked for the transaction, so concurrent repeats run one after another.
+
+    `payload.retest`: a missed session's test taken afterwards (user, 2026-10-22) - saved as a
+    RESULT_RETEST result, which nothing counts as finished: the session stays Missed, out of its
+    ranking, and the trainee isn't checked out of it. Once per test, like any submission."""
+    retest = payload.retest
+    conference, module_key = _open(db, trainee, payload.conferenceUid, suite_uid, retest)
     questions = assessment_repository.list_questions_for_suite(db, suite_uid)
     if not questions:
         raise not_found("No questions found for this assessment")
 
-    existing = assessment_repository.get_latest_result(db, conference.conferenceUid, trainee.traineeUid, suite_uid)
+    find_existing = assessment_repository.get_retest_result if retest else assessment_repository.get_latest_result
+    existing = find_existing(db, conference.conferenceUid, trainee.traineeUid, suite_uid)
+    if retest and existing is None and assessment_repository.get_latest_result(
+        db, conference.conferenceUid, trainee.traineeUid, suite_uid
+    ):
+        raise conflict(ALREADY_RETAKEN)   # taken in the session after all - nothing to retake
     if existing is not None:
         stored = assessment_repository.list_answers_for_trainee_suite(db, conference.conferenceUid, trainee.traineeUid, suite_uid)
         assessment_repository.commit(db)  # releases the row lock
@@ -216,18 +247,20 @@ def submit_assessment(db: Session, trainee: Trainee, suite_uid: str, payload: Su
     result.submittedAt = now
     result.durationSeconds = _seconds_between(result.startedAt, now)
     result.answersSnapshot = answers_snapshot(questions, answers_by_qid, scored=module_key != "SURVEY")
-    result.status = RESULT_COMPLETED
+    result.status = RESULT_RETEST if retest else RESULT_COMPLETED
     # The device that submitted it (the one that opened it may have been another).
     for column, value in caller_device().items():
         setattr(result, column, value)
     # The session's last module done -> the trainee is checked out (same rule as the Attendance
-    # and Live Quiz modules; module_flow.mark_checkout_if_last_module).
-    mark_checkout_if_last_module(db, conference, trainee.traineeUid, module_key)
+    # and Live Quiz modules; module_flow.mark_checkout_if_last_module). Not by a retest: they
+    # never attended.
+    if not retest:
+        mark_checkout_if_last_module(db, conference, trainee.traineeUid, module_key)
     assessment_repository.commit(db)
 
     log_activity(
         db,
-        action="SUBMIT_ASSESSMENT",
+        action="SUBMIT_RETEST" if retest else "SUBMIT_ASSESSMENT",
         username=str(trainee.phone),
         role="trainee",
         remarks=f"Submitted {suite_uid} for {conference.conferenceUid}"

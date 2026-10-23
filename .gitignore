@@ -51,8 +51,10 @@ backend/backups/
 # local-only: an AI chat transcript, and one-off data scripts with fixed IDs from before the
 # 2026-10-21 reset
 db-convo.txt
+post-test convo.txt
 backend/scripts/insert_test_data.py
 backend/scripts/insert_demo_test_data.py
+backend/scripts/inspect_tenants_data.py
 
 
 *.md 

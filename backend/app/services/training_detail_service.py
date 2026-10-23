@@ -14,7 +14,7 @@ from app.models.quiz import Question
 from app.models.trainee import Trainee
 from app.repositories import assessment_repository, attendance_repository, conference_repository
 from app.schemas.assessment import QuestionOption
-from app.schemas.session import TrainingDetailOut, TrainingModuleDetail, TrainingQuestionAttempt
+from app.schemas.session import RetestModule, TrainingDetailOut, TrainingModuleDetail, TrainingQuestionAttempt
 from app.services import answer_numbers, session_service
 from app.services.module_flow import configured_modules, module_suite_uid
 from app.services.trainee_dashboard_service import _fmt_score, _trainee_status_for
@@ -59,16 +59,22 @@ def _reviewable_questions(
 
 
 def _assessment_module(
-    db: Session, conference_uid: str, trainee_uid: str, module_key: str, suite_uid: str | None, session_over: bool
+    db: Session,
+    conference,
+    attendance,
+    trainee_uid: str,
+    module_key: str,
+    suite_uid: str | None,
+    session_over: bool,
 ) -> TrainingModuleDetail:
     if not suite_uid:
         return TrainingModuleDetail(key=module_key, name=MODULE_LABELS[module_key], status="Missed")
 
-    result = assessment_repository.get_latest_result(db, conference_uid, trainee_uid, suite_uid)
+    result = assessment_repository.get_latest_result(db, conference.conferenceUid, trainee_uid, suite_uid)
     questions = assessment_repository.list_questions_for_suite(db, suite_uid)
     answers_by_qid = {
         a.questionId: a
-        for a in assessment_repository.list_answers_for_trainee_suite(db, conference_uid, trainee_uid, suite_uid)
+        for a in assessment_repository.list_answers_for_trainee_suite(db, conference.conferenceUid, trainee_uid, suite_uid)
     }
 
     attempts: list[TrainingQuestionAttempt] = []
@@ -105,6 +111,16 @@ def _assessment_module(
     else:
         status = "Scheduled"
 
+    can_retest = False
+    retest_done = False
+    retest_score = None
+    if module_key in trainee_access.SUBMITTABLE_MODULES and session_over and result is None and attendance is not None:
+        if trainee_access.is_retestable(conference, attendance):
+            retest_result = assessment_repository.get_retest_result(db, conference.conferenceUid, trainee_uid, suite_uid)
+            retest_done = retest_result is not None
+            can_retest = not retest_done
+            retest_score = _fmt_score(retest_result.totalScore, retest_result.maxScore) if retest_result and module_key != "SURVEY" else None
+
     return TrainingModuleDetail(
         key=module_key,
         name=MODULE_LABELS[module_key],
@@ -113,6 +129,10 @@ def _assessment_module(
         score=_fmt_score(result.totalScore, result.maxScore) if result and module_key != "SURVEY" else None,
         completedAt=result.submittedAt.strftime("%Y-%m-%d %H:%M:%S") if result and result.submittedAt else None,
         questions=attempts,
+        assessmentSuiteUid=suite_uid,
+        canRetest=can_retest,
+        retestDone=retest_done,
+        retestScore=retest_score,
     )
 
 
@@ -124,7 +144,9 @@ def get_training_detail(db: Session, trainee: Trainee, conference_uid: str) -> T
         raise not_found("Training not found")
 
     attendance = attendance_repository.get_for_conference_and_trainee(db, conference_uid, trainee.traineeUid)
-    overall_status = _trainee_status_for(conference, attendance)
+    all_results = assessment_repository.list_results_for_trainee(db, trainee.traineeUid)
+    conf_results = [r for r in all_results if r.conferenceUid == conference_uid]
+    overall_status = _trainee_status_for(conference, attendance, conf_results)
     session_over = session_service._session_is_over(conference)
 
     # A trainee who missed the training or was marked absent sees only its outcome - no module
@@ -137,10 +159,11 @@ def get_training_detail(db: Session, trainee: Trainee, conference_uid: str) -> T
         else:
             suite_uid = module_suite_uid(conference, module_key)
             modules.append(
-                _assessment_module(db, conference_uid, trainee.traineeUid, module_key, suite_uid, session_over)
+                _assessment_module(db, conference, attendance, trainee.traineeUid, module_key, suite_uid, session_over)
             )
 
     location = location_label(conference)
+    retestable = attendance is not None and trainee_access.is_retestable(conference, attendance)
 
     return TrainingDetailOut(
         conferenceUid=conference.conferenceUid,
@@ -150,4 +173,29 @@ def get_training_detail(db: Session, trainee: Trainee, conference_uid: str) -> T
         trainerName=conference.trainerName,
         status=overall_status,
         modules=modules,
+        retest=_retest_modules(db, conference, trainee.traineeUid) if retestable else [],
     )
+
+
+def _retest_modules(db: Session, conference, trainee_uid: str) -> list[RetestModule]:
+    """The missed session's Standard Test and Survey, in run order, each with the trainee's retest of
+    it once taken."""
+    modules = []
+    for module_key in configured_modules(conference):
+        suite_uid = module_suite_uid(conference, module_key) if module_key in trainee_access.SUBMITTABLE_MODULES else None
+        if not suite_uid:
+            continue
+        # If they took it during the live session, it's not missed:
+        if assessment_repository.get_latest_result(db, conference.conferenceUid, trainee_uid, suite_uid) is not None:
+            continue
+        result = assessment_repository.get_retest_result(db, conference.conferenceUid, trainee_uid, suite_uid)
+        modules.append(
+            RetestModule(
+                key=module_key,
+                name=MODULE_LABELS[module_key],
+                suiteUid=suite_uid,
+                done=result is not None,
+                score=_fmt_score(result.totalScore, result.maxScore) if result and module_key != "SURVEY" else None,
+            )
+        )
+    return modules

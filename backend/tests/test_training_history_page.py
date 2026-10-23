@@ -8,6 +8,7 @@ from unittest.mock import patch
 from app.core.security import create_access_token
 from app.models.attendance import Attendance
 from app.models.conference import Conference
+from app.models.quiz import AssessmentResult
 from app.models.trainee import Trainee
 from app.services import session_service, trainee_dashboard_service
 from tests.tenant_fixtures import ALPHA, TenantWorld
@@ -126,6 +127,51 @@ class TrainingHistoryPage(unittest.TestCase):
         rows = self.w.client.get("/sessions/trainings?limit=100", headers=headers).json()["items"]
         self.assertFalse(any(row["conferenceUid"].startswith("CONF-H") for row in rows))
         self.assertEqual(self.w.client.get("/sessions/trainings").status_code, 401)
+
+    def test_module_completion_determines_training_status(self):
+        # A conference with a postAssessment module
+        conf_uid = "CONF-MODS"
+        self.db.add(Conference(
+            conferenceUid=conf_uid,
+            trainerEmployeeId="trainer1",
+            conferenceDate="2026-09-02",
+            conferenceStatus="Completed",
+            postAssessmentUid="SUITE-TEST-1",
+        ))
+        self.db.add(Attendance(
+            attendanceUid=f"ATT-{conf_uid}",
+            conferenceUid=conf_uid,
+            traineeUid=ME,
+            status="Present",
+        ))
+        self.db.commit()
+
+        # Without submitting the test, the session outcome must be Incomplete, not Completed
+        trainee = self.me()
+        dashboard = trainee_dashboard_service.build_trainee_dashboard(self.db, trainee, 50)
+        row = next(r for r in dashboard.trainings if r.conferenceUid == conf_uid)
+        self.assertEqual(row.status, "Incomplete")
+
+        # Filtering by Incomplete returns it
+        incomplete_page = self.get("?status=Incomplete")
+        self.assertTrue(any(item["conferenceUid"] == conf_uid for item in incomplete_page["items"]))
+
+        # Now submit the assessment
+        self.db.add(AssessmentResult(
+            conferenceUid=conf_uid,
+            traineeUid=ME,
+            assessmentSuiteUid="SUITE-TEST-1",
+            status="Completed",
+            totalScore=5.0,
+            maxScore=5.0,
+            submittedAt=datetime(2026, 9, 2, 10, 0, 0),
+        ))
+        self.db.commit()
+
+        # Once all modules are submitted/completed, outcome flips to Completed
+        dashboard = trainee_dashboard_service.build_trainee_dashboard(self.db, trainee, 50)
+        row = next(r for r in dashboard.trainings if r.conferenceUid == conf_uid)
+        self.assertEqual(row.status, "Completed")
 
 
 class TodayIsTheIndiaDate(unittest.TestCase):

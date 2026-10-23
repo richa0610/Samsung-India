@@ -3,7 +3,7 @@ from typing import Optional
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core.constants import FINISHED_RESULT_STATUSES, RESULT_STARTED
+from app.core.constants import FINISHED_RESULT_STATUSES, RESULT_RETEST, RESULT_STARTED
 from app.models.conference import Conference
 from app.models.quiz import Assessment, AssessmentResult, AssessmentSuite, Question
 
@@ -210,22 +210,35 @@ def get_latest_result(
     )
 
 
-def get_started_result(
-    db: Session, conference_uid: str, trainee_uid: str, suite_uid: str
+def _latest_with_status(
+    db: Session, conference_uid: str, trainee_uid: str, suite_uid: str, status: str
 ) -> Optional[AssessmentResult]:
-    """The trainee's unfinished attempt at this test here: the row written (status "Started", with
-    startedAt) when they first opened its questions, which their submit then completes."""
     return (
         db.query(AssessmentResult)
         .filter(
             AssessmentResult.conferenceUid == conference_uid,
             AssessmentResult.traineeUid == trainee_uid,
             AssessmentResult.assessmentSuiteUid == suite_uid,
-            AssessmentResult.status == RESULT_STARTED,
+            AssessmentResult.status == status,
         )
         .order_by(AssessmentResult.attemptNumber.desc())
         .first()
     )
+
+
+def get_started_result(
+    db: Session, conference_uid: str, trainee_uid: str, suite_uid: str
+) -> Optional[AssessmentResult]:
+    """The trainee's unfinished attempt at this test here: the row written (status "Started", with
+    startedAt) when they first opened its questions, which their submit then completes."""
+    return _latest_with_status(db, conference_uid, trainee_uid, suite_uid, RESULT_STARTED)
+
+
+def get_retest_result(
+    db: Session, conference_uid: str, trainee_uid: str, suite_uid: str
+) -> Optional[AssessmentResult]:
+    """The trainee's retest of this test of a session they missed (core/constants.RESULT_RETEST)."""
+    return _latest_with_status(db, conference_uid, trainee_uid, suite_uid, RESULT_RETEST)
 
 
 def submitted_trainees_by_suite(db: Session, conference_uid: str, suite_uids: list[str]) -> dict[str, set[str]]:

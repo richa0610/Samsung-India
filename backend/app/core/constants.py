@@ -12,6 +12,10 @@ RESULT_STARTED = "Started"
 RESULT_COMPLETED = "Completed"
 RESULT_SUBMITTED_BEFORE = "Submitted"
 FINISHED_RESULT_STATUSES = (RESULT_COMPLETED, RESULT_SUBMITTED_BEFORE)
+# A missed session's Standard Test / Survey taken afterwards (user, 2026-10-22): a result of its own,
+# never one of FINISHED_RESULT_STATUSES - so no ranking, average, pass rate or "trained" count
+# includes it, and the session stays Missed for the trainee.
+RESULT_RETEST = "Retest"
 
 # How many times a trainer may lift one trainee's proctoring lockout in one training. Once they're
 # all used, the trainee stays locked out of that training's test.

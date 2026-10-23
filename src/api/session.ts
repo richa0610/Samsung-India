@@ -488,6 +488,18 @@ export type TrainingModuleDetail = {
   score: string | null;
   completedAt: string | null;
   questions: TrainingQuestionAttempt[];
+  assessmentSuiteUid?: string | null;
+  canRetest?: boolean;
+  retestDone?: boolean;
+  retestScore?: string | null;
+};
+
+export type RetestModule = {
+  key: SessionModuleKey;
+  name: string;
+  suiteUid: string;
+  done: boolean;
+  score: string | null;
 };
 
 export type TrainingDetail = {
@@ -498,6 +510,7 @@ export type TrainingDetail = {
   trainerName: string | null;
   status: string;
   modules: TrainingModuleDetail[];
+  retest?: RetestModule[];
 };
 
 export function getTrainingDetail(token: string, conferenceUid: string) {

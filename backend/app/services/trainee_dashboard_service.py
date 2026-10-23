@@ -31,7 +31,12 @@ from app.schemas.session import (
     TrainingHistoryPage,
 )
 from app.services import session_service
-from app.services.module_flow import live_quiz_suite_uid, scored_suite_uids
+from app.services.module_flow import (
+    configured_modules,
+    live_quiz_suite_uid,
+    module_suite_uid,
+    scored_suite_uids,
+)
 from app.utils.date_utils import ist_now, utc_now
 
 _PERIOD_DAYS = 30
@@ -62,7 +67,33 @@ def _avg_percent(rows: list) -> float | None:
     return (total / maximum) * 100 if maximum > 0 else None
 
 
-def _trainee_status_for(conference, attendance) -> str:
+def _all_modules_completed(conference, attendance, results: list | None) -> bool:
+    """Whether the trainee completed every module configured for this training."""
+    if attendance is None or attendance.status != "Present":
+        return False
+    modules = configured_modules(conference)
+    if not modules:
+        return True
+
+    finished_suites = {
+        r.assessmentSuiteUid
+        for r in (results or [])
+        if (getattr(r, "status", None) in FINISHED_RESULT_STATUSES or getattr(r, "status", None) is None)
+        and getattr(r, "assessmentSuiteUid", None)
+    }
+
+    for key in modules:
+        if key == "ATTENDANCE":
+            if attendance.status != "Present":
+                return False
+        else:
+            suite_uid = module_suite_uid(conference, key)
+            if not suite_uid or suite_uid not in finished_suites:
+                return False
+    return True
+
+
+def _trainee_status_for(conference, attendance, results: list | None = None) -> str:
     """This trainee's own outcome for one conference - the status on each
     Training Details row, and what Training History's status filter matches,
     so the two can never disagree. (The Dashboard's metric cards group
@@ -70,7 +101,7 @@ def _trainee_status_for(conference, attendance) -> str:
     over = session_service._session_is_over(conference)
     marked = attendance.status if attendance else None
     if marked == "Present" and over:
-        return "Completed"
+        return "Completed" if _all_modules_completed(conference, attendance, results) else "Incomplete"
     if marked == "Absent":
         return "Absent"
     if over:
@@ -169,7 +200,14 @@ def list_training_history(
     own = _OwnTrainings(db, trainee, start, end)
     ordered = own.newest_first()
     if status:
-        ordered = [c for c in ordered if _trainee_status_for(c, own.attendance_by_conf.get(c.conferenceUid)) == status]
+        ordered = [
+            c
+            for c in ordered
+            if _trainee_status_for(
+                c, own.attendance_by_conf.get(c.conferenceUid), own.results_by_conf.get(c.conferenceUid, [])
+            )
+            == status
+        ]
     if card:
         ordered = [c for c in ordered if _metric_card_for(c, own.attendance_by_conf.get(c.conferenceUid)) == card]
     total = len(ordered)
@@ -292,7 +330,7 @@ def _training_row(conf, attendance, conf_results, session_rank) -> DashboardTrai
     # The trainee's own outcome for this training, not the raw conference
     # lifecycle: a session that ran and ended while the trainee only
     # "Joined" (never checked in) is "Missed" for them, not "Completed".
-    status = _trainee_status_for(conf, attendance)
+    status = _trainee_status_for(conf, attendance, conf_results)
 
     position = session_rank.get(conf.conferenceUid) if post else None
     rank_label = str(position) if position is not None else None
