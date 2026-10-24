@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlalchemy import URL, create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
