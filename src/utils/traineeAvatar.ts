@@ -2,11 +2,22 @@ import { ImageSourcePropType } from "react-native";
 
 import { resolveMediaUrl } from "./media";
 
-const AVATAR_BY_GENDER: Record<string, ImageSourcePropType> = {
+type Gender = "male" | "female";
+
+// The same two pictures the server gives a trainer without a photo (backend/media/trainer_photos).
+const AVATAR_BY_GENDER: Record<Gender, ImageSourcePropType> = {
   male: require("@/assets/images/user_img/default_male.png"),
   female: require("@/assets/images/user_img/default_female.png"),
 };
-const NEUTRAL_AVATAR: ImageSourcePropType = require("@/assets/images/Icons/face_icon.png");
+
+/** "male" / "female" however the gender was typed - any letter case, spaces around it, or just its
+ *  first letter ("M", "f") - or null for anything else (blank, "Other", ...). */
+export function genderKey(gender: string | null | undefined): Gender | null {
+  const value = (gender ?? "").trim().toLowerCase();
+  if (value === "male" || value === "m") return "male";
+  if (value === "female" || value === "f") return "female";
+  return null;
+}
 
 // `profilePhoto` often carries a placeholder filename ("default.png", etc.)
 // rather than a real upload - those are NOT an image URL, they mean "no
@@ -19,12 +30,12 @@ function isRealPhoto(value: string | null | undefined): boolean {
 }
 
 /**
- * The trainee's avatar - one source of truth so the Join Session screen
- * (`components/session/join`) and the session-detail header
- * (`TrainingSessionHeader`) always show the same thing:
+ * The trainee's avatar picture - one source of truth for every trainee
+ * screen, which all show it through `components/common/TraineeAvatar`:
  *   1. their uploaded profile photo, if there's a real one
- *   2. a male / female icon by `gender`
- *   3. a neutral face icon when gender is unknown
+ *   2. a male / female picture by `gender` (see genderKey)
+ *   3. null when gender is unknown - TraineeAvatar then shows their initials,
+ *      never a picture of someone who may look nothing like them
  *
  * `/media` now requires a bearer token (was an open static mount), so a
  * real photo needs `token` - the trainee's own session token - attached as
@@ -33,12 +44,13 @@ function isRealPhoto(value: string | null | undefined): boolean {
 export function traineeAvatar(
   input: { gender?: string | null; profilePhoto?: string | null } | null | undefined,
   token?: string | null,
-): ImageSourcePropType {
+): ImageSourcePropType | null {
   if (isRealPhoto(input?.profilePhoto)) {
     const photoUrl = resolveMediaUrl(input?.profilePhoto);
     if (photoUrl) {
       return token ? { uri: photoUrl, headers: { Authorization: `Bearer ${token}` } } : { uri: photoUrl };
     }
   }
-  return AVATAR_BY_GENDER[input?.gender?.toLowerCase() ?? ""] ?? NEUTRAL_AVATAR;
+  const gender = genderKey(input?.gender);
+  return gender ? AVATAR_BY_GENDER[gender] : null;
 }

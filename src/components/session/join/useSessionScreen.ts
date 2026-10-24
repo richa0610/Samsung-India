@@ -3,12 +3,10 @@ import { useCallback, useState } from "react";
 
 import { CurrentSession, getCurrentSession } from "@/api/session";
 import { useAuth } from "@/hooks/useAuth";
-import { traineeAvatar } from "@/utils/traineeAvatar";
 
 export function useSessionScreen() {
   const router = useRouter();
   const { trainee, token, logout } = useAuth();
-  const avatar = traineeAvatar(trainee, token);
 
   const [session, setSession] = useState<CurrentSession | null>(null);
   const [loading, setLoading] = useState(true);
@@ -69,5 +67,5 @@ export function useSessionScreen() {
     router.replace({ pathname: "/session_detail" });
   };
 
-  return { trainee, avatar, loading, notice, details, handleLogout, handleJoinSession };
+  return { trainee, loading, notice, details, handleLogout, handleJoinSession };
 }

@@ -61,10 +61,11 @@ def default_trainer_avatar(gender: str | None) -> str:
     routers/media.py), so the frontend needs no special-casing between a
     real photo and this default - it's just another path to resolve and
     fetch. `gender` is a free-text field on both Admin and AgencyTeam (no
-    fixed set of values), so this only branches on it actually saying
-    "male"; everything else (typed as "Female", blank, or anything else)
-    gets the female default."""
-    if (gender or "").strip().lower() == "male":
+    fixed set of values), so this only branches on it saying male - "male"
+    or just "m", in any letter case, spaces around it ignored (the app's
+    genderKey reads it the same way, src/utils/traineeAvatar.ts); everything
+    else ("Female", "F", blank, or anything else) gets the female default."""
+    if (gender or "").strip().lower() in ("male", "m"):
         return "trainer_photos/default_male.png"
     return "trainer_photos/default_female.png"
 

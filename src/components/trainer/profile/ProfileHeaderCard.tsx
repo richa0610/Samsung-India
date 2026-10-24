@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 import { FontWeight } from "@/theme/fontWeight";
+import { initialsOf } from "@/utils/initials";
 import { resolveMediaUrl } from "@/utils/media";
 
 type ProfileHeaderCardProps = {
@@ -20,12 +21,7 @@ type ProfileHeaderCardProps = {
 
 export function ProfileHeaderCard({ name, onLogout, photoUrl, uploading = false, onPickPhoto }: ProfileHeaderCardProps) {
   const { adminToken } = useAuth();
-  const initials = name
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  const initials = initialsOf(name);
 
   const resolvedPhotoUrl = resolveMediaUrl(photoUrl);
 

@@ -1,20 +1,20 @@
-import { ImageSourcePropType, StyleSheet, View } from "react-native";
-import { Image } from "expo-image";
+import { StyleSheet, View } from "react-native";
 
+import TraineeAvatar, { AvatarPerson } from "@/components/common/TraineeAvatar";
 import AppText from "@/components/ui/AppText";
 import { Colors } from "@/theme/colors";
 import { Fonts } from "@/theme/fonts";
 
 type SessionHeroProps = {
-  avatar: ImageSourcePropType;
+  person: AvatarPerson | null;
   name: string;
   phone: string;
 };
 
-export default function SessionHero({ avatar, name, phone }: SessionHeroProps) {
+export default function SessionHero({ person, name, phone }: SessionHeroProps) {
   return (
     <View style={styles.hero}>
-      <Image source={avatar} style={styles.avatar} contentFit="cover" />
+      <TraineeAvatar person={person} style={styles.avatar} />
       <AppText style={styles.name}>{name}</AppText>
       <AppText style={styles.phone}>{phone}</AppText>
     </View>

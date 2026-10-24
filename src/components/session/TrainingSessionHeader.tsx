@@ -1,19 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import {
-  ImageSourcePropType,
   Pressable,
   StyleSheet,
   View,
 } from "react-native";
-import { Image } from "expo-image";
 
 import CalendarIcon from "@/assets/images/svg/calender2.svg";
+import TraineeAvatar from "@/components/common/TraineeAvatar";
 import AppText from "@/components/ui/AppText";
-import { useAuth } from "@/hooks/useAuth";
 import { Colors } from "@/theme/colors";
 import { Radius } from "@/theme/radius";
 import { FontWeight } from "@/theme/typography";
-import { traineeAvatar } from "@/utils";
 
 export type TrainingSessionHeaderProps = {
   onBack?: () => void;
@@ -52,9 +49,6 @@ export default function TrainingSessionHeader({
   userSubtitle,
   isTrainingLive,
 }: TrainingSessionHeaderProps) {
-  const { token } = useAuth();
-  const avatar: ImageSourcePropType = traineeAvatar({ gender, profilePhoto }, token);
-
   const isCompleted =
     sessionClosed ||
     confirmationStatus.toLowerCase().includes("completed");
@@ -91,7 +85,7 @@ export default function TrainingSessionHeader({
               Profile screen's avatar (ProfileHeader.tsx), for a consistent
               look across every screen that shows this photo. */}
           <View style={styles.avatarContainer}>
-            <Image source={avatar} style={styles.avatar} contentFit="cover" />
+            <TraineeAvatar person={{ name: userName, gender, profilePhoto }} style={styles.avatar} />
             <View style={styles.onlineDot} />
           </View>
 

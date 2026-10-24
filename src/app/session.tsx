@@ -6,11 +6,11 @@ import { JoinSessionCard, SessionHero, useSessionScreen } from "@/components/ses
 import { Colors } from "@/theme/colors";
 
 export default function SessionScreen() {
-  const { trainee, avatar, loading, notice, details, handleLogout, handleJoinSession } = useSessionScreen();
+  const { trainee, loading, notice, details, handleLogout, handleJoinSession } = useSessionScreen();
 
   return (
     <SafeAreaView style={styles.container}>
-      <SessionHero avatar={avatar} name={trainee?.name || "Trainee"} phone={String(trainee?.phone || "")} />
+      <SessionHero person={trainee} name={trainee?.name || "Trainee"} phone={String(trainee?.phone || "")} />
 
       <View style={styles.content}>
         <JoinSessionCard

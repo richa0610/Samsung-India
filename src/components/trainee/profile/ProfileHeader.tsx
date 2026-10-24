@@ -1,15 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
 import { ActivityIndicator, Pressable, StyleSheet, View } from "react-native";
-import { Image } from "expo-image";
 
 import Calendar from "@/assets/images/svg/calender2.svg";
+import TraineeAvatar from "@/components/common/TraineeAvatar";
 import AppText from "@/components/ui/AppText";
 import { Trainee } from "@/api/auth";
-import { useAuth } from "@/hooks/useAuth";
 import { Colors } from "@/theme/colors";
 import { FontWeight } from "@/theme/fontWeight";
 import { createShadow } from "@/theme/shadows";
-import { traineeAvatar } from "@/utils/traineeAvatar";
 
 type ProfileHeaderProps = {
   trainee: Trainee | null;
@@ -20,7 +18,6 @@ type ProfileHeaderProps = {
 };
 
 export default function ProfileHeader({ trainee, uploading, sessionPillLabel, onPickPhoto, onLogout }: ProfileHeaderProps) {
-  const { token } = useAuth();
   return (
     <View style={styles.header}>
       <View style={styles.headerTopRow}>
@@ -32,7 +29,7 @@ export default function ProfileHeader({ trainee, uploading, sessionPillLabel, on
             accessibilityRole="button"
             accessibilityLabel="Change profile picture"
           >
-            <Image source={traineeAvatar(trainee, token)} style={styles.avatar} contentFit="cover" />
+            <TraineeAvatar person={trainee} style={styles.avatar} />
             <View style={styles.onlineDot} />
             {uploading && (
               <View style={styles.uploadingOverlay}>
