@@ -3,7 +3,8 @@
 1. The route inventory is locked: a route added, removed or re-guarded without updating ROUTES
    fails here, so nothing new can ship unreviewed.
 2. Every protected HTTP route refuses an anonymous caller; staff routes refuse trainee tokens and
-   trainee routes refuse staff tokens; admin-only routes refuse trainers.
+   trainee routes refuse staff tokens; admin-only routes refuse trainers; the trainer area
+   (/trainer, user 2026-10-31) refuses admin accounts.
 3. Every staff route that names a training refuses a trainer who isn't that training's trainer -
    with a VALID request (so the refusal is authorization, not validation) - and changes nothing.
 4. Tokens for another tenant, a demoted trainer, a deactivated admin grant and a revoked token are
@@ -23,9 +24,11 @@ from app.models.trainee import Trainee
 from tests.tenant_fixtures import ALPHA, BETA, TenantWorld, uid
 
 PUBLIC, STAFF, ADMIN, TRAINEE, ACCOUNT, WS = "public", "staff", "admin-only", "trainee", "any-account", "websocket"
+TRAINER = "trainer-only"
 
 # (method, path) -> who may call it. STAFF = get_current_admin (trainers and admin-panel accounts,
-# further scoped inside); ADMIN = require_admin_role; ACCOUNT = staff or trainee (media).
+# further scoped inside); ADMIN = require_admin_role; TRAINER = require_trainer_account (the /trainer
+# area); ACCOUNT = staff or trainee (media).
 ROUTES = {
     ("GET", "/"): PUBLIC,
     ("POST", "/admin/login"): PUBLIC,
@@ -121,9 +124,16 @@ ROUTES = {
     ("WS", "/ws/admin"): WS,
     ("WS", "/ws/live/{conference_uid}"): WS,
 }
+# The trainer area (user, 2026-10-31): every staff route again under /trainer behind the trainer-only
+# gate - and nothing admin-only - plus the trainer login and live-event channel. Derived from the
+# staff routes above, so the two areas can't drift apart.
+ROUTES.update({(method, "/trainer" + path.removeprefix("/admin")): TRAINER for (method, path), cls in list(ROUTES.items()) if cls == STAFF})
+ROUTES.update({("POST", "/trainer/login"): PUBLIC, ("WS", "/ws/trainer"): WS})
 
+# The first guard found names the route's class - so the trainer gate before get_current_admin, which it uses.
 _GUARDS = {
     "require_admin_role": ADMIN,
+    "require_trainer_account": TRAINER,
     "get_current_admin": STAFF,
     "get_current_trainee": TRAINEE,
     "get_current_account": ACCOUNT,
@@ -134,9 +144,11 @@ PHOTO = {"photo": ("p.jpg", b"\xff\xd8\xff\xe0" + b"\x00" * 64, "image/jpeg")}
 
 
 def _walk(routes):
+    """Every route as the app serves it. An included router's routes come with that inclusion's prefix
+    and extra dependencies (the /trainer gate), which FastAPI keeps on the inclusion, not the route."""
     for route in routes:
         if type(route).__name__ == "_IncludedRouter":
-            yield from _walk(route.original_router.routes)
+            yield from _walk(route.effective_candidates())
         else:
             yield route
 
@@ -153,13 +165,14 @@ def _dependency_names(dependant) -> set:
 def inventory(app) -> dict:
     found = {}
     for route in _walk(app.routes):
-        if isinstance(route, APIRoute):
+        original = getattr(route, "original_route", route)   # an included route's own definition
+        if isinstance(original, APIRoute):
             names = _dependency_names(route.dependant)
             guard = next((cls for name, cls in _GUARDS.items() if name in names), PUBLIC)
             for method in route.methods:
                 found[(method, route.path)] = guard
-        elif isinstance(route, APIWebSocketRoute):
-            found[("WS", route.path)] = WS
+        elif isinstance(original, APIWebSocketRoute):
+            found[("WS", getattr(route, "starlette_route", route).path)] = WS
     return found
 
 
@@ -219,13 +232,13 @@ class RouteCoverage(unittest.TestCase):
 
     # ------------------------------------------------------------- 2. who may call what, at all
     def test_anonymous_callers_are_refused_everywhere_but_the_public_routes(self):
-        for method, path in self.of(STAFF, ADMIN, TRAINEE, ACCOUNT):
+        for method, path in self.of(STAFF, ADMIN, TRAINER, TRAINEE, ACCOUNT):
             with self.subTest(method=method, path=path):
                 self.assertEqual(self.call(method, path, **valid_request(method, path)).status_code, 401)
 
     def test_trainee_tokens_are_refused_on_staff_routes(self):
         headers = self.trainee_headers()
-        for method, path in self.of(STAFF, ADMIN):
+        for method, path in self.of(STAFF, ADMIN, TRAINER):
             with self.subTest(method=method, path=path):
                 self.assertIn(self.call(method, path, headers, **valid_request(method, path)).status_code, (401, 403))
 
@@ -239,6 +252,12 @@ class RouteCoverage(unittest.TestCase):
     def test_trainers_are_refused_on_admin_only_routes(self):
         for who in ("trainer1", "adm_trainer"):
             for method, path in self.of(ADMIN):
+                with self.subTest(who=who, method=method, path=path):
+                    self.assertEqual(self.call(method, path, self.w.headers(who), **valid_request(method, path)).status_code, 403)
+
+    def test_admin_accounts_are_refused_in_the_trainer_area(self):
+        for who in ("super", "coadmin"):
+            for method, path in self.of(TRAINER):
                 with self.subTest(who=who, method=method, path=path):
                     self.assertEqual(self.call(method, path, self.w.headers(who), **valid_request(method, path)).status_code, 403)
 
@@ -258,8 +277,8 @@ class RouteCoverage(unittest.TestCase):
             {"status": "Approved", "conferenceStatus": "Ongoing", "activeModuleId": "ATTENDANCE"})
         self.w.tenant_db[ALPHA].commit()
         before = self.snapshot()
-        on_a_training = [key for key in self.of(STAFF) if "{conference_uid}" in key[1]]
-        self.assertEqual(len(on_a_training), 19)  # every one of them is probed below
+        on_a_training = [key for key in self.of(STAFF, TRAINER) if "{conference_uid}" in key[1]]
+        self.assertEqual(len(on_a_training), 38)  # 19 under /admin and their /trainer twins - every one probed below
         for method, path in on_a_training:
             with self.subTest(method=method, path=path):
                 response = self.call(method, path, self.w.headers("trainer1"), **valid_request(method, path))
@@ -272,14 +291,14 @@ class RouteCoverage(unittest.TestCase):
         self.w.tenant_db[ALPHA].query(Conference).filter_by(conferenceUid=OTHER_TRAINING).update(
             {"status": "Approved", "conferenceStatus": "Ongoing"})
         self.w.tenant_db[ALPHA].commit()
-        for method, path in [k for k in self.of(STAFF) if "{conference_uid}" in k[1] and k[0] == "GET"]:
+        for method, path in [k for k in self.of(STAFF, TRAINER) if "{conference_uid}" in k[1] and k[0] == "GET"]:
             with self.subTest(method=method, path=path):
                 response = self.call(method, path, self.w.headers("trainer2"), **valid_request(method, path))
                 self.assertNotIn(response.status_code, (401, 403, 404), response.text)
 
     # ------------------------------------------ 4. other tenant, demoted, deactivated, revoked
     def assert_refused_on_staff_routes(self, headers, allowed=(401, 403)):
-        for method, path in self.of(STAFF, ADMIN):
+        for method, path in self.of(STAFF, ADMIN, TRAINER):
             with self.subTest(method=method, path=path):
                 self.assertIn(self.call(method, path, headers, **valid_request(method, path)).status_code, allowed)
 

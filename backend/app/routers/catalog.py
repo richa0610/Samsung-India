@@ -9,7 +9,8 @@ from app.models.admin import Admin
 from app.schemas.catalog import MasterGroupOut, SelectOptionOut
 from app.services import catalog_service, location_service
 
-router = APIRouter(prefix="/admin", tags=["catalog"])
+# Staff routes: mounted at /admin, and for trainers at /trainer (main.py).
+router = APIRouter(tags=["catalog"])
 
 # A state / district name from the pickers (the longest Indian names are well under this).
 PlaceQuery = Annotated[Optional[str], Query(max_length=150)]

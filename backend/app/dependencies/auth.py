@@ -14,7 +14,7 @@ from app.models.agency_team import AgencyTeam
 from app.models.trainee import Trainee
 from app.repositories import admin_repository, trainee_repository
 from app.services import device_sessions
-from app.services.access_service import resolve_scope
+from app.services.access_service import TRAINER_ACCOUNT, account_kind, resolve_scope
 
 bearer_scheme = HTTPBearer()
 
@@ -192,6 +192,18 @@ def require_admin_role(admin: Admin | AgencyTeam = Depends(get_current_admin)) -
             detail="This action requires an admin account",
         )
     return admin
+
+
+TRAINER_ACCOUNT_REQUIRED = "This needs a trainer account. Admins sign in with Admin login."
+
+
+def require_trainer_account(account: Admin | AgencyTeam = Depends(get_current_admin)) -> Admin | AgencyTeam:
+    """The gate of the whole /trainer area (main.py): a trainer account only (access_service.account_kind).
+    get_current_admin has already verified the account - FastAPI runs it once per request, shared with
+    the endpoint's own use of it, so this adds no database read."""
+    if account_kind(account) != TRAINER_ACCOUNT:
+        raise forbidden(TRAINER_ACCOUNT_REQUIRED)
+    return account
 
 
 def require_super_admin(

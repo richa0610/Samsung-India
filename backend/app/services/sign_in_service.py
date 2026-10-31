@@ -260,9 +260,15 @@ def sign_in_trainee(
 
 
 def sign_in_staff(
-    common_db: Session, username: str, password: str, ip_address: Optional[str] = None, device: Optional[Device] = None
+    common_db: Session,
+    username: str,
+    password: str,
+    ip_address: Optional[str] = None,
+    device: Optional[Device] = None,
+    kind: Optional[str] = None,
 ) -> AdminAuthSession:
-    """An admin-table account first, as with a company code (admin_service.login), then a trainer."""
+    """An admin-table account first, as with a company code (admin_service.login), then a trainer.
+    `kind`: the login it came through (admin_service.ensure_login_kind)."""
     admin_lock = f"*:{username}"
     rate_limit.ensure_account_not_locked(admin_service.LOGIN_SCOPE, admin_lock)
     admin = admin_repository.get_admin_by_username(common_db, username)
@@ -271,6 +277,7 @@ def sign_in_staff(
         tenants = granted_tenants(common_db, admin)
         if not tenants:
             raise forbidden(admin_service.NOT_AUTHORIZED)
+        admin_service.ensure_login_kind(admin, kind)
         if len(tenants) == 1:
             return _admin_signed_in(common_db, admin, tenants[0], ip_address)
         raise HTTPException(
@@ -293,6 +300,7 @@ def sign_in_staff(
         # Only an agency account with the trainer role signs in as a trainer (the approved rule).
         if not resolve_scope(common_db, found.record, found.entry.tenant_uid).is_trainer:
             raise forbidden(admin_service.NOT_AUTHORIZED)
+        admin_service.ensure_login_kind(found.record, kind)
         session = admin_service.trainer_signed_in(
             found.db, found.record, found.entry.tenant_uid, ip_address, common_db=common_db, device=device
         )

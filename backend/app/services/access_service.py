@@ -81,6 +81,21 @@ def norm(value: Optional[str]) -> str:
     return (value or "").strip().lower()
 
 
+# The two staff areas (user, 2026-10-31): trainers use /trainer, admin-panel accounts use /admin.
+TRAINER_ACCOUNT = "trainer"
+ADMIN_ACCOUNT = "admin"
+
+
+def account_kind(principal: object) -> str:
+    """Which staff area a signed-in staff account belongs to. An agency-team account (only a trainer
+    one ever signs in), or an admin-table account with the trainer role, is a trainer; any other
+    admin-table account is an admin - the same split `_row_grant` makes, where a trainer grant only
+    counts on a "trainer" account and an admin-panel grant only on an "admin" one."""
+    if isinstance(principal, AgencyTeam) or norm(getattr(principal, "role", None)) == TRAINER_ACCOUNT:
+        return TRAINER_ACCOUNT
+    return ADMIN_ACCOUNT
+
+
 def company_admin_key(tenant_uid: str, company: str) -> str:
     """The value stored in `admin_access.company_admin_key` for an active company_admin grant.
     Two spellings of one company ("Samsung India", " samsung india ") give the same key, so the

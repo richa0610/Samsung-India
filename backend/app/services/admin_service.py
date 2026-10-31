@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from typing import Optional
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core import rate_limit
@@ -12,7 +13,7 @@ from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
 from app.repositories import admin_repository, dashboard_repository
 from app.repositories.dashboard_repository import DashboardSnapshot
-from app.services.access_service import AccessScope, granted_companies, norm, resolve_scope
+from app.services.access_service import TRAINER_ACCOUNT, AccessScope, account_kind, granted_companies, norm, resolve_scope
 from app.schemas.admin import (
     AdminAuthSession,
     AdminDashboardStatsOut,
@@ -44,6 +45,21 @@ LOGIN_SCOPE = "admin-login"   # rate_limit's key prefix for staff sign-in failur
 LOGIN_FAILED = "Invalid username or password"
 NOT_AUTHORIZED = "Not authorized for this tenant"
 
+# An account signing in on the other kind's login (trainers on /trainer, admins on /admin - user,
+# 2026-10-31). Said only once the password is right, so it tells someone guessing nothing new.
+USE_TRAINER_LOGIN = "This is a trainer account. Please sign in with Trainer login on the latest app."
+USE_ADMIN_LOGIN = "This is an admin account. Please sign in with Admin login."
+
+
+def ensure_login_kind(account: Admin | AgencyTeam, kind: Optional[str]) -> None:
+    """Refuses (403, with a code the app shows its own notice for) an account signing in on the other
+    kind's login. `kind` None takes either - the shared POST /admin/login until the old app is retired."""
+    actual = account_kind(account)
+    if kind is None or actual == kind:
+        return
+    code, message = ("USE_TRAINER_LOGIN", USE_TRAINER_LOGIN) if actual == TRAINER_ACCOUNT else ("USE_ADMIN_LOGIN", USE_ADMIN_LOGIN)
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail={"code": code, "message": message})
+
 
 def login(
     common_db: Session,
@@ -52,10 +68,12 @@ def login(
     tenant_id: str,
     ip_address: str | None = None,
     device: Optional[Device] = None,
+    kind: Optional[str] = None,
 ) -> AdminAuthSession:
     """`Admin` (superadmin/internal accounts) lives in the shared Common
     Database; `AgencyTeam` (partner-agency trainers) lives in the caller's
-    own tenant database - see the DB-per-tenant split in app/database/."""
+    own tenant database - see the DB-per-tenant split in app/database/.
+    `kind`: the login it came through (ensure_login_kind)."""
     # Per-account failure limit (the only login limit - none per caller IP): wrong passwords for
     # one username, from however many addresses, lock only that username in this tenant for a while.
     account = f"{tenant_id}:{payload.username}"
@@ -70,6 +88,7 @@ def login(
         # Admin's global grant passes for any tenant; anyone else needs a grant naming this one.
         if not resolve_scope(common_db, admin, tenant_id).allowed:
             raise forbidden(NOT_AUTHORIZED)
+        ensure_login_kind(admin, kind)
         return admin_signed_in(db, admin, tenant_id, ip_address)
 
     # Real trainers live in `agencyteam`, not `admin` - fall back to it so
@@ -84,6 +103,7 @@ def login(
         # as an admin without a grant, so the refusal reveals nothing beyond "not allowed here".
         if not resolve_scope(common_db, agent, tenant_id).is_trainer:
             raise forbidden(NOT_AUTHORIZED)
+        ensure_login_kind(agent, kind)
         return trainer_signed_in(db, agent, tenant_id, ip_address, common_db=common_db, device=device)
 
     rate_limit.record_account_failure(LOGIN_SCOPE, account)

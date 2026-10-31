@@ -45,7 +45,10 @@ from app.services.training import (
     session_start,
 )
 
-router = APIRouter(prefix="/admin", tags=["training"])
+# Staff routes: mounted at /admin, and for trainers at /trainer (main.py).
+router = APIRouter(tags=["training"])
+# Admin-only routes (require_admin_role): mounted at /admin only.
+admin_router = APIRouter(tags=["training"])
 
 # A calendar date query parameter: YYYY-MM-DD.
 _ISO_DATE = r"^\d{4}-\d{2}-\d{2}$"
@@ -60,7 +63,7 @@ def list_assessment_suites(
     return assessment_builder_service.list_assessment_suites(db, module)
 
 
-@router.post("/assessment-suites", response_model=AssessmentSuiteDetail)
+@admin_router.post("/assessment-suites", response_model=AssessmentSuiteDetail)
 def create_assessment_suite(
     payload: AssessmentSuiteCreate,
     db: Session = Depends(get_db),
@@ -69,7 +72,7 @@ def create_assessment_suite(
     return assessment_builder_service.create_assessment_suite(db, payload)
 
 
-@router.get("/assessment-suites/{suite_uid}", response_model=AssessmentSuiteDetail)
+@admin_router.get("/assessment-suites/{suite_uid}", response_model=AssessmentSuiteDetail)
 def get_assessment_suite(
     suite_uid: str,
     db: Session = Depends(get_db),
@@ -78,7 +81,7 @@ def get_assessment_suite(
     return assessment_builder_service.get_assessment_suite(db, suite_uid)
 
 
-@router.post("/assessment-suites/{suite_uid}/questions", response_model=AssessmentSuiteDetail)
+@admin_router.post("/assessment-suites/{suite_uid}/questions", response_model=AssessmentSuiteDetail)
 def add_question(
     suite_uid: str,
     payload: QuestionCreate,
@@ -88,7 +91,7 @@ def add_question(
     return assessment_builder_service.add_question(db, suite_uid, payload, admin)
 
 
-@router.delete("/assessment-suites/{suite_uid}/questions/{question_id}", response_model=AssessmentSuiteDetail)
+@admin_router.delete("/assessment-suites/{suite_uid}/questions/{question_id}", response_model=AssessmentSuiteDetail)
 def delete_question(
     suite_uid: str,
     question_id: int,
@@ -167,7 +170,7 @@ def get_training_facets(
     return listing.training_facets(db, admin, filters, common_db=common_db, tenant_id=tenant_id)
 
 
-@router.post("/trainings/{conference_uid}/approve", response_model=TrainingOut)
+@admin_router.post("/trainings/{conference_uid}/approve", response_model=TrainingOut)
 def approve_training(
     conference_uid: str,
     payload: Optional[TrainingStatusActionRequest] = None,
@@ -184,7 +187,7 @@ def approve_training(
     )
 
 
-@router.post("/trainings/{conference_uid}/reject", response_model=TrainingOut)
+@admin_router.post("/trainings/{conference_uid}/reject", response_model=TrainingOut)
 def reject_training(
     conference_uid: str,
     payload: Optional[TrainingStatusActionRequest] = None,
@@ -224,7 +227,7 @@ def get_join_code(
     return session_dashboard.get_join_code(db, admin, conference_uid, common_db, tenant_id)
 
 
-@router.get("/trainings/{conference_uid}/detail", response_model=TrainingDetailOut)
+@admin_router.get("/trainings/{conference_uid}/detail", response_model=TrainingDetailOut)
 def get_training_detail(
     conference_uid: str,
     db: Session = Depends(get_db),
@@ -235,7 +238,7 @@ def get_training_detail(
     return management.get_training_detail(db, admin, conference_uid, common_db, tenant_id)
 
 
-@router.patch("/trainings/{conference_uid}", response_model=TrainingOut)
+@admin_router.patch("/trainings/{conference_uid}", response_model=TrainingOut)
 def update_training(
     conference_uid: str,
     payload: TrainingAdminUpdate,

@@ -18,6 +18,7 @@ from app.models.agency_team import AgencyTeam
 from app.models.trainee import Trainee
 from app.repositories import attendance_repository
 from app.services import conference_access
+from app.services.access_service import TRAINER_ACCOUNT, account_kind
 
 router = APIRouter(tags=["ws"])
 logger = logging.getLogger("ws")
@@ -254,10 +255,30 @@ def _authorize_room(principal, common_db, tenant_db, tenant_id: str, conference_
     return False
 
 
+def _is_staff(principal, *_) -> bool:
+    return not isinstance(principal, Trainee)
+
+
+def _is_trainer(principal, *_) -> bool:
+    return _is_staff(principal) and account_kind(principal) == TRAINER_ACCOUNT
+
+
 @router.websocket("/ws/admin")
 async def admin_events(websocket: WebSocket):
     # This channel is for the admin panel / trainer app only.
-    identity = await _open_authenticated(websocket, lambda principal, *_: not isinstance(principal, Trainee))
+    await _staff_events(websocket, _is_staff)
+
+
+@router.websocket("/ws/trainer")
+async def trainer_events(websocket: WebSocket):
+    # The trainer app's channel (user, 2026-10-31) - trainer accounts only.
+    await _staff_events(websocket, _is_trainer)
+
+
+async def _staff_events(websocket: WebSocket, authorize: Authorize) -> None:
+    """A staff channel: the same live events (`ConnectionManager.send_to` / `broadcast`) whichever
+    of the two a staff account is connected to."""
+    identity = await _open_authenticated(websocket, authorize)
     if identity is None:
         return
     await manager.connect(websocket, identity.tenant_id, identity.username)

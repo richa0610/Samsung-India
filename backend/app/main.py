@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
@@ -19,9 +19,11 @@ from app.database.common import CommonSessionLocal, common_engine
 from app.database.connection import CommonBase, TenantBase
 from app.database.schema_sync import relax_columns, sync_missing_columns, sync_missing_indexes
 from app.database.tenant import tenant_manager
+from app.dependencies.auth import require_trainer_account
 
 # Import all models
 from app.routers.admin import router as admin_router
+from app.routers.admin import staff_router as admin_staff_router
 from app.routers.assessment import router as assessment_router
 from app.routers.attendance import router as attendance_router
 from app.routers.catalog import router as catalog_router
@@ -30,7 +32,9 @@ from app.routers.media import router as media_router
 from app.routers.session import router as session_router
 from app.routers.tenants import router as tenants_router
 from app.routers.trainee import router as trainee_router
+from app.routers.trainer import login_router as trainer_login_router
 from app.routers.trainer import router as trainer_router
+from app.routers.training import admin_router as training_admin_router
 from app.routers.training import router as training_router
 from app.routers.ws import router as ws_router
 from app.services import tenant_setup, user_registry_service
@@ -254,11 +258,20 @@ app.include_router(trainee_router)
 app.include_router(session_router)
 app.include_router(attendance_router)
 app.include_router(assessment_router)
-app.include_router(admin_router)
-app.include_router(trainer_router)
-app.include_router(catalog_router)
+
+# The staff area, once per kind of account (user, 2026-10-31): /trainer takes trainer accounts only;
+# /admin takes admin accounts, and trainers too until the old app is retired. One set of handlers
+# serves both - only the gate differs - and the admin-only routers sit under /admin alone.
+STAFF_ROUTERS = (admin_staff_router, trainer_router, catalog_router, training_router)
+app.include_router(admin_router, prefix="/admin")
+for staff_router in STAFF_ROUTERS:
+    app.include_router(staff_router, prefix="/admin")
+app.include_router(training_admin_router, prefix="/admin")
+app.include_router(trainer_login_router, prefix="/trainer")
+for staff_router in STAFF_ROUTERS:
+    app.include_router(staff_router, prefix="/trainer", dependencies=[Depends(require_trainer_account)])
+
 app.include_router(locations_router)
-app.include_router(training_router)
 app.include_router(ws_router)
 app.include_router(media_router)
 app.include_router(tenants_router)

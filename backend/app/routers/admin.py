@@ -17,12 +17,15 @@ from app.schemas.admin import (
     CheckInSettingsUpdate,
     CompanyChoiceRequest,
 )
+from app.routers._staff_login import staff_sign_in
 from app.services import admin_service, media_migration, sign_in_service, tenant_settings_service, token_revocation
 from app.services.access_service import resolve_scope, scope_summary
-from app.services.device_sessions import Device
 from app.utils.helpers import client_ip
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+# The admin login and the admin-only routes: mounted at /admin only (main.py).
+router = APIRouter(tags=["admin"])
+# Staff routes trainers share: mounted at /admin, and for trainers at /trainer (main.py).
+staff_router = APIRouter(tags=["admin"])
 
 
 @router.post("/login", response_model=AdminAuthSession)
@@ -32,15 +35,8 @@ def login(
     common_db: Session = Depends(get_common_db),
     db: Optional[Session] = Depends(get_optional_db),
 ):
-    device = Device.of(payload.deviceId, payload.deviceName, request.headers.get("user-agent"))
-    # Without a company code: an admin's grants, or the central user registry for a trainer, say
-    # which company (services/sign_in_service) - an admin with several gets 409 CHOOSE_COMPANY.
-    if db is None:
-        return sign_in_service.sign_in_staff(
-            common_db, payload.username, payload.password, ip_address=client_ip(request), device=device
-        )
-    tenant_id = get_tenant_id_from_request(request)
-    return admin_service.login(common_db, db, payload, tenant_id, ip_address=client_ip(request), device=device)
+    # Any staff account, as before, until the old app (whose trainers sign in here) is retired.
+    return staff_sign_in(payload, request, common_db, db, kind=None)
 
 
 @router.post("/login/company", response_model=AdminAuthSession)
@@ -85,7 +81,7 @@ def update_check_in_settings(
     return CheckInSettingsOut(faceDetectionEnabled=enabled)
 
 
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@staff_router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
     request: Request,
     admin: Admin | AgencyTeam = Depends(get_current_admin),

@@ -1,15 +1,35 @@
-from fastapi import APIRouter, Depends, File, UploadFile
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.dependencies.auth import get_current_admin
-from app.dependencies.database import get_common_db, get_db, get_tenant_id_from_request
+from app.dependencies.database import get_common_db, get_db, get_optional_db, get_tenant_id_from_request
 from app.models.admin import Admin
 from app.models.agency_team import AgencyTeam
+from app.routers._staff_login import staff_sign_in
+from app.schemas.admin import AdminAuthSession, AdminLoginRequest
 from app.schemas.catalog import SelectOptionOut
 from app.schemas.trainer_profile import TrainerProfileOut, TrainerProfileUpdate
 from app.services import trainer_service
+from app.services.access_service import TRAINER_ACCOUNT
 
-router = APIRouter(prefix="/admin", tags=["trainer"])
+# Staff routes: mounted at /admin, and for trainers at /trainer (main.py).
+router = APIRouter(tags=["trainer"])
+# The trainer login: mounted at /trainer only.
+login_router = APIRouter(tags=["trainer"])
+
+
+@login_router.post("/login", response_model=AdminAuthSession)
+def login(
+    payload: AdminLoginRequest,
+    request: Request,
+    common_db: Session = Depends(get_common_db),
+    db: Optional[Session] = Depends(get_optional_db),
+):
+    """A trainer's sign-in (user, 2026-10-31): POST /admin/login's, for trainer accounts only - an admin
+    account is told to use Admin login."""
+    return staff_sign_in(payload, request, common_db, db, kind=TRAINER_ACCOUNT)
 
 
 @router.get("/trainers", response_model=list[SelectOptionOut])

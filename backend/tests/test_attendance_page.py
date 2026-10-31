@@ -367,7 +367,8 @@ class RouteAuthorizationTests(unittest.TestCase):
         test_trainer_lists.py and test_tenant_isolation.py), never by the route alone."""
         from app.routers.training import router
 
-        route = next(r for r in router.routes if getattr(r, "path", "") == "/admin/attendance/page")
+        # The router's own path - main.py mounts it at /admin and /trainer (test_phase7_route_coverage).
+        route = next(r for r in router.routes if getattr(r, "path", "") == "/attendance/page")
         called = {d.call.__name__ for d in route.dependant.dependencies}
         self.assertIn("get_current_admin", called)
         self.assertIn("get_common_db", called)
