@@ -22,12 +22,17 @@ jest.mock("@/hooks/useCompany", () => ({ useBackfillCompany: () => {} }));
 jest.mock("@/config/company", () => ({ getCompany: () => null, setCompany: jest.fn() }));
 jest.mock("@/constants/api", () => ({ getApiBaseUrl: () => "http://server", getWsBaseUrl: () => "ws://server" }));
 
-// The staff side keeps a live-events socket open; nothing here needs it to connect.
+// The staff side keeps a live-events socket open; nothing here needs it to connect. It remembers the
+// addresses it was opened at.
 class FakeSocket {
+  static urls: string[] = [];
   onopen: unknown = null;
   onmessage: unknown = null;
   onclose: unknown = null;
   onerror: unknown = null;
+  constructor(url: string) {
+    FakeSocket.urls.push(url);
+  }
   send() {}
   close() {}
 }
@@ -176,4 +181,15 @@ test("several requests failing together sign out once", async () => {
 
   await waitFor(() => expect(auth.current.adminToken).toBeNull());
   expect(mockRouter.replace).toHaveBeenCalledTimes(1);
+});
+
+test("the staff live-events socket is the account's own area's - a trainer's /ws/trainer, an admin's /ws/admin", async () => {
+  for (const [subject, role, channel] of [["agencyteam:trainer1", "trainer", "/ws/trainer"], ["admin:super", "admin", "/ws/admin"]]) {
+    FakeSocket.urls.length = 0;
+    save(STAFF_KEY, staff(token(subject, 3600), role));
+    const { unmount } = await renderHook(() => useAuth(), { wrapper: AuthProvider });
+    await waitFor(() => expect(FakeSocket.urls).toHaveLength(1));
+    expect(FakeSocket.urls[0].endsWith(channel)).toBe(true);
+    unmount();
+  }
 });

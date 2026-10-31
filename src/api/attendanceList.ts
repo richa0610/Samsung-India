@@ -1,5 +1,5 @@
 import { AdminFilters, adminFilterParams } from "./adminFilters";
-import { apiRequest } from "./client";
+import { apiRequest, staffPath } from "./client";
 import type { PageMeta } from "./training";
 
 export type AttendanceListItem = {
@@ -93,7 +93,7 @@ export function fetchAttendancePage(
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.limit) params.set("limit", String(options.limit));
   for (const [key, value] of adminFilterParams(options.filters)) params.set(key, value);
-  return apiRequest<AttendancePage>(`/admin/attendance/page?${params.toString()}`, {
+  return apiRequest<AttendancePage>(staffPath(token, `/attendance/page?${params.toString()}`), {
     headers: { Authorization: `Bearer ${token}` },
     signal: options.signal,
   });

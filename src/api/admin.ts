@@ -1,6 +1,7 @@
 import { AdminFilters, adminFilterParams } from "./adminFilters";
-import { apiRequest } from "./client";
+import { apiRequest, staffPath } from "./client";
 import { Company } from "@/config/company";
+import type { StaffArea } from "@/utils/sessionToken";
 import { getDeviceId, getDeviceName } from "@/config/device";
 
 export type AdminAccount = {
@@ -31,10 +32,12 @@ export type CompanyChoice = {
 };
 
 /** A trainer by username, HO ID or phone, or an admin by username - no company code (the server
- *  finds it) - and this device, which counts toward a trainer's device limit. */
-export function loginAdmin(username: string, password: string) {
+ *  finds it) - and this device, which counts toward a trainer's device limit. `portal`: the login
+ *  screen it was typed on - trainers sign in at /trainer, admins at /admin (user, 2026-10-31); the
+ *  server answers 403 USE_ADMIN_LOGIN / USE_TRAINER_LOGIN to the other kind. */
+export function loginAdmin(username: string, password: string, portal: StaffArea = "admin") {
   return apiRequest<AdminAuthSession>(
-    "/admin/login",
+    `/${portal}/login`,
     { method: "POST", body: JSON.stringify({ username, password, deviceId: getDeviceId(), deviceName: getDeviceName() }) },
     { company: false },
   );
@@ -177,7 +180,7 @@ export { ApiError } from "./client";
 
 /** Signs the admin / trainer out on the server: every token issued for them stops working (all devices). */
 export function logoutAdmin(token: string) {
-  return apiRequest<null>("/admin/logout", {
+  return apiRequest<null>(staffPath(token, "/logout"), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });

@@ -1,4 +1,4 @@
-import { apiRequest, apiUpload } from "./client";
+import { apiRequest, apiUpload, staffPath } from "./client";
 
 export type TrainerProfile = {
   name: string;
@@ -53,13 +53,13 @@ export type TrainerProfile = {
 };
 
 export function fetchTrainerProfile(token: string) {
-  return apiRequest<TrainerProfile>("/admin/profile", {
+  return apiRequest<TrainerProfile>(staffPath(token, "/profile"), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
 export function updateTrainerProfile(token: string, payload: Partial<TrainerProfile>) {
-  return apiRequest<TrainerProfile>("/admin/profile", {
+  return apiRequest<TrainerProfile>(staffPath(token, "/profile"), {
     method: "PATCH",
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
@@ -76,7 +76,7 @@ export function uploadTrainerPhoto(token: string, image: PickedTrainerPhoto) {
     type: image.type,
   } as unknown as Blob);
 
-  return apiUpload<TrainerProfile>("/admin/profile/photo", formData, token);
+  return apiUpload<TrainerProfile>(staffPath(token, "/profile/photo"), formData, token);
 }
 
 export type PickedTrainerDocument = { uri: string; name: string; type: string };
@@ -89,7 +89,7 @@ export function uploadTrainerAadhar(token: string, file: PickedTrainerDocument) 
     type: file.type,
   } as unknown as Blob);
 
-  return apiUpload<TrainerProfile>("/admin/profile/aadhar", formData, token);
+  return apiUpload<TrainerProfile>(staffPath(token, "/profile/aadhar"), formData, token);
 }
 
 export { ApiError } from "./client";

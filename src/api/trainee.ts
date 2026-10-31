@@ -1,5 +1,5 @@
 import type { PickedImage } from "./auth";
-import { apiRequest, apiUpload } from "./client";
+import { apiRequest, apiUpload, staffPath } from "./client";
 import type { PageMeta } from "./training";
 
 /** A trainee as the admin / trainer side sees them (GET/POST /admin/trainees - TraineeAdminOut). */
@@ -50,7 +50,7 @@ export type NewTraineeInput = Omit<
 export type TraineeListItem = NewTraineeRecord;
 
 export function registerNewTrainee(token: string, payload: NewTraineeInput) {
-  return apiRequest<NewTraineeRecord>("/admin/trainees", {
+  return apiRequest<NewTraineeRecord>(staffPath(token, "/trainees"), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
@@ -61,7 +61,7 @@ export function registerNewTrainee(token: string, payload: NewTraineeInput) {
 export function uploadNewTraineePhoto(token: string, traineeUid: string, image: PickedImage) {
   const formData = new FormData();
   formData.append("file", { uri: image.uri, name: image.name, type: image.type } as unknown as Blob);
-  return apiUpload<NewTraineeRecord>(`/admin/trainees/${encodeURIComponent(traineeUid)}/photo`, formData, token);
+  return apiUpload<NewTraineeRecord>(staffPath(token, `/trainees/${encodeURIComponent(traineeUid)}/photo`), formData, token);
 }
 
 export type TraineeSortKey =
@@ -107,7 +107,7 @@ export function fetchTraineesPage(
   if (options.dir) params.set("dir", options.dir);
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.limit) params.set("limit", String(options.limit));
-  return apiRequest<TraineePage>(`/admin/trainees/page?${params.toString()}`, {
+  return apiRequest<TraineePage>(staffPath(token, `/trainees/page?${params.toString()}`), {
     headers: { Authorization: `Bearer ${token}` },
     signal: options.signal,
   });

@@ -68,8 +68,33 @@ test("signing in sends a trainer to the trainer dashboard", async () => {
   await fireEvent.press(screen.getByLabelText(STAFF_LOGIN_TEXT.trainer.submit));
 
   await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith("/trainer_dashboard"));
-  expect(mockLogin).toHaveBeenCalledWith("9100000001", "secret");
+  expect(mockLogin).toHaveBeenCalledWith("9100000001", "secret", "trainer");   // the trainer login (/trainer)
   expect(mockSetAdminSession).toHaveBeenCalled();
+});
+
+test("the admin screen signs in at the admin login", async () => {
+  mockLogin.mockResolvedValue({ access_token: "t", admin: { role: "admin" } } as never);
+  await render(<StaffLoginScreen portal="admin" />);
+
+  await fireEvent.changeText(screen.getByPlaceholderText(STAFF_LOGIN_TEXT.admin.idPlaceholder), "coadmin");
+  await fireEvent.changeText(screen.getByPlaceholderText(STAFF_LOGIN_TEXT.passwordPlaceholder), "secret");
+  await fireEvent.press(screen.getByLabelText(STAFF_LOGIN_TEXT.admin.submit));
+
+  await waitFor(() => expect(mockRouter.replace).toHaveBeenCalledWith("/admin_dashboard"));
+  expect(mockLogin).toHaveBeenCalledWith("coadmin", "secret", "admin");
+});
+
+test("an account on the other kind's login is told which login to use", async () => {
+  const message = "This is an admin account. Please sign in with Admin login.";
+  mockLogin.mockRejectedValue(new ApiError(message, 403, { code: "USE_ADMIN_LOGIN", message }));
+  await render(<StaffLoginScreen portal="trainer" />);
+
+  await fireEvent.changeText(screen.getByPlaceholderText(STAFF_LOGIN_TEXT.trainer.idPlaceholder), "coadmin");
+  await fireEvent.changeText(screen.getByPlaceholderText(STAFF_LOGIN_TEXT.passwordPlaceholder), "secret");
+  await fireEvent.press(screen.getByLabelText(STAFF_LOGIN_TEXT.trainer.submit));
+
+  await waitFor(() => expect(screen.getByText(message)).toBeTruthy());
+  expect(mockSetAdminSession).not.toHaveBeenCalled();
 });
 
 test("an HO ID longer than a phone number reaches the server whole - no company code asked", async () => {
@@ -80,7 +105,7 @@ test("an HO ID longer than a phone number reaches the server whole - no company 
   await fireEvent.changeText(screen.getByPlaceholderText(STAFF_LOGIN_TEXT.passwordPlaceholder), "secret");
   await fireEvent.press(screen.getByLabelText(STAFF_LOGIN_TEXT.trainer.submit));
 
-  await waitFor(() => expect(mockLogin).toHaveBeenCalledWith("DEMO-OFF-001", "secret"));
+  await waitFor(() => expect(mockLogin).toHaveBeenCalledWith("DEMO-OFF-001", "secret", "trainer"));
 });
 
 test("an admin with access to several companies is taken to choose one", async () => {

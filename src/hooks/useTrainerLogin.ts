@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { ApiError, CompanyChoice, loginAdmin } from "@/api/admin";
 import { signInNotice } from "@/constants/strings";
 import { setCompanyChoice } from "@/services/companyChoice";
+import type { StaffArea } from "@/utils/sessionToken";
 import { cleanText } from "@/utils/validation";
 
 // A username, HO ID or phone number - as long as the field takes (StaffLoginScreen's maxLength).
@@ -25,7 +26,8 @@ function companyChoiceOf(err: unknown): CompanyChoice | null {
   return body?.code === "CHOOSE_COMPANY" ? body : null;
 }
 
-export function useTrainerLogin(initialReason?: string) {
+/** `portal`: the login screen in use - a trainer's or an admin's (they sign in at /trainer or /admin). */
+export function useTrainerLogin(initialReason?: string, portal: StaffArea = "trainer") {
   const router = useRouter();
   const { setAdminSession } = useAuth();
 
@@ -44,7 +46,7 @@ export function useTrainerLogin(initialReason?: string) {
     setLoading(true);
     setNotice(null);
     try {
-      const session = await loginAdmin(cleanUsername, password);
+      const session = await loginAdmin(cleanUsername, password, portal);
       setAdminSession(session);
       const home = staffHome(session.admin.role);
       if (home) {

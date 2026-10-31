@@ -1,11 +1,19 @@
 import { getCompany } from "@/config/company";
 import { getApiBaseUrl } from "@/constants/api";
+import { staffArea } from "@/utils/sessionToken";
 
 /** The company this device signs in to, on every request - the server reads it only before
  *  sign-in (afterwards the token's own tenant wins), so sending it always is harmless. */
 function companyHeader(): Record<string, string> {
   const company = getCompany();
   return company ? { "X-Tenant-ID": company.tenantId } : {};
+}
+
+/** A staff route's path for this sign-in (user, 2026-10-31): a trainer's requests go to /trainer, an
+ *  admin's to /admin - the server refuses each in the other's area. `path` is what follows the area,
+ *  e.g. "/trainings/page". Admin-only routes keep their literal "/admin/..." path. */
+export function staffPath(token: string, path: string): string {
+  return `/${staffArea(token)}${path}`;
 }
 
 export class ApiError extends Error {

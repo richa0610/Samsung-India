@@ -1,6 +1,6 @@
 import { SelectOption } from "@/components/ui/SearchableSelect";
 import { AdminFilters, adminFilterParams } from "./adminFilters";
-import { apiRequest, apiUpload } from "./client";
+import { apiRequest, apiUpload, staffPath } from "./client";
 // All types are preserved — they are used extensively across screens.
 
 export type ModuleConfig = {
@@ -264,7 +264,7 @@ export type SessionDashboard = {
 };
 
 export function createTraining(token: string, payload: TrainingCreatePayload) {
-  return apiRequest<TrainingOut>("/admin/trainings", {
+  return apiRequest<TrainingOut>(staffPath(token, "/trainings"), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     body: JSON.stringify(payload),
@@ -311,7 +311,7 @@ export function fetchTrainingFacets(token: string, range?: { start?: string; end
   if (range?.end) params.set("end", range.end);
   const query = params.toString();
   return apiRequest<{ trainingHubs: string[]; trainingTypes: string[] }>(
-    `/admin/trainings/facets${query ? `?${query}` : ""}`,
+    staffPath(token, `/trainings/facets${query ? `?${query}` : ""}`),
     { headers: { Authorization: `Bearer ${token}` } },
   );
 }
@@ -352,7 +352,7 @@ export function fetchTrainingsPage(
   if (options.cursor) params.set("cursor", options.cursor);
   if (options.limit) params.set("limit", String(options.limit));
   for (const [key, value] of adminFilterParams(options.filters)) params.set(key, value);
-  return apiRequest<TrainingPage>(`/admin/trainings/page?${params.toString()}`, {
+  return apiRequest<TrainingPage>(staffPath(token, `/trainings/page?${params.toString()}`), {
     headers: { Authorization: `Bearer ${token}` },
     signal: options.signal,
   });
@@ -365,7 +365,7 @@ export function fetchTrainerSummary(token: string, range?: { start?: string; end
   if (range?.start) params.set("start", range.start);
   if (range?.end) params.set("end", range.end);
   const query = params.toString();
-  return apiRequest<TrainerSummary>(`/admin/trainings/summary${query ? `?${query}` : ""}`, {
+  return apiRequest<TrainerSummary>(staffPath(token, `/trainings/summary${query ? `?${query}` : ""}`), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -380,14 +380,14 @@ export const joinLink = (joinCode: string, tenantId: string) =>
  *  ID is not accepted by the server. Only the training's trainer (or an admin covering it) gets it. */
 export async function fetchJoinLink(token: string, conferenceUid: string): Promise<string> {
   const { joinCode, tenantId } = await apiRequest<{ conferenceUid: string; joinCode: string; tenantId: string }>(
-    `/admin/trainings/${encodeURIComponent(conferenceUid)}/join-code`,
+    staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/join-code`),
     { headers: { Authorization: `Bearer ${token}` } },
   );
   return joinLink(joinCode, tenantId);
 }
 
 export function fetchSessionDashboard(token: string, conferenceUid: string) {
-  return apiRequest<SessionDashboard>(`/admin/trainings/${encodeURIComponent(conferenceUid)}`, {
+  return apiRequest<SessionDashboard>(staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}`), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -397,7 +397,7 @@ export function fetchSessionDashboard(token: string, conferenceUid: string) {
  *  unlike SessionDashboard.topPerformers, this isn't capped to 5. Powers the
  *  card's "View All" page. */
 export function fetchAllPerformers(token: string, conferenceUid: string) {
-  return apiRequest<TopPerformer[]>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/performers`, {
+  return apiRequest<TopPerformer[]>(staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/performers`), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -427,7 +427,7 @@ export type SessionReport = {
 
 export function fetchSessionReport(token: string, conferenceUid: string) {
   return apiRequest<SessionReport>(
-    `/admin/trainings/${encodeURIComponent(conferenceUid)}/report`,
+    staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/report`),
     { headers: { Authorization: `Bearer ${token}` } },
   );
 }
@@ -451,7 +451,7 @@ export type ScheduleCheckResult = { offSchedule: boolean };
  *  as `startTraining` would if a reason is needed. */
 export function checkTrainingSchedule(token: string, conferenceUid: string) {
   return apiRequest<ScheduleCheckResult>(
-    `/admin/trainings/${encodeURIComponent(conferenceUid)}/schedule-check`,
+    staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/schedule-check`),
     { headers: { Authorization: `Bearer ${token}` } },
   );
 }
@@ -478,7 +478,7 @@ export function startTraining(
     if (value != null) formData.append(key, String(value));
   }
   if (scheduleOverrideReason?.trim()) formData.append("scheduleOverrideReason", scheduleOverrideReason.trim());
-  return apiUpload<TrainingOut>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/start`, formData, token);
+  return apiUpload<TrainingOut>(staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/start`), formData, token);
 }
 
 export type UploadFile = { uri: string; name: string; type: string };
@@ -512,7 +512,7 @@ export function endTraining(
     formData.append("latitude", String(position.latitude));
     formData.append("longitude", String(position.longitude));
   }
-  return apiUpload<TrainingOut>(`/admin/trainings/${encodeURIComponent(conferenceUid)}/end`, formData, token);
+  return apiUpload<TrainingOut>(staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/end`), formData, token);
 }
 
 // Manually opens one module. The trainer walks the flow forward one Start
@@ -525,7 +525,7 @@ export function startModule(
   position?: TrainerPosition | null,
 ) {
   return apiRequest<TrainingOut>(
-    `/admin/trainings/${encodeURIComponent(conferenceUid)}/modules/${encodeURIComponent(moduleKey)}/start`,
+    staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/modules/${encodeURIComponent(moduleKey)}/start`),
     { method: "POST", headers: { Authorization: `Bearer ${token}` }, ...positionBody(position) },
   );
 }
@@ -534,7 +534,7 @@ export function startModule(
 // ends the session (only endTraining does that).
 export function stopActiveModule(token: string, conferenceUid: string, position?: TrainerPosition | null) {
   return apiRequest<TrainingOut>(
-    `/admin/trainings/${encodeURIComponent(conferenceUid)}/modules/stop-active`,
+    staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/modules/stop-active`),
     { method: "POST", headers: { Authorization: `Bearer ${token}` }, ...positionBody(position) },
   );
 }
@@ -548,7 +548,7 @@ export function restartModule(
   position?: TrainerPosition | null,
 ) {
   return apiRequest<TrainingOut>(
-    `/admin/trainings/${encodeURIComponent(conferenceUid)}/modules/${encodeURIComponent(moduleKey)}/restart`,
+    staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/modules/${encodeURIComponent(moduleKey)}/restart`),
     { method: "POST", headers: { Authorization: `Bearer ${token}` }, ...positionBody(position) },
   );
 }
@@ -557,7 +557,7 @@ export function restartModule(
 
 function liveQuizAction(token: string, conferenceUid: string, action: string, body?: unknown) {
   return apiRequest<SessionDashboard>(
-    `/admin/trainings/${encodeURIComponent(conferenceUid)}/live-quiz/${action}`,
+    staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/live-quiz/${action}`),
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
@@ -598,7 +598,7 @@ export function markAttendance(
   reason: string,
 ) {
   return apiRequest<SessionDashboard>(
-    `/admin/trainings/${encodeURIComponent(conferenceUid)}/attendance/${encodeURIComponent(traineeUid)}`,
+    staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/attendance/${encodeURIComponent(traineeUid)}`),
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
@@ -611,7 +611,7 @@ export function markAttendance(
  *  running and with a reason (audit-logged). */
 export function resetAttendance(token: string, conferenceUid: string, traineeUid: string, reason: string) {
   return apiRequest<SessionDashboard>(
-    `/admin/trainings/${encodeURIComponent(conferenceUid)}/attendance/${encodeURIComponent(traineeUid)}`,
+    staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/attendance/${encodeURIComponent(traineeUid)}`),
     {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
@@ -629,7 +629,7 @@ export function unlockProctoring(
   reason: string,
 ) {
   return apiRequest<SessionDashboard>(
-    `/admin/trainings/${encodeURIComponent(conferenceUid)}/attendance/${encodeURIComponent(traineeUid)}/unlock`,
+    staffPath(token, `/trainings/${encodeURIComponent(conferenceUid)}/attendance/${encodeURIComponent(traineeUid)}/unlock`),
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },
@@ -644,21 +644,21 @@ export type AssessmentSuiteModule = "standardTest" | "liveQuiz" | "survey";
  *  (filtered server-side on `assessmentsuite.assessment_type`). */
 export function fetchAssessmentSuites(token: string, module?: AssessmentSuiteModule) {
   const query = module ? `?module=${module}` : "";
-  return apiRequest<AssessmentSuiteOut[]>(`/admin/assessment-suites${query}`, {
+  return apiRequest<AssessmentSuiteOut[]>(staffPath(token, `/assessment-suites${query}`), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
 export function fetchTrainerName(token: string, username: string) {
   return apiRequest<{ username: string; name: string }>(
-    `/admin/trainers/${encodeURIComponent(username)}`,
+    staffPath(token, `/trainers/${encodeURIComponent(username)}`),
     { headers: { Authorization: `Bearer ${token}` } }
   );
 }
 
 export function fetchTrainers(token: string, company?: string) {
   const query = company ? `?company=${encodeURIComponent(company)}` : "";
-  return apiRequest<SelectOption[]>(`/admin/trainers${query}`, {
+  return apiRequest<SelectOption[]>(staffPath(token, `/trainers${query}`), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -670,7 +670,7 @@ export function fetchVenues(token: string, district?: string, state?: string) {
   if (district) params.set("district", district);
   if (district && state) params.set("state", state);
   const query = params.toString();
-  return apiRequest<SelectOption[]>(`/admin/venues${query ? `?${query}` : ""}`, {
+  return apiRequest<SelectOption[]>(staffPath(token, `/venues${query ? `?${query}` : ""}`), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
@@ -681,43 +681,43 @@ export type MasterGroup = { name: string; options: string[] };
 
 /** The master list's zones (East, North, ...), each with its regions. */
 export function fetchZones(token: string) {
-  return apiRequest<MasterGroup[]>("/admin/zones", {
+  return apiRequest<MasterGroup[]>(staffPath(token, "/zones"), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
 export function fetchChecklistItems(token: string) {
-  return apiRequest<SelectOption[]>("/admin/checklist-items", {
+  return apiRequest<SelectOption[]>(staffPath(token, "/checklist-items"), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
 export function fetchTrainingHubs(token: string) {
-  return apiRequest<SelectOption[]>("/admin/training-hubs", {
+  return apiRequest<SelectOption[]>(staffPath(token, "/training-hubs"), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
 export function fetchAudiences(token: string) {
-  return apiRequest<SelectOption[]>("/admin/audiences", {
+  return apiRequest<SelectOption[]>(staffPath(token, "/audiences"), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
 export function fetchSessionTypes(token: string) {
-  return apiRequest<SelectOption[]>("/admin/session-types", {
+  return apiRequest<SelectOption[]>(staffPath(token, "/session-types"), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
 export function fetchTrainingTypes(token: string) {
-  return apiRequest<SelectOption[]>("/admin/training-types", {
+  return apiRequest<SelectOption[]>(staffPath(token, "/training-types"), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
 
 export function fetchRequestedByOptions(token: string) {
-  return apiRequest<SelectOption[]>("/admin/requested-by-options", {
+  return apiRequest<SelectOption[]>(staffPath(token, "/requested-by-options"), {
     headers: { Authorization: `Bearer ${token}` },
   });
 }

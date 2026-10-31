@@ -36,9 +36,15 @@ test("a trainee signs in with this device and no company code", async () => {
 });
 
 test("staff sign in the same way", async () => {
-  await loginAdmin("trainer1", "secret");
+  await loginAdmin("trainer1", "secret", "trainer");
   expect(sent().body).toEqual({ username: "trainer1", password: "secret", deviceId: "device-1", deviceName: "Pixel 8 (Android)" });
   expect(sent().headers).not.toHaveProperty("X-Tenant-ID");
+});
+
+test("each login screen signs in at its own login - trainers at /trainer, admins at /admin", async () => {
+  await loginAdmin("trainer1", "secret", "trainer");
+  await loginAdmin("coadmin", "secret", "admin");
+  expect(mockFetch.mock.calls.map(([url]) => url)).toEqual(["http://server/trainer/login", "http://server/admin/login"]);
 });
 
 test("an admin's company choice sends the ticket and the company picked", async () => {

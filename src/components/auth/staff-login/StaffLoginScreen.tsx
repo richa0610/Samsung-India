@@ -85,7 +85,7 @@ export default function StaffLoginScreen({ portal, reason }: Props) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const text = STAFF_LOGIN_TEXT[portal];
-  const { username, setUsername, password, setPassword, notice, loading, handleLogin } = useTrainerLogin(reason);
+  const { username, setUsername, password, setPassword, notice, loading, handleLogin } = useTrainerLogin(reason, portal);
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const showForgotPassword = () => Alert.alert(STAFF_LOGIN_TEXT.forgotTitle, STAFF_LOGIN_TEXT.forgotMessage);

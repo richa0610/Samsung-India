@@ -11,7 +11,7 @@ import { setCompany } from "@/config/company";
 import { getWsBaseUrl } from "@/constants/api";
 import { useBackfillCompany } from "@/hooks/useCompany";
 import { emit } from "@/services/liveEvents";
-import { isTokenExpired } from "@/utils/sessionToken";
+import { isTokenExpired, staffArea } from "@/utils/sessionToken";
 
 // Cold-start persistence for both sessions - without this, a still-valid JWT
 // was lost the instant the app process died (backgrounded + killed by the
@@ -194,8 +194,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let stopped = false;
 
     const connect = () => {
-      // The token goes in the first message, never the URL - URLs end up in proxy access logs.
-      const ws = new WebSocket(`${getWsBaseUrl()}/ws/admin`);
+      // The token goes in the first message, never the URL - URLs end up in proxy access logs. The
+      // channel is the account's own area's, like its requests (api/client staffPath).
+      const ws = new WebSocket(`${getWsBaseUrl()}/ws/${staffArea(adminToken)}`);
       ws.onopen = () => ws.send(JSON.stringify({ type: "auth", token: adminToken }));
       socket = ws;
       socket.onmessage = (event) => {
