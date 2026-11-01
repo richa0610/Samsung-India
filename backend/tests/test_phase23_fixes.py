@@ -45,7 +45,7 @@ class FixesTestCase(TrainerWorldTestCase):
 
     def login(self, username, password=PASSWORD, forwarded="203.0.113.10", tenant=ALPHA, **headers):
         return self.w.client.post(
-            "/admin/login",
+            self.w.login_path(username),
             json={"username": username, "password": password},
             headers={"X-Tenant-ID": tenant, "X-Forwarded-For": forwarded, **headers},
         )
@@ -265,13 +265,13 @@ class TokenRevocation(FixesTestCase):
         first = self.login("trainer1").json()["access_token"]
         second = self.login("trainer1", forwarded="198.51.100.2").json()["access_token"]  # another device
         other = self.w.headers("trainer2")
-        response = self.w.client.post("/admin/logout", headers={"Authorization": f"Bearer {first}"})
+        response = self.w.client.post("/trainer/logout", headers={"Authorization": f"Bearer {first}"})
         self.assertEqual(response.status_code, 204)
         for token in (first, second):
-            self.assertEqual(self.w.client.get("/admin/profile", headers={"Authorization": f"Bearer {token}"}).status_code, 401)
-        self.assertEqual(self.w.client.get("/admin/profile", headers=other).status_code, 200)
+            self.assertEqual(self.w.client.get("/trainer/profile", headers={"Authorization": f"Bearer {token}"}).status_code, 401)
+        self.assertEqual(self.w.client.get("/trainer/profile", headers=other).status_code, 200)
         fresh = self.login("trainer1", forwarded="198.51.100.3").json()["access_token"]
-        self.assertEqual(self.w.client.get("/admin/profile", headers={"Authorization": f"Bearer {fresh}"}).status_code, 200)
+        self.assertEqual(self.w.client.get("/trainer/profile", headers={"Authorization": f"Bearer {fresh}"}).status_code, 200)
         logouts = self.alpha.query(LogsMaster).filter(LogsMaster.action == "LOGOUT").count()
         self.assertEqual(logouts, 1)
 
@@ -296,7 +296,7 @@ class TokenRevocation(FixesTestCase):
 
     def test_tokens_issued_before_versions_existed_keep_working_until_a_logout(self):
         legacy = create_access_token(subject="agencyteam:trainer1", tenant_id=ALPHA, role="trainer")  # ver 0
-        self.assertEqual(self.w.client.get("/admin/profile", headers={"Authorization": f"Bearer {legacy}"}).status_code, 200)
+        self.assertEqual(self.w.client.get("/trainer/profile", headers={"Authorization": f"Bearer {legacy}"}).status_code, 200)
 
 
 class TenantPasswordEncryption(unittest.TestCase):
@@ -415,7 +415,7 @@ class PlacementRules(FixesTestCase):
                 "region": "North 1", "requestedBy": "Quess", "trainerId": trainer,
                 "trainerName": "T", "supervisorId": "s", "supervisorName": "S", "jobStatus": "Active",
                 "username": f"placement{n}", "password": "Correct-Horse-9"}
-        return self.w.client.post("/admin/trainees", json=body, headers=self.w.headers(who)).status_code
+        return self.w.client.post(self.w.area_path(who, "/admin/trainees"), json=body, headers=self.w.headers(who)).status_code
 
     def test_a_trainer_registers_trainees_for_their_own_company_only(self):
         self.assertEqual(self.register("trainer1", 1), 201)                          # self
@@ -477,7 +477,7 @@ class PartialTrainingPatch(FixesTestCase):
 class AttendanceResetRules(FixesTestCase):
     """Rule 4: a reset needs a reason and a running session, like a manual mark."""
 
-    PATH = f"/admin/trainings/{uid('S_N1')}/attendance/TR-S_N1-0"
+    PATH = f"/trainer/trainings/{uid('S_N1')}/attendance/TR-S_N1-0"
 
     def reset(self, body):
         return self.w.client.request("DELETE", self.PATH, json=body, headers=self.w.headers("trainer1"))
@@ -537,7 +537,7 @@ class MediaPlanEndpoint(FixesTestCase):
     def test_everyone_else_is_refused(self):
         for who in ("coadmin", "coord", "trainer1", "adm_trainer"):
             with self.subTest(who=who):
-                self.assertEqual(self.get(who, "/admin/maintenance/media-plan").status_code, 403)
+                self.assertEqual(self.w.client.get("/admin/maintenance/media-plan", headers=self.w.headers(who)).status_code, 403)
         phone = self.alpha.query(Trainee).filter(Trainee.traineeUid == "TR-S_N1-0").one().phone
         trainee = create_access_token(subject=str(phone), tenant_id=ALPHA, role="trainee")
         response = self.w.client.get("/admin/maintenance/media-plan", headers={"Authorization": f"Bearer {trainee}"})

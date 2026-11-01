@@ -41,7 +41,7 @@ class TrainerLocationOnTheActivityLog(TrainerWorldTestCase):
         data = {"latitude": str(at[0]), "longitude": str(at[1])}
         if venue:
             data.update(venueLatitude=str(venue[0]), venueLongitude=str(venue[1]))
-        return self.w.client.post(f"/admin/trainings/{S_N1}/start", files={"photo": PHOTO}, data=data, headers=self.headers)
+        return self.w.client.post(f"/trainer/trainings/{S_N1}/start", files={"photo": PHOTO}, data=data, headers=self.headers)
 
     def rows(self):
         self.alpha.expire_all()
@@ -68,13 +68,13 @@ class TrainerLocationOnTheActivityLog(TrainerWorldTestCase):
 
     def test_module_and_end_entries_carry_the_module_and_no_location(self):
         self.assertEqual(self.start(AT_VENUE).status_code, 200)
-        started = self.w.client.post(f"/admin/trainings/{S_N1}/modules/STANDARD_TEST/start",
+        started = self.w.client.post(f"/trainer/trainings/{S_N1}/modules/STANDARD_TEST/start",
                                      json={"latitude": FAR_AWAY[0], "longitude": FAR_AWAY[1]}, headers=self.headers)
         self.assertEqual(started.status_code, 200, started.text)                # an older app's location is ignored
-        stopped = self.w.client.post(f"/admin/trainings/{S_N1}/modules/stop-active", headers=self.headers)
+        stopped = self.w.client.post(f"/trainer/trainings/{S_N1}/modules/stop-active", headers=self.headers)
         self.assertEqual(stopped.status_code, 200, stopped.text)
         ended = self.w.client.post(
-            f"/admin/trainings/{S_N1}/end", headers=self.headers,
+            f"/trainer/trainings/{S_N1}/end", headers=self.headers,
             files={"photo": PHOTO, "attendanceSheet": ("s.pdf", b"%PDF-1.4", "application/pdf")},
             data={"totalPax": "2", "latitude": str(AT_VENUE[0]), "longitude": str(AT_VENUE[1])},
         )
@@ -92,7 +92,7 @@ class TrainerLocationOnTheActivityLog(TrainerWorldTestCase):
 
     def test_the_execution_flow_reads_the_new_rows(self):
         self.assertEqual(self.start(AT_VENUE).status_code, 200)
-        self.w.client.post(f"/admin/trainings/{S_N1}/modules/STANDARD_TEST/start", headers=self.headers)
+        self.w.client.post(f"/trainer/trainings/{S_N1}/modules/STANDARD_TEST/start", headers=self.headers)
         self.alpha.expire_all()
         conference = self.alpha.query(Conference).filter(Conference.conferenceUid == S_N1).one()
         flow = {item.moduleKey: item for item in timeline.execution_flow(self.alpha, conference)}

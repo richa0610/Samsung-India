@@ -19,7 +19,7 @@ from app.database.common import CommonSessionLocal, common_engine
 from app.database.connection import CommonBase, TenantBase
 from app.database.schema_sync import relax_columns, sync_missing_columns, sync_missing_indexes
 from app.database.tenant import tenant_manager
-from app.dependencies.auth import require_trainer_account
+from app.dependencies.auth import require_admin_account, require_trainer_account
 
 # Import all models
 from app.routers.admin import router as admin_router
@@ -259,13 +259,13 @@ app.include_router(session_router)
 app.include_router(attendance_router)
 app.include_router(assessment_router)
 
-# The staff area, once per kind of account (user, 2026-10-31): /trainer takes trainer accounts only;
-# /admin takes admin accounts, and trainers too until the old app is retired. One set of handlers
-# serves both - only the gate differs - and the admin-only routers sit under /admin alone.
+# The staff area, once per kind of account (user, 2026-10-31): /admin takes admin accounts only,
+# /trainer trainer accounts only. One set of handlers serves both - only the gate differs - and the
+# admin-only routers sit under /admin alone.
 STAFF_ROUTERS = (admin_staff_router, trainer_router, catalog_router, training_router)
 app.include_router(admin_router, prefix="/admin")
 for staff_router in STAFF_ROUTERS:
-    app.include_router(staff_router, prefix="/admin")
+    app.include_router(staff_router, prefix="/admin", dependencies=[Depends(require_admin_account)])
 app.include_router(training_admin_router, prefix="/admin")
 app.include_router(trainer_login_router, prefix="/trainer")
 for staff_router in STAFF_ROUTERS:

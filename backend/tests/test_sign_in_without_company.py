@@ -46,7 +46,8 @@ class SignInTestCase(TrainerWorldTestCase):
         return self.w.client.post("/trainees/login", json={"identifier": str(identifier), "password": password}, headers=headers or {})
 
     def staff_sign_in(self, username, password=PASSWORD, headers=None):
-        return self.w.client.post("/admin/login", json={"username": username, "password": password}, headers=headers or {})
+        """At the login the app's screen uses for this account (TenantWorld.login_path)."""
+        return self.w.client.post(self.w.login_path(username), json={"username": username, "password": password}, headers=headers or {})
 
     def claims(self, response):
         return jwt.decode(response.json()["access_token"], settings.SECRET_KEY, algorithms=[settings.ALGORITHM])

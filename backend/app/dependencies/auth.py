@@ -194,6 +194,18 @@ def require_admin_role(admin: Admin | AgencyTeam = Depends(get_current_admin)) -
     return admin
 
 
+ADMIN_ACCOUNT_REQUIRED = "Trainer accounts now use the latest app. Please update the app and sign in with Trainer login."
+
+
+def require_admin_account(account: Admin | AgencyTeam = Depends(get_current_admin)) -> Admin | AgencyTeam:
+    """The gate of the /admin staff routes (main.py): admin accounts only - trainers use /trainer (user,
+    2026-10-31). A trainer still on the old app, which calls /admin, is told to update it. Like the
+    trainer gate, it adds no database read (get_current_admin runs once per request)."""
+    if account_kind(account) == TRAINER_ACCOUNT:
+        raise forbidden(ADMIN_ACCOUNT_REQUIRED)
+    return account
+
+
 TRAINER_ACCOUNT_REQUIRED = "This needs a trainer account. Admins sign in with Admin login."
 
 

@@ -459,7 +459,7 @@ class Seeder:
 
     def sign_in_staff(self, username: str) -> str:
         body = {"username": username, "password": self.password, "deviceId": f"seed-{username}", "deviceName": DEVICE_NAME}
-        return self.call("POST", "/admin/login", json=body, what=f"trainer sign-in {username}")["access_token"]
+        return self.call("POST", "/trainer/login", json=body, what=f"trainer sign-in {username}")["access_token"]
 
     def sign_in_trainee(self, username: str) -> str:
         body = {"identifier": username, "password": self.password, "deviceId": f"seed-{username}", "deviceName": DEVICE_NAME}
@@ -540,12 +540,12 @@ class Seeder:
 
     def pickers(self, token: str) -> dict:
         """What the forms' pickers offer, asked the way the forms ask."""
-        zones = [z for z in self.call("GET", "/admin/zones", token, what="zones") if z["options"]]
-        states = [s for s in self.call("GET", "/admin/states", token, what="states") if s["options"]]
-        trainers = {o["value"]: o.get("name") or o["label"] for o in self.call("GET", "/admin/trainers", token, what="trainers")}
+        zones = [z for z in self.call("GET", "/trainer/zones", token, what="zones") if z["options"]]
+        states = [s for s in self.call("GET", "/trainer/states", token, what="states") if s["options"]]
+        trainers = {o["value"]: o.get("name") or o["label"] for o in self.call("GET", "/trainer/trainers", token, what="trainers")}
         lists = {key: [o["value"] for o in self.call("GET", path, token, what=key)] for key, path in (
-            ("requestedBy", "/admin/requested-by-options"), ("trainingHub", "/admin/training-hubs"),
-            ("audience", "/admin/audiences"), ("sessionType", "/admin/session-types"), ("trainingType", "/admin/training-types"),
+            ("requestedBy", "/trainer/requested-by-options"), ("trainingHub", "/trainer/training-hubs"),
+            ("audience", "/trainer/audiences"), ("sessionType", "/trainer/session-types"), ("trainingType", "/trainer/training-types"),
         )}
         return {"zones": zones, "states": states, "trainers": trainers, "lists": lists}
 
@@ -581,7 +581,7 @@ class Seeder:
             "joinedOn": date(2025, 1 + n % 12, 1).isoformat(), "jobStatus": "Active", "jobCity": district,
             "username": person.username, "password": self.password,
         }
-        made = self.call("POST", "/admin/trainees", token, json=body, what=f"add trainee {person.username}")
+        made = self.call("POST", "/trainer/trainees", token, json=body, what=f"add trainee {person.username}")
         self.report.trainees.append((company.tenant_uid, made["traineeUid"], person.username))
         return made["traineeUid"], self.sign_in_trainee(person.username)
 
@@ -601,7 +601,7 @@ class Seeder:
         return made["trainee"]["traineeUid"], made["access_token"]
 
     def test_suite(self, token: str) -> Optional[dict]:
-        suites = self.call("GET", "/admin/assessment-suites", token, params={"module": "standardTest"}, what="question sets")
+        suites = self.call("GET", "/trainer/assessment-suites", token, params={"module": "standardTest"}, what="question sets")
         usable = [s for s in suites if s["noOfQuestion"] >= 1]
         return max(usable, key=lambda s: s["noOfQuestion"]) if usable else None
 
@@ -648,7 +648,7 @@ class Seeder:
             "audience": self.option(company, pick, "audience"), "sessionType": self.option(company, pick, "sessionType"),
             "trainingType": self.option(company, pick, "trainingType"), "batchSize": "25", "sessionFlow": flow, "checklist": [],
         }
-        return self.call("POST", "/admin/trainings", token, json=body, what="add training")["conferenceUid"]
+        return self.call("POST", "/trainer/trainings", token, json=body, what="add training")["conferenceUid"]
 
     def approve(self, company: Company, conference_uid: str) -> None:
         """What the company admin's Approve button runs - the one step that needs an admin."""
@@ -663,7 +663,7 @@ class Seeder:
 
     def run_training(self, uid: str, token: str, trainees: list[tuple[str, str]], suite: Optional[dict]) -> None:
         photo = ("photo.jpg", self.photo, "image/jpeg")
-        base = f"/admin/trainings/{uid}"
+        base = f"/trainer/trainings/{uid}"
         try:
             self.call("POST", f"{base}/start", token, files={"photo": photo}, what=f"start {uid}")
         except ApiError as exc:

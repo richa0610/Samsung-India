@@ -82,7 +82,7 @@ class OnlyASuperAdminMayReadOrChangeIt(CheckInFaceDetectionTestCase):
     def test_every_other_admin_role_and_trainer_is_refused_and_nothing_changes(self):
         for who in ("coadmin", "coord", "subcoord", "ungranted", "adm_trainer", "trainer1"):
             with self.subTest(who=who):
-                self.assertEqual(self.get(who, SETTINGS).status_code, 403)
+                self.assertEqual(self.w.client.get(SETTINGS, headers=self.w.headers(who)).status_code, 403)
                 self.assertEqual(self.put(who, {"faceDetectionEnabled": False}).status_code, 403)
         self.assertEqual(self.stored(ALPHA), 1)
 

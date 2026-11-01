@@ -14,7 +14,7 @@ from app.schemas.trainer_profile import TrainerProfileOut, TrainerProfileUpdate
 from app.services import trainer_service
 from app.services.access_service import TRAINER_ACCOUNT
 
-# Staff routes: mounted at /admin, and for trainers at /trainer (main.py).
+# Staff routes: mounted at /admin for admins and /trainer for trainers (main.py).
 router = APIRouter(tags=["trainer"])
 # The trainer login: mounted at /trainer only.
 login_router = APIRouter(tags=["trainer"])

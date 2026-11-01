@@ -126,11 +126,11 @@ class JoinThroughTheApi(unittest.TestCase):
                       (401, 404))
 
     def test_only_the_trainings_trainer_gets_its_code(self):
-        response = self.w.client.get(f"/admin/trainings/{OPEN}/join-code", headers=self.w.headers("trainer1"))
+        response = self.w.client.get(f"/trainer/trainings/{OPEN}/join-code", headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(join_code.verify(ALPHA, response.json()["joinCode"]), OPEN)
         self.assertEqual(response.json()["tenantId"], ALPHA)  # the company the QR link names
-        self.assertEqual(self.w.client.get(f"/admin/trainings/{OPEN}/join-code", headers=self.w.headers("trainer2")).status_code, 404)
+        self.assertEqual(self.w.client.get(f"/trainer/trainings/{OPEN}/join-code", headers=self.w.headers("trainer2")).status_code, 404)
         self.assertEqual(self.w.client.get(f"/admin/trainings/{OPEN}/join-code").status_code, 401)
 
 

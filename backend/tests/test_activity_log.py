@@ -93,7 +93,7 @@ class ActivityLogColumns(TrainerWorldTestCase):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
         for target in ("app.routers.media.MEDIA_ROOT", "app.core.media.MEDIA_ROOT"):
             self.enterContext(patch(target, root))
-        response = self.w.client.post("/admin/trainees/TR-S_N1-0/photo",
+        response = self.w.client.post("/trainer/trainees/TR-S_N1-0/photo",
                                       files={"file": ("p.jpg", b"\xff\xd8\xff\xe0" + b"\x00" * 64, "image/jpeg")},
                                       headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 200, response.text)

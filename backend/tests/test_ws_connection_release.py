@@ -31,6 +31,7 @@ from tests.tenant_fixtures import ALPHA, uid
 from tests.test_trainer_authorization import TrainerWorldTestCase
 
 ADMIN_CHANNEL = "/ws/admin"
+TRAINER_CHANNEL = "/ws/trainer"   # every trainer socket (user, 2026-10-31); ADMIN_CHANNEL is admins only
 LIVE_ROOM = f"/ws/live/{uid('S_N1')}"  # trainer1's training; TR-S_N1-0 is on its roster
 
 
@@ -91,7 +92,7 @@ class AnOpenSocketHoldsNoConnection(SocketTestCase):
 
     def test_a_signed_in_socket_keeps_no_connection_checked_out(self):
         cases = [
-            ("trainer on the admin channel", ADMIN_CHANNEL, self.w.token("trainer1")),
+            ("trainer on the trainer channel", TRAINER_CHANNEL, self.w.token("trainer1")),
             ("admin on the admin channel", ADMIN_CHANNEL, self.w.token("coadmin")),
             ("trainer in a live room", LIVE_ROOM, self.w.token("trainer1")),
             ("admin in a live room", LIVE_ROOM, self.w.token("coadmin")),
@@ -112,7 +113,7 @@ class MoreSocketsThanThePoolHolds(SocketTestCase):
         self.use_file_database(self.POOL_SIZE)
 
     def test_every_socket_connects_and_requests_still_work(self):
-        sockets = [(ADMIN_CHANNEL, self.w.token("trainer1")), (LIVE_ROOM, self.trainee_token())] * 3
+        sockets = [(TRAINER_CHANNEL, self.w.token("trainer1")), (LIVE_ROOM, self.trainee_token())] * 3
         with ExitStack() as stack:
             for path, token in sockets:
                 self.open_ready(stack, path, token)
@@ -133,7 +134,7 @@ class TheCheckRunsOffTheEventLoop(SocketTestCase):
             return real(*args, **kwargs)
 
         with patch.object(ws_module, "resolve_principal", spy), ExitStack() as stack:
-            self.open_ready(stack, ADMIN_CHANNEL, self.w.token("trainer1"))
+            self.open_ready(stack, TRAINER_CHANNEL, self.w.token("trainer1"))
             self.open_ready(stack, LIVE_ROOM, self.trainee_token())
         self.assertEqual(where, ["worker thread", "worker thread"])
 
@@ -147,7 +148,7 @@ class SignInChecksAreCapped(SocketTestCase):
         # One sign-in first, so the burst finds the tenant's status cached and doesn't read the
         # (single-connection, in-memory) common database from several threads at once.
         with ExitStack() as stack:
-            self.open_ready(stack, ADMIN_CHANNEL, token)
+            self.open_ready(stack, TRAINER_CHANNEL, token)
         lock = threading.Lock()
         inside = {"now": 0, "most": 0}
         release = threading.Event()
@@ -167,7 +168,7 @@ class SignInChecksAreCapped(SocketTestCase):
 
         def reconnect():
             try:
-                with self.w.client.websocket_connect(ADMIN_CHANNEL) as socket:
+                with self.w.client.websocket_connect(TRAINER_CHANNEL) as socket:
                     socket.send_json({"type": "auth", "token": token})
                     if socket.receive_json() == {"type": "ready"}:
                         with lock:
@@ -197,7 +198,7 @@ class SignInFailuresCloseCleanly(SocketTestCase):
     def test_a_database_failure_closes_with_the_server_error_code(self):
         down = OperationalError("SELECT 1", {}, Exception("database is down"))
         with patch.object(ws_module, "resolve_principal", side_effect=down), self.assertLogs("ws", "ERROR"):
-            self.assertEqual(self.close_code(ADMIN_CHANNEL, self.w.token("trainer1")), 1011)
+            self.assertEqual(self.close_code(TRAINER_CHANNEL, self.w.token("trainer1")), 1011)
 
     def test_a_refused_sign_in_still_closes_with_the_policy_code(self):
         cases = [
@@ -205,6 +206,8 @@ class SignInFailuresCloseCleanly(SocketTestCase):
             ("trainee on the admin channel", ADMIN_CHANNEL, self.trainee_token()),
             ("trainer outside their own room", f"/ws/live/{uid('S_S1')}", self.w.token("trainer1")),
             ("admin with no grant", ADMIN_CHANNEL, self.w.token("ungranted")),
+            ("trainer on the admin channel", ADMIN_CHANNEL, self.w.token("trainer1")),
+            ("admin on the trainer channel", TRAINER_CHANNEL, self.w.token("coadmin")),
         ]
         for label, path, token in cases:
             with self.subTest(label):
@@ -214,4 +217,4 @@ class SignInFailuresCloseCleanly(SocketTestCase):
         self.w.common.query(Tenant).filter_by(tenant_uid=ALPHA).update({"status": "suspended"})
         self.w.common.commit()
         tenant_manager.clear_status_cache()
-        self.assertEqual(self.close_code(ADMIN_CHANNEL, self.w.token("trainer1")), 1008)
+        self.assertEqual(self.close_code(TRAINER_CHANNEL, self.w.token("trainer1")), 1008)

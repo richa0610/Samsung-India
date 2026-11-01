@@ -187,5 +187,5 @@ class TodayIsTheIndiaDate(unittest.TestCase):
 
     def test_the_trainer_home_counts_todays_trainings_in_india(self):
         with patch("app.services.training.listing.ist_now", return_value=datetime(2026, 9, 30, 0, 30)):
-            body = self.w.client.get("/admin/trainings/summary", headers=self.w.headers("trainer1")).json()
+            body = self.w.client.get("/trainer/trainings/summary", headers=self.w.headers("trainer1")).json()
         self.assertEqual(body["totalSessions"], 1)

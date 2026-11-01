@@ -1,10 +1,10 @@
-"""The trainer area (user, 2026-10-31): trainers use /trainer - the same handlers as their /admin twins,
-behind a trainer-only gate - and sign in with POST /trainer/login, which an admin account can't use.
-/admin is unchanged for now: it still takes trainers, for the app already installed.
+"""The two staff areas (user, 2026-10-31): trainers use /trainer and admins /admin - one set of handlers
+behind a gate per area - each signing in at their own login, which the other kind can't use. A trainer
+still on the old app, which calls /admin, is told to update it.
 
-Route-by-route authorization (anonymous, trainee, admin and other-trainer callers) is in
+Route-by-route authorization (anonymous, trainee, admin, trainer and other-trainer callers) is in
 test_phase7_route_coverage. This covers what that can't: the twins run the very same code, the two
-logins with and without a company code, and the trainer's live-event channel.
+logins with and without a company code, and the two live-event channels.
 
 Synthetic TenantWorld (in-memory SQLite) only."""
 
@@ -13,6 +13,7 @@ from contextlib import ExitStack
 
 from fastapi.routing import APIRoute
 
+from app.dependencies.auth import ADMIN_ACCOUNT_REQUIRED
 from app.services import admin_service
 from tests.tenant_fixtures import ALPHA, PASSWORD, TenantWorld
 from tests.test_phase7_route_coverage import _walk
@@ -44,14 +45,13 @@ class TheTrainerAreaIsTheStaffAreaAgain(unittest.TestCase):
             with self.subTest(method=method, path=path):
                 self.assertIs(endpoint, self.endpoints[(method, "/admin" + path.removeprefix("/trainer"))])
 
-    def test_a_trainer_gets_the_same_answer_from_either_area(self):
+    def test_a_trainer_on_the_old_app_is_told_to_update_it(self):
         headers = self.w.headers("trainer1")
         for path in ("/trainings/page", "/trainings/summary", "/attendance/page", "/trainees/page", "/zones", "/profile"):
             with self.subTest(path=path):
-                via_admin = self.w.client.get("/admin" + path, headers=headers)
-                via_trainer = self.w.client.get("/trainer" + path, headers=headers)
-                self.assertEqual(via_trainer.status_code, 200, via_trainer.text)
-                self.assertEqual(via_trainer.json(), via_admin.json())
+                via_admin = self.w.client.get("/admin" + path, headers=headers)      # what the old app calls
+                self.assertEqual((via_admin.status_code, via_admin.json()["detail"]), (403, ADMIN_ACCOUNT_REQUIRED))
+                self.assertEqual(self.w.client.get("/trainer" + path, headers=headers).status_code, 200)
 
 
 class TrainerLoginWithACompanyCode(unittest.TestCase):
@@ -84,8 +84,17 @@ class TrainerLoginWithACompanyCode(unittest.TestCase):
                 self.assertEqual((via_trainer.status_code, via_trainer.json()), (via_admin.status_code, via_admin.json()))
                 self.assertEqual(via_trainer.status_code, 401)
 
-    def test_admin_login_still_takes_trainers_for_the_installed_app(self):
-        self.assertEqual(self.sign_in("admin", "trainer1").status_code, 200)
+    def test_admin_login_sends_a_trainer_to_trainer_login_once_the_password_is_right(self):
+        for who in ("trainer1", "adm_trainer"):
+            with self.subTest(who=who):
+                response = self.sign_in("admin", who)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.json()["detail"], {"code": "USE_TRAINER_LOGIN", "message": admin_service.USE_TRAINER_LOGIN})
+
+    def test_admins_sign_in_at_admin_login(self):
+        response = self.sign_in("admin", "coadmin")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["admin"]["role"], "admin")
 
 
 class TrainerLoginWithoutACompanyCode(SignInTestCase):
@@ -103,23 +112,28 @@ class TrainerLoginWithoutACompanyCode(SignInTestCase):
         self.assertEqual(response.json()["detail"]["code"], "USE_ADMIN_LOGIN")
         self.assertEqual(self.staff_sign_in("super").json()["detail"]["code"], "CHOOSE_COMPANY")   # Admin login unchanged
 
+    def test_a_trainer_at_admin_login_is_sent_to_trainer_login(self):
+        response = self.w.client.post("/admin/login", json={"username": "trainer1", "password": PASSWORD})   # no company code
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["detail"]["code"], "USE_TRAINER_LOGIN")
+
     def test_a_wrong_password_is_still_just_a_failed_sign_in(self):
         self.assertEqual(self.trainer_sign_in("super", password="wrong").status_code, 401)
         self.assertEqual(self.trainer_sign_in("trainer1", password="wrong").status_code, 401)
 
 
-class TrainerLiveEvents(SocketTestCase):
-    def test_trainers_connect_and_admin_accounts_are_refused(self):
-        for who in ("trainer1", "adm_trainer"):
-            with self.subTest(who=who), ExitStack() as stack:
-                self.open_ready(stack, "/ws/trainer", self.w.token(who))
-        for who in ("super", "coadmin"):
-            with self.subTest(who=who):
-                self.assertEqual(self.close_code("/ws/trainer", self.w.token(who)), 1008)
+class StaffLiveEvents(SocketTestCase):
+    def assert_channel_takes(self, channel, welcome, refused):
+        for who in welcome:
+            with self.subTest(channel=channel, who=who), ExitStack() as stack:
+                self.open_ready(stack, channel, self.w.token(who))
+        for who in refused:
+            with self.subTest(channel=channel, who=who):
+                self.assertEqual(self.close_code(channel, self.w.token(who)), 1008)
 
-    def test_the_admin_channel_still_takes_trainers_for_the_installed_app(self):
-        with ExitStack() as stack:
-            self.open_ready(stack, "/ws/admin", self.w.token("trainer1"))
+    def test_each_channel_takes_its_own_kind_of_account_only(self):
+        self.assert_channel_takes("/ws/trainer", welcome=("trainer1", "adm_trainer"), refused=("super", "coadmin"))
+        self.assert_channel_takes("/ws/admin", welcome=("super", "coadmin"), refused=("trainer1", "adm_trainer"))
 
 
 if __name__ == "__main__":

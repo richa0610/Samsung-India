@@ -67,7 +67,7 @@ class CorsIsTheOutermostMiddleware(unittest.TestCase):
         every_slot_taken = [asyncio.Semaphore(0), 1]
         with patch.object(limiter, "wait_seconds", 0.05), patch.dict(limiter._slots, {ALPHA.lower(): every_slot_taken}):
             response = self.w.client.get(
-                "/admin/trainings/page", headers={**self.w.headers("trainer1"), "Origin": self.origin}
+                "/trainer/trainings/page", headers={**self.w.headers("trainer1"), "Origin": self.origin}
             )
         self.assertEqual(response.status_code, 503, response.text)
         self.assertEqual(response.headers.get("access-control-allow-origin"), self.origin)

@@ -50,7 +50,7 @@ class RegistryTestCase(TrainerWorldTestCase):
                 "requestedBy": "Quess", "trainerId": "trainer1", "trainerName": "T", "supervisorId": "s",
                 "supervisorName": "S", "jobStatus": "Active", "username": f"placement{n}", "password": "Correct-Horse-9",
                 **extra}
-        return self.w.client.post("/admin/trainees", json=body, headers=self.w.headers("trainer1"))
+        return self.w.client.post("/trainer/trainees", json=body, headers=self.w.headers("trainer1"))
 
     def entry(self, user_uid):
         self.common.expire_all()
@@ -275,7 +275,7 @@ class ProfileChangesReachTheRegistry(RegistryTestCase):
         self.assertIsNone(self.record(self.alpha, uid).employee_id)
 
     def test_a_trainer_s_new_password_is_copied(self):
-        response = self.w.client.patch("/admin/profile", json={"password": "Brand-New-7"}, headers=self.w.headers("trainer1"))
+        response = self.w.client.patch("/trainer/profile", json={"password": "Brand-New-7"}, headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 200, response.text)
         entry = self.entry("g1")
         self.assertEqual((entry.tenant_uid, entry.status), (ALPHA, "active"))

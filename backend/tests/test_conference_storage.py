@@ -214,7 +214,7 @@ class ASessionRun(StoredTheirWayTestCase):
         self.headers = self.w.headers("trainer1")
 
     def act(self, path, **kwargs):
-        response = self.w.client.post(f"/admin/trainings/{self.S_N1}{path}", headers=self.headers, **kwargs)
+        response = self.w.client.post(f"/trainer/trainings/{self.S_N1}{path}", headers=self.headers, **kwargs)
         self.assertEqual(response.status_code, 200, response.text)
         return response
 
@@ -274,9 +274,9 @@ class ASessionRun(StoredTheirWayTestCase):
     def test_a_started_training_cannot_be_started_or_ended_twice(self):
         self.act("/start", files={"photo": PHOTO}, data={"scheduleOverrideReason": "late"})
         self.act("/end", files={"photo": PHOTO, "attendanceSheet": SHEET}, data={"totalPax": "1"})
-        again = self.w.client.post(f"/admin/trainings/{self.S_N1}/end", headers=self.headers,
+        again = self.w.client.post(f"/trainer/trainings/{self.S_N1}/end", headers=self.headers,
                                    files={"photo": PHOTO, "attendanceSheet": SHEET}, data={"totalPax": "1"})
         self.assertEqual(again.status_code, 409)
-        restart = self.w.client.post(f"/admin/trainings/{self.S_N1}/start", headers=self.headers,
+        restart = self.w.client.post(f"/trainer/trainings/{self.S_N1}/start", headers=self.headers,
                                      files={"photo": PHOTO}, data={"scheduleOverrideReason": "late"})
         self.assertEqual(restart.status_code, 409)

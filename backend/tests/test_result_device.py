@@ -64,7 +64,7 @@ class LiveQuizSubmission(ResultDeviceTestCase):
 
     def test_a_result_scored_by_the_trainers_finish_keeps_the_trainees_device(self):
         response = self.w.client.post(
-            f"/admin/trainings/{S_N1}/live-quiz/finish",
+            f"/trainer/trainings/{S_N1}/live-quiz/finish",
             headers={**self.w.headers("trainer1"), "User-Agent": "trainer-tablet", "X-Forwarded-For": "198.51.100.9"},
         )
         self.assertEqual(response.status_code, 200, response.text)

@@ -94,7 +94,8 @@ class DirectoryWorld(unittest.TestCase):
         self.w.close()
 
     def get(self, path, who=None):
-        response = self.w.client.get(path, headers=self.w.headers(who) if who else {})
+        # As the app calls it: a trainer's staff path under /trainer, an admin's under /admin (area_path).
+        response = self.w.client.get(self.w.area_path(who, path) if who else path, headers=self.w.headers(who) if who else {})
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 
@@ -177,7 +178,7 @@ class TheVenueList(DirectoryWorld):
         self.assertEqual(self.venues("district=Aurangabad"), ["V-BR", "V-MH", "V-NOSTATE"])
 
     def test_an_overlong_name_is_refused(self):
-        response = self.w.client.get(f"/admin/venues?district={'x' * 151}", headers=self.w.headers("trainer1"))
+        response = self.w.client.get(f"/trainer/venues?district={'x' * 151}", headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 422)
 
 

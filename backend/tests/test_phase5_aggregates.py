@@ -26,7 +26,8 @@ from tests import _legacy_queries as legacy_queries
 
 class Phase5TestCase(TrainerWorldTestCase):
     def get_json(self, who, path, tenant=ALPHA):
-        response = self.w.client.get(path, headers=self.w.headers(who, tenant))
+        # As the app calls it: a trainer's staff path under /trainer, an admin's under /admin (area_path).
+        response = self.w.client.get(self.w.area_path(who, path), headers=self.w.headers(who, tenant))
         self.assertEqual(response.status_code, 200, f"{who} {path}: {response.text}")
         return response.json()
 
@@ -151,7 +152,7 @@ class TrainerPickersFollowTheAssignmentRule(Phase5TestCase):
 
     def test_a_trainer_name_is_only_resolved_for_pickable_trainers(self):
         def status(who, username):
-            return self.w.client.get(f"/admin/trainers/{username}", headers=self.w.headers(who)).status_code
+            return self.w.client.get(self.w.area_path(who, f"/admin/trainers/{username}"), headers=self.w.headers(who)).status_code
 
         self.assertEqual(status("trainer1", "trainer2"), 200)
         self.assertEqual(status("trainer1", "trainer3"), 404)       # another company's trainer
@@ -215,7 +216,7 @@ class SessionReportsAreTheTrainersOwn(Phase5TestCase):
         self.update_conference("S_S1", conferenceStatus="Completed")
         for path in ("", "/performers", "/report"):
             with self.subTest(path=path):
-                self.assertEqual(self.w.client.get(f"/admin/trainings/{uid('S_S1')}{path}",
+                self.assertEqual(self.w.client.get(f"/trainer/trainings/{uid('S_S1')}{path}",
                                                    headers=self.w.headers("trainer1")).status_code, 404)
         # /detail is admin-only: every trainer gets 403 whatever the id (so it reveals nothing).
         for conference in (uid("S_S1"), uid("S_N1"), "CONF-NOPE"):

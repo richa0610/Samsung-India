@@ -53,7 +53,8 @@ USE_ADMIN_LOGIN = "This is an admin account. Please sign in with Admin login."
 
 def ensure_login_kind(account: Admin | AgencyTeam, kind: Optional[str]) -> None:
     """Refuses (403, with a code the app shows its own notice for) an account signing in on the other
-    kind's login. `kind` None takes either - the shared POST /admin/login until the old app is retired."""
+    kind's login. `kind` None takes either - a direct call from code that isn't a login (scripts, tests);
+    both logins pass their own kind (routers/admin.py, routers/trainer.py)."""
     actual = account_kind(account)
     if kind is None or actual == kind:
         return

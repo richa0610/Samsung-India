@@ -79,7 +79,8 @@ class MasterListPickers(unittest.TestCase):
         self.w.close()
 
     def get(self, path, who="trainer1"):
-        response = self.w.client.get(path, headers=self.w.headers(who))
+        # As the app calls it: a trainer's staff path under /trainer, an admin's under /admin (area_path).
+        response = self.w.client.get(self.w.area_path(who, path), headers=self.w.headers(who))
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()
 

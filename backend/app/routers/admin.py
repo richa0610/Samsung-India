@@ -19,12 +19,12 @@ from app.schemas.admin import (
 )
 from app.routers._staff_login import staff_sign_in
 from app.services import admin_service, media_migration, sign_in_service, tenant_settings_service, token_revocation
-from app.services.access_service import resolve_scope, scope_summary
+from app.services.access_service import ADMIN_ACCOUNT, resolve_scope, scope_summary
 from app.utils.helpers import client_ip
 
 # The admin login and the admin-only routes: mounted at /admin only (main.py).
 router = APIRouter(tags=["admin"])
-# Staff routes trainers share: mounted at /admin, and for trainers at /trainer (main.py).
+# Staff routes shared with trainers: mounted at /admin for admins and /trainer for trainers (main.py).
 staff_router = APIRouter(tags=["admin"])
 
 
@@ -35,8 +35,9 @@ def login(
     common_db: Session = Depends(get_common_db),
     db: Optional[Session] = Depends(get_optional_db),
 ):
-    # Any staff account, as before, until the old app (whose trainers sign in here) is retired.
-    return staff_sign_in(payload, request, common_db, db, kind=None)
+    """An admin's sign-in (user, 2026-10-31): admin accounts only - a trainer is told to use Trainer
+    login on the latest app (POST /trainer/login)."""
+    return staff_sign_in(payload, request, common_db, db, kind=ADMIN_ACCOUNT)
 
 
 @router.post("/login/company", response_model=AdminAuthSession)

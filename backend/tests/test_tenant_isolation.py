@@ -58,9 +58,10 @@ class WorldTestCase(unittest.TestCase):
         self.w.close()
 
     def get(self, who, path, tenant=ALPHA, extra=None):
+        """As the app calls it: a trainer's staff path under /trainer, an admin's under /admin (area_path)."""
         headers = self.w.headers(who, tenant)
         headers.update(extra or {})
-        return self.w.client.get(path, headers=headers)
+        return self.w.client.get(self.w.area_path(who, path), headers=headers)
 
     def keys(self, who, path, tenant=ALPHA):
         response = self.get(who, path, tenant)
@@ -360,7 +361,7 @@ class AccessScopeEndpoint(WorldTestCase):
     def test_a_trainer_stored_in_the_admin_table_cannot_reach_it(self):
         """require_admin_role: this is an admin-panel concern, not something a trainer account
         (admin-table or agency-team) needs or should read."""
-        self.assertEqual(self.get("trainer1", "/admin/access/scope").status_code, 403)
+        self.assertEqual(self.w.client.get("/admin/access/scope", headers=self.w.headers("trainer1")).status_code, 403)
 
 
 # ======================================================================= landed: Attendance List access control
@@ -576,7 +577,7 @@ class LoginTenantMembership(WorldTestCase):
         self.assertNotIn("password", wrong_tenant.json()["detail"].lower())
 
     def test_trainer_login_is_unaffected(self):
-        response = self.w.client.post("/admin/login", json={"username": "trainer1", "password": PASSWORD}, headers={"X-Tenant-ID": ALPHA})
+        response = self.w.client.post("/trainer/login", json={"username": "trainer1", "password": PASSWORD}, headers={"X-Tenant-ID": ALPHA})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["admin"]["role"], "trainer")
 

@@ -13,7 +13,7 @@ from app.core.request_context import token_fingerprint
 from app.models.attendance import Attendance
 from tests.test_check_in import AT_VENUE, CONFERENCE, FAR_AWAY, OWN_TRAINEE, CheckInTestCase
 
-MARK_URL = f"/admin/trainings/{CONFERENCE}/attendance/{OWN_TRAINEE}"
+MARK_URL = f"/trainer/trainings/{CONFERENCE}/attendance/{OWN_TRAINEE}"
 
 
 class AttendanceAuditTestCase(CheckInTestCase):
@@ -24,7 +24,7 @@ class AttendanceAuditTestCase(CheckInTestCase):
     def trainer(self, path, body):
         # Kept: a token made again later carries a later issue time once the clock ticks over a second.
         self.trainer_headers = self.w.headers("trainer1")
-        return self.w.client.post(path, json=body, headers=self.trainer_headers)
+        return self.w.client.post(self.w.area_path("trainer1", path), json=body, headers=self.trainer_headers)
 
     def join(self):
         """The trainee on the session as "Joined" - before any check-in of their own."""

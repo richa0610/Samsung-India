@@ -120,7 +120,7 @@ class NewTraineeForm(TraineeIdsTestCase):
             "supervisorName": "S", "jobStatus": "Active", "password": "Correct-Horse-9"}
 
     def add(self, **extra):
-        response = self.w.client.post("/admin/trainees", json={**self.BODY, **extra}, headers=self.w.headers("trainer1"))
+        response = self.w.client.post("/trainer/trainees", json={**self.BODY, **extra}, headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()
 

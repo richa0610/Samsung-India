@@ -42,11 +42,12 @@ class TrainerWorldTestCase(unittest.TestCase):
                                   conferenceStatus="Scheduled", status="Approved", postAssessmentUid="SUITE-1"))
         self.alpha.commit()
 
+    # As the app calls it: a trainer's staff path under /trainer, an admin's under /admin (area_path).
     def get(self, who, path, tenant=ALPHA, **headers):
-        return self.w.client.get(path, headers={**self.w.headers(who, tenant), **headers})
+        return self.w.client.get(self.w.area_path(who, path), headers={**self.w.headers(who, tenant), **headers})
 
     def post(self, who, path, json=None, tenant=ALPHA):
-        return self.w.client.post(path, json=json, headers=self.w.headers(who, tenant))
+        return self.w.client.post(self.w.area_path(who, path), json=json, headers=self.w.headers(who, tenant))
 
     def set_agency_role(self, who, role):
         self.w.agency[who].role = role
@@ -100,7 +101,7 @@ class UnassignedRecords(TrainerWorldTestCase):
             with self.subTest(method=method, suffix=suffix):
                 # Valid bodies, so the refusal tested is the authorization, not validation.
                 body = (MARK if method == "POST" else {"reason": "x"}) if suffix.startswith("/attendance/") else None
-                response = self.w.client.request(method, f"/admin/trainings/{OTHERS}{suffix}", json=body,
+                response = self.w.client.request(method, f"/trainer/trainings/{OTHERS}{suffix}", json=body,
                                                  headers=self.w.headers("trainer1"))
                 self.assertEqual(response.status_code, 404, response.text)
         # The refused DELETE really touched nothing.

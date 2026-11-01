@@ -222,7 +222,7 @@ class CheckInFollowsTheSession(Phase4TestCase):
 
 class TrainerStateChangesAreAtomic(Phase4TestCase):
     def post(self, path):
-        return self.w.client.post(path, headers=self.w.headers("trainer1"))
+        return self.w.client.post(self.w.area_path("trainer1", path), headers=self.w.headers("trainer1"))
 
     def modules_logged(self, action):
         return self.alpha.query(ConferenceActivityLog).filter_by(conferenceUid=S_N1, action=action).count()
@@ -249,7 +249,7 @@ class TrainerStateChangesAreAtomic(Phase4TestCase):
         self.open_module(None)
         files = {"photo": ("p.jpg", b"\xff\xd8\xff\xe0 photo", "image/jpeg"), "attendanceSheet": ("s.pdf", b"%PDF-1.4", "application/pdf")}
         with patch.object(conference_repository, "claim_end", return_value=False):
-            response = self.w.client.post(f"/admin/trainings/{S_N1}/end", data={"totalPax": "2"}, files=files,
+            response = self.w.client.post(f"/trainer/trainings/{S_N1}/end", data={"totalPax": "2"}, files=files,
                                           headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 409)
         self.alpha.expire_all()
@@ -264,7 +264,7 @@ class NoMassAssignment(Phase4TestCase):
         self.alpha.commit()
         body = {"name": "Renamed", "profilePicture": "trainer_documents/aadhar/agency_2.pdf", "username": "trainer9",
                 "aadharFile": "trainer_documents/aadhar/agency_2.pdf"}
-        response = self.w.client.patch("/admin/profile", json=body, headers=self.w.headers("trainer1"))
+        response = self.w.client.patch("/trainer/profile", json=body, headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 200, response.text)
         self.alpha.expire_all()
         row = self.alpha.query(AgencyTeam).filter(AgencyTeam.id == agent.id).one()
@@ -272,7 +272,7 @@ class NoMassAssignment(Phase4TestCase):
 
     def test_an_admin_account_cannot_repoint_its_aadhaar_either(self):
         admin = self.w.admins["adm_trainer"]
-        response = self.w.client.patch("/admin/profile", json={"aadharFile": "trainer_documents/aadhar/agency_1.pdf"},
+        response = self.w.client.patch("/trainer/profile", json={"aadharFile": "trainer_documents/aadhar/agency_1.pdf"},
                                        headers=self.w.headers("adm_trainer"))
         self.assertEqual(response.status_code, 200)
         self.w.common.expire_all()
@@ -284,7 +284,7 @@ class NoMassAssignment(Phase4TestCase):
                 "region": "North 1", "requestedBy": "Quess", "trainerId": "trainer1",
                 "trainerName": "Trainer One", "supervisorId": "s", "supervisorName": "S", "jobStatus": "Active",
                 "username": "masspath", "password": "Correct-Horse-9", "profilePhoto": "trainee_photos/TR-S_S1-0.jpg"}
-        response = self.w.client.post("/admin/trainees", json=body, headers=self.w.headers("trainer1"))
+        response = self.w.client.post("/trainer/trainees", json=body, headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 201, response.text)
         # The server makes the trainee's ID (the sent "TR-MA" is ignored) - looked up by the one it returned.
         self.assertIsNone(self.alpha.query(Trainee).filter_by(traineeUid=response.json()["traineeUid"]).one().profilePhoto)
@@ -297,7 +297,7 @@ class StatusRules(Phase4TestCase):
 
     def end(self):
         files = {"photo": ("p.jpg", b"\xff\xd8\xff\xe0 photo", "image/jpeg"), "attendanceSheet": ("s.pdf", b"%PDF-1.4", "application/pdf")}
-        return self.w.client.post(f"/admin/trainings/{S_N1}/end", data={"totalPax": "2"}, files=files,
+        return self.w.client.post(f"/trainer/trainings/{S_N1}/end", data={"totalPax": "2"}, files=files,
                                   headers=self.w.headers("trainer1"))
 
     def test_a_session_that_was_never_started_cannot_be_ended(self):
@@ -348,7 +348,7 @@ class HrFieldsAreAdminManaged(Phase4TestCase):
         self.w.common.query(Admin).filter(Admin.id == admin.id).update({"salary": "30000", "jobStatus": "Active", "designation": "Trainer"})
         self.w.common.commit()
         body = {"name": "Still Editable", "salary": "99999", "jobStatus": "Manager", "designation": "Head", "joinedOn": "2020-01-01"}
-        response = self.w.client.patch("/admin/profile", json=body, headers=self.w.headers("adm_trainer"))
+        response = self.w.client.patch("/trainer/profile", json=body, headers=self.w.headers("adm_trainer"))
         self.assertEqual(response.status_code, 200, response.text)
         self.w.common.expire_all()
         row = self.w.common.get(Admin, admin.id)
@@ -357,7 +357,7 @@ class HrFieldsAreAdminManaged(Phase4TestCase):
     def test_an_agency_trainer_cannot_change_their_designation(self):
         agent = self.w.agency["trainer1"]
         before = agent.designation
-        self.w.client.patch("/admin/profile", json={"designation": "Head"}, headers=self.w.headers("trainer1"))
+        self.w.client.patch("/trainer/profile", json={"designation": "Head"}, headers=self.w.headers("trainer1"))
         self.alpha.expire_all()
         self.assertEqual(self.alpha.query(AgencyTeam).filter(AgencyTeam.id == agent.id).one().designation, before)
 
@@ -379,7 +379,7 @@ class NewTraineePhotoUpload(Phase4TestCase):
             self.addCleanup(p.stop)
 
     def upload(self, who, trainee_uid=ROSTERED, content=JPEG, content_type="image/jpeg"):
-        return self.w.client.post(f"/admin/trainees/{trainee_uid}/photo", files={"file": ("p.jpg", content, content_type)},
+        return self.w.client.post(self.w.area_path(who, f"/admin/trainees/{trainee_uid}/photo"), files={"file": ("p.jpg", content, content_type)},
                                   headers=self.w.headers(who))
 
     def photo_of(self, trainee_uid):

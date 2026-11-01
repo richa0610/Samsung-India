@@ -220,22 +220,22 @@ def cases(world, t):
     today = date.today().isoformat()
     tr, ad, te = t["trainer"], t["coadmin"], t["trainee"]
     return [
-        ("T01 trainer Home (today)", tr, "/admin/trainings/summary"),
-        ("T02 trainer Home (month range)", tr, "/admin/trainings/summary?start=2026-09-01&end=2026-09-30"),
-        ("T03 Sessions: All, page 1", tr, "/admin/trainings/page?sort=session&limit=20"),
-        ("T04 Sessions: All, page 3", tr, "/admin/trainings/page?sort=session&limit=20&page=3"),
-        ("T05 Sessions: Today", tr, f"/admin/trainings/page?sort=session&limit=20&on_date={today}"),
-        ("T06 Sessions: Completed", tr, "/admin/trainings/page?sort=session&limit=20&status=completed"),
-        ("T07 Sessions: search 'CONF00'", tr, "/admin/trainings/page?sort=session&limit=20&q=CONF00"),
-        ("T08 Sessions filter options", tr, "/admin/trainings/facets"),
-        ("T09 Session dashboard (live, largest)", tr, f"/admin/trainings/{big_live}"),
-        ("T10 Session dashboard (completed, largest)", tr, f"/admin/trainings/{big_done}"),
-        ("T11 All performers (completed)", tr, f"/admin/trainings/{big_done}/performers"),
-        ("T12 Session report (completed)", tr, f"/admin/trainings/{big_done}/report"),
-        ("T13 trainer Training List, page 1", tr, "/admin/trainings/page?approval=approved&limit=10"),
-        ("T14 trainer Attendance List, page 1", tr, "/admin/attendance/page?mode=all&limit=10"),
-        ("T15 trainer Trainee List, page 1", tr, "/admin/trainees/page?mode=all&limit=10"),
-        ("T16 Trainer dropdown", tr, "/admin/trainers"),
+        ("T01 trainer Home (today)", tr, "/trainer/trainings/summary"),
+        ("T02 trainer Home (month range)", tr, "/trainer/trainings/summary?start=2026-09-01&end=2026-09-30"),
+        ("T03 Sessions: All, page 1", tr, "/trainer/trainings/page?sort=session&limit=20"),
+        ("T04 Sessions: All, page 3", tr, "/trainer/trainings/page?sort=session&limit=20&page=3"),
+        ("T05 Sessions: Today", tr, f"/trainer/trainings/page?sort=session&limit=20&on_date={today}"),
+        ("T06 Sessions: Completed", tr, "/trainer/trainings/page?sort=session&limit=20&status=completed"),
+        ("T07 Sessions: search 'CONF00'", tr, "/trainer/trainings/page?sort=session&limit=20&q=CONF00"),
+        ("T08 Sessions filter options", tr, "/trainer/trainings/facets"),
+        ("T09 Session dashboard (live, largest)", tr, f"/trainer/trainings/{big_live}"),
+        ("T10 Session dashboard (completed, largest)", tr, f"/trainer/trainings/{big_done}"),
+        ("T11 All performers (completed)", tr, f"/trainer/trainings/{big_done}/performers"),
+        ("T12 Session report (completed)", tr, f"/trainer/trainings/{big_done}/report"),
+        ("T13 trainer Training List, page 1", tr, "/trainer/trainings/page?approval=approved&limit=10"),
+        ("T14 trainer Attendance List, page 1", tr, "/trainer/attendance/page?mode=all&limit=10"),
+        ("T15 trainer Trainee List, page 1", tr, "/trainer/trainees/page?mode=all&limit=10"),
+        ("T16 Trainer dropdown", tr, "/trainer/trainers"),
         ("A01 admin dashboard stats", ad, "/admin/dashboard/stats"),
         ("A02 admin Training List, page 1", ad, "/admin/trainings/page?approval=reviewed&limit=10"),
         ("A03 admin Attendance List, page 1", ad, "/admin/attendance/page?mode=all&limit=10"),
@@ -337,10 +337,10 @@ def concurrency(db_name: str, label: str, per_thread: int, baseline: bool = Fals
     t = world.tokens()
     today = date.today().isoformat()
     workload = [
-        "/admin/trainings/summary", "/admin/trainings/page?sort=session&limit=20",
-        f"/admin/trainings/page?sort=session&limit=20&on_date={today}", "/admin/attendance/page?mode=all&limit=10",
-        "/admin/trainees/page?mode=all&limit=10", "/admin/trainings/facets",
-        "/admin/attendance/page?mode=confirmed&limit=10",
+        "/trainer/trainings/summary", "/trainer/trainings/page?sort=session&limit=20",
+        f"/trainer/trainings/page?sort=session&limit=20&on_date={today}", "/trainer/attendance/page?mode=all&limit=10",
+        "/trainer/trainees/page?mode=all&limit=10", "/trainer/trainings/facets",
+        "/trainer/attendance/page?mode=confirmed&limit=10",
     ]
     out = {"label": label, "database": db_name, "per_thread": per_thread, "levels": []}
     print(f"{'threads':>7} {'requests':>8} {'req/s':>7} {'p50':>7} {'p95':>7} {'p99':>7} {'errors':>6}")

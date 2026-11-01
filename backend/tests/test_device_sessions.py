@@ -49,7 +49,7 @@ class DeviceTestCase(TrainerWorldTestCase):
         return response.json()["access_token"]
 
     def staff_sign_in(self, device_id):
-        response = self.w.client.post("/admin/login", json={"username": "trainer1", "password": PASSWORD, "deviceId": device_id})
+        response = self.w.client.post("/trainer/login", json={"username": "trainer1", "password": PASSWORD, "deviceId": device_id})
         self.assertEqual(response.status_code, 200, response.text)
         return response.json()["access_token"]
 
@@ -139,7 +139,7 @@ class EachSignInIsADevice(DeviceTestCase):
 
     def test_a_trainer_s_devices_are_limited_the_same_way(self):
         first, _second, _third = self.staff_sign_in("tab-a"), self.staff_sign_in("tab-b"), self.staff_sign_in("tab-c")
-        refused = self.use(first, "/admin/profile")
+        refused = self.use(first, "/trainer/profile")
         self.assertEqual((refused.status_code, refused.json()["detail"]), (401, ELSEWHERE))
 
     def test_a_signed_out_device_can_t_reach_files_or_live_updates_either(self):
@@ -161,8 +161,8 @@ class LogoutEndsThisDeviceOnly(DeviceTestCase):
 
     def test_a_trainer_s_logout_too(self):
         here, there = self.staff_sign_in("tab-a"), self.staff_sign_in("tab-b")
-        self.assertEqual(self.w.client.post("/admin/logout", headers={"Authorization": f"Bearer {here}"}).status_code, 204)
-        self.assertEqual((self.use(here, "/admin/profile").status_code, self.use(there, "/admin/profile").status_code), (401, 200))
+        self.assertEqual(self.w.client.post("/trainer/logout", headers={"Authorization": f"Bearer {here}"}).status_code, 204)
+        self.assertEqual((self.use(here, "/trainer/profile").status_code, self.use(there, "/trainer/profile").status_code), (401, 200))
 
     def test_a_token_from_before_devices_were_tracked_still_signs_out_everywhere(self):
         phone = self.alpha.query(Trainee).filter_by(traineeUid="TR-S_N1-0").one().phone

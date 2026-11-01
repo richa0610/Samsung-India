@@ -60,7 +60,7 @@ class MediaTestCase(TrainerWorldTestCase):
 
 class UploadsAreStoredPerTenant(MediaTestCase):
     def test_an_upload_lands_in_the_uploaders_tenant_folder(self):
-        response = self.w.client.post("/admin/profile/aadhar", files={"file": PDF}, headers=self.w.headers("trainer1"))
+        response = self.w.client.post("/trainer/profile/aadhar", files={"file": PDF}, headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 200, response.text)
         agent_id = self.w.agency["trainer1"].id
         self.assertTrue((self.root / ALPHA / f"trainer_documents/aadhar/agency_{agent_id}.pdf").is_file())
@@ -74,7 +74,7 @@ class UploadsAreStoredPerTenant(MediaTestCase):
         beta.commit()
         self.assertEqual(twin.id, self.w.agency["trainer1"].id)  # same row id in each tenant database
         for who, tenant, body in (("trainer1", ALPHA, b"%PDF-1.4 alpha"), ("beta_agent", BETA, b"%PDF-1.4 beta")):
-            response = self.w.client.post("/admin/profile/aadhar", files={"file": ("a.pdf", body, "application/pdf")},
+            response = self.w.client.post("/trainer/profile/aadhar", files={"file": ("a.pdf", body, "application/pdf")},
                                           headers=self.w.headers(who, tenant))
             self.assertEqual(response.status_code, 200, response.text)
         path = f"trainer_documents/aadhar/agency_{twin.id}.pdf"
@@ -85,7 +85,7 @@ class UploadsAreStoredPerTenant(MediaTestCase):
 
 class FilesFollowTheirOwnersRule(MediaTestCase):
     def test_an_aadhaar_document_is_readable_by_its_owner_only(self):
-        self.w.client.post("/admin/profile/aadhar", files={"file": PDF}, headers=self.w.headers("trainer1"))
+        self.w.client.post("/trainer/profile/aadhar", files={"file": PDF}, headers=self.w.headers("trainer1"))
         path = f"trainer_documents/aadhar/agency_{self.w.agency['trainer1'].id}.pdf"
         self.assertEqual(self.status("trainer1", path), 200)
         for who in ("trainer2", "coadmin", "super", "TR-S_N1-0"):
@@ -283,7 +283,7 @@ class TrainerRoleOnlyLogin(TrainerWorldTestCase):
         rate_limit.reset()  # the login rate limiter is process-wide; start each test fresh
 
     def login(self, username, password=PASSWORD):
-        return self.w.client.post("/admin/login", json={"username": username, "password": password}, headers={"X-Tenant-ID": ALPHA})
+        return self.w.client.post("/trainer/login", json={"username": username, "password": password}, headers={"X-Tenant-ID": ALPHA})
 
     def test_only_the_trainer_role_can_sign_in_as_a_trainer(self):
         self.assertEqual(self.login("trainer1").status_code, 200)
@@ -304,7 +304,7 @@ class TrainerRoleOnlyLogin(TrainerWorldTestCase):
     def test_a_token_issued_before_the_role_changed_stops_working(self):
         headers = self.w.headers("trainer1")
         self.set_agency_role("trainer1", None)
-        self.assertEqual(self.w.client.get("/admin/profile", headers=headers).status_code, 403)
+        self.assertEqual(self.w.client.get("/trainer/profile", headers=headers).status_code, 403)
 
 
 class AttendanceResetIsAudited(TrainerWorldTestCase):
@@ -315,7 +315,7 @@ class AttendanceResetIsAudited(TrainerWorldTestCase):
 
     def reset(self, key, trainee):
         # Rule 4 (Phase 2.2): a reset carries a reason and only works while the session runs.
-        return self.w.client.request("DELETE", f"/admin/trainings/{uid(key)}/attendance/{trainee}",
+        return self.w.client.request("DELETE", f"/trainer/trainings/{uid(key)}/attendance/{trainee}",
                                      json=self.REASON, headers=self.w.headers("trainer1"))
 
     def test_a_reset_writes_who_cleared_whose_record(self):

@@ -45,7 +45,7 @@ from app.services.training import (
     session_start,
 )
 
-# Staff routes: mounted at /admin, and for trainers at /trainer (main.py).
+# Staff routes: mounted at /admin for admins and /trainer for trainers (main.py).
 router = APIRouter(tags=["training"])
 # Admin-only routes (require_admin_role): mounted at /admin only.
 admin_router = APIRouter(tags=["training"])

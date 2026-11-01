@@ -138,7 +138,7 @@ class LiveQuizStartedThenSubmitted(ResultLifecycleTestCase):
 
     def test_the_trainers_finish_completes_the_same_row(self):
         self.answer_two_questions()
-        response = self.w.client.post(f"/admin/trainings/{S_N1}/live-quiz/finish", headers=self.w.headers("trainer1"))
+        response = self.w.client.post(f"/trainer/trainings/{S_N1}/live-quiz/finish", headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 200, response.text)
         [row] = self.rows()
         self.assertEqual((row.status, row.startedAt), ("Completed", utc_from_epoch_ms(self.first_live_ms)))

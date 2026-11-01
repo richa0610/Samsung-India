@@ -50,7 +50,7 @@ from app.models.pincode import PincodeBase
 from app.models.conference import Conference
 from app.models.quiz import AssessmentResult
 from app.services import location_service
-from app.services.access_service import company_admin_key
+from app.services.access_service import TRAINER_ACCOUNT, account_kind, company_admin_key
 from app.models.trainee import Trainee
 
 ALPHA, BETA = "ALPHA", "BETA"
@@ -217,6 +217,21 @@ class TenantWorld:
 
     def principal(self, who: str):
         return self.admins[who] if who in self.admins else self.agency[who]
+
+    def area_path(self, who: str, path: str) -> str:
+        """`path`, written under /admin, as the app sends it for this account (src/api/client.ts
+        staffPath, user 2026-10-31): a trainer's staff requests go to /trainer, an admin's stay on
+        /admin. Only for helpers acting as the app - a test of who each area refuses calls the
+        literal path (test_phase7_route_coverage, test_trainer_area)."""
+        if path.startswith("/admin/") and account_kind(self.principal(who)) == TRAINER_ACCOUNT:
+            return "/trainer/" + path.removeprefix("/admin/")
+        return path
+
+    def login_path(self, username: str) -> str:
+        """The login the app posts to for this username (user, 2026-10-31): Admin login for an admin
+        account, Trainer login for anyone else - a trainer, or an ID that names nobody."""
+        row = self.admins.get(username)
+        return "/admin/login" if row is not None and account_kind(row) != TRAINER_ACCOUNT else "/trainer/login"
 
     def conference_keys(self, items) -> set:
         """Map response items (any shape carrying a conference uid) back to fixture keys."""

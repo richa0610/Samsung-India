@@ -38,7 +38,7 @@ class AdminChangeAuditTestCase(MediaTestCase):
         self.raw_token = self.headers["Authorization"].removeprefix("Bearer ")
 
     def patch_profile(self, body):
-        response = self.w.client.patch("/admin/profile", json=body, headers=self.headers)
+        response = self.w.client.patch("/trainer/profile", json=body, headers=self.headers)
         self.assertEqual(response.status_code, 200, response.text)
 
     def upload(self, path, file):
@@ -93,20 +93,20 @@ class NoSecretsAreWritten(AdminChangeAuditTestCase):
 
 class UploadsAreStampedToo(AdminChangeAuditTestCase):
     def test_a_photo_upload_lists_the_new_photo(self):
-        self.upload("/admin/profile/photo", JPEG)
+        self.upload("/trainer/profile/photo", JPEG)
         row = self.row()
         self.assertIn(f"profilePhoto is: {row.profilePhoto}", row.masterRemarks)
         self.assertTrue(row.securityDetails.startswith("Your browser: Google Chrome 124.0.0.0"), row.securityDetails)
 
     def test_an_aadhaar_upload_lists_the_new_document(self):
-        self.upload("/admin/profile/aadhar", PDF)
+        self.upload("/trainer/profile/aadhar", PDF)
         row = self.row()
         self.assertIn(f"aadharImage is: {row.aadharImage}", row.masterRemarks)
 
 
 class AgencyTrainersSaveAsBefore(AdminChangeAuditTestCase):
     def test_an_agency_trainer_profile_save_still_works_and_touches_no_admin_row(self):
-        response = self.w.client.patch("/admin/profile", json={"name": "Agency Renamed"}, headers=self.w.headers("trainer1"))
+        response = self.w.client.patch("/trainer/profile", json={"name": "Agency Renamed"}, headers=self.w.headers("trainer1"))
         self.assertEqual(response.status_code, 200, response.text)
         self.alpha.expire_all()
         self.assertEqual(self.alpha.query(AgencyTeam).filter_by(username="trainer1").one().name, "Agency Renamed")

@@ -28,7 +28,7 @@ for adm in ['demoadmin1', 'demoadmin2']:
 
 # 3. Trainers login (by phone and by offerId)
 for trn in ['9811122001', 'OFF26002', '9811122003']:
-    res = client.post('/admin/login', json={'username': trn, 'password': PASSWORD}, headers={'X-Tenant-ID': 'demo'})
+    res = client.post('/trainer/login', json={'username': trn, 'password': PASSWORD}, headers={'X-Tenant-ID': 'demo'})
     assert res.status_code == 200, f'Trainer {trn} failed: {res.text}'
     name = res.json()["admin"]["name"]
     print(f'Trainer {trn} login OK: {name}')
