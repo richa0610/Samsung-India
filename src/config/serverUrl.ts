@@ -10,10 +10,12 @@ import { persistedText } from "./persistedText";
  * request, so a change takes effect without an app restart.
  */
 
-const DEFAULT_HOST = "129.121.73.181";
+// The live backend (Bluehost, behind Apache at this path) - used when the build sets no
+// EXPO_PUBLIC_API_URL.
+const LIVE_API_URL = "https://tecsoui.com/adm/application/backend";
 export const DEFAULT_API_URL = process.env.EXPO_PUBLIC_API_URL
   ? normalize(process.env.EXPO_PUBLIC_API_URL)
-  : `http://${DEFAULT_HOST}:8000`;
+  : LIVE_API_URL;
 
 const store = persistedText("server-url.txt");
 
